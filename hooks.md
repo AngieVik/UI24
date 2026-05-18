@@ -1689,7 +1689,38 @@ interface UseOfflineQueue {
    c. Ejecuta la mutación contra Supabase con el JWT del ejecutor
       (crearClienteConJwt(mutacion.payload.jwt) — ver logic.md §34.5)
    d. Si éxito (HTTP 2xx) → DELETE de IndexedDB
+
+      IDEMPOTENCIA PK — doc1_asistencia (error 23505 unique_violation):
+        Si error.code === '23505' AND mutacion.tipo === 'doc1_asistencia':
+          → Tratar como éxito idempotente: DELETE de IndexedDB sin reintentar
+          → UPDATE doc1_asistencias SET synced = true WHERE id = mutacion.payload.asistencia_id
+          → CONTINUAR — la asistencia ya estaba en Supabase; no es un error real
+
    e. Si fallo HTTP 4xx/5xx:
+
+      RAMA ESPECIAL — Gasto con stock insuficiente (doc6_metadata):
+        Si mutacion.tipo === 'doc6_metadata' AND error.code === 'stock_insuficiente':
+          → NO incrementar intentos ni marcar como 'fallido'
+
+          IDEMPOTENCIA (pre-check antes de rellamar RPC):
+            Consultar `descuadres_inventario WHERE mutation_uuid = mutacion.id`
+            Si ya existe → DELETE de IndexedDB directamente (el RPC ya se ejecutó)
+                            y CONTINUAR (no rellamar la RPC)
+
+          → Llamar RPC `forzar_gasto_con_descuadre` con el mismo payload:
+              { location_id, item_id, cantidad, terminal_id, mutation_uuid: mutacion.id }
+              (Ver logic.md §47 para la especificación SQL completa)
+          → Si RPC tiene éxito:
+              DELETE de IndexedDB (mutación resuelta como descuadre)
+              El stock_real en Supabase puede quedar negativo — corrección delegada
+              a logística. El Realtime handler de useInventario reconcilia el store local
+              con el nuevo valor real recibido del servidor (invariant §24.5 se mantiene).
+              Bandeja logística recibe alerta vía trigger automático (ver logic.md §47.3).
+          → Si RPC falla:
+              Tratar como fallo genérico (rama estándar a continuación)
+          → CONTINUAR con la siguiente mutación (no detener la cola)
+
+      RAMA ESTÁNDAR:
       - intentos++
       - Si intentos < 3 → estado = 'pendiente' (reintento posterior)
       - Si intentos >= 3 → estado = 'fallido'
@@ -1791,6 +1822,80 @@ useEffect(() => {
 Ver `logic.md §17.3` para la justificación completa.
 
 ### Persistencia: IndexedDB (via `idb` o similar)
+
+**Estructura general de la base IndexedDB `u24_offline`:**
+
+| Object Store | Clave primaria | Descripción |
+|---|---|---|
+| `mutation_queue` | `id` (UUID) | Cola de mutaciones pendientes (todos los tipos) |
+| `document_drafts` | `id` (UUID) | Borradores de documentos en curso |
+| `doc1_metadata` | `drp_id` (UUID) | Metadata del DRP para Doc-1 (un registro por DRP) |
+| `doc1_asistencias` | `id` (UUID asistencia) | Asistencias individuales del Doc-1 (append-only) |
+
+### Estructura Normalizada de Doc-1 en IndexedDB
+
+**Problema con la serialización monolítica:**
+Guardar Doc-1 como un único objeto `{ drp_id, metadata, asistencias: [...] }` implica
+reescribir el array completo en IndexedDB cada vez que se añade una asistencia.
+Con DRPs de alta afluencia (decenas de asistencias), esta reescritura crece linealmente
+y puede causar contención en el hilo principal durante la serialización.
+
+**Solución — dos object stores independientes:**
+
+```
+Object store: doc1_metadata
+  Clave: drp_id (UUID)
+  Campos: { drp_id, nombre_drp, fecha, hora, ubicacion, estado, timestamp_creacion }
+  Acceso: un único registro por DRP — mutado solo en creación y cierre
+
+Object store: doc1_asistencias
+  Clave: id (UUID, crypto.randomUUID() en cliente)
+  Índice secundario: drp_id (para listar todas las asistencias de un DRP)
+  Campos: {
+    id,               // UUID local — usado como mutation_uuid en cola
+    drp_id,           // FK → doc1_metadata.drp_id
+    synced,           // boolean: false hasta confirmación RPC
+    timestamp_local,  // Date.now() en el cliente (no sustituye al server timestamp)
+    registrador_id,   // ID_nombre del que registra
+    p_filiacion,      // { nombre, edad, dni, ... }
+    motivo,           // texto libre
+    resolucion,       // texto libre
+  }
+  Acceso: append-only INSERT por cada asistencia nueva; nunca UPDATE del array
+```
+
+**Flujo de escritura — añadir asistencia:**
+
+```
+1. Usuario confirma el modal de nueva asistencia
+2. crypto.randomUUID() → asistenciaId
+3. INSERT en doc1_asistencias: { id: asistenciaId, drp_id, synced: false, ...campos }
+   (solo este único registro — no se toca doc1_metadata)
+4. useOfflineQueue.enqueue('doc1_asistencia', {
+     asistencia_id: asistenciaId,
+     drp_id, registrador_id, jwt, ...campos
+   })
+   → mutation_uuid = asistenciaId (idempotencia: si se reenvía, RPC detecta UUID duplicado)
+5. Si isOnline → procesarCola() inmediatamente
+6. Al éxito del RPC: UPDATE doc1_asistencias SET synced = true WHERE id = asistenciaId
+```
+
+**Lectura en UI:**
+
+```typescript
+// Obtener Doc-1 completo para un DRP (renderizado o exportación PDF)
+const metadata    = await db.get('doc1_metadata', drpId)
+const asistencias = await db.getAll('doc1_asistencias',
+  IDBKeyRange.only(drpId),   // usando índice secundario drp_id
+)
+// asistencias ordena por timestamp_local ASC para presentación cronológica
+```
+
+**Ventajas:**
+* Cada mutación escribe O(1) bytes independientemente del tamaño del Doc-1
+* Las asistencias `synced: false` son exactamente las mutaciones pendientes —
+  no requieren cruce con `mutation_queue` para saber qué falta confirmar
+* La clave `asistenciaId` sirve como `mutation_uuid` para idempotencia en RPC
 
 ### Stores: `useDocumentosStore` (borradores en curso)
 
@@ -2037,25 +2142,32 @@ Solo disponible en estado 'Borrador_En_Curso'.
 
 ## 13. useIdleTimeout
 
-> Monitoriza la inactividad DOM en terminales con sesión de emergencia
-> (rol `invitado`). Si no hay interacción durante 20 minutos, fuerza
-> la regresión a `estado_0` sin destruir la cookie de la BBDD.
-> El terminal requiere reintroducir el PIN para volver a `estado_1`.
-> Ver `logic.md §26` para la justificación completa.
+> Monitoriza la inactividad en terminales con sesión de emergencia (rol `invitado`).
+> Si no hay interacción durante 20 minutos, fuerza la regresión a `estado_0`
+> sin destruir la cookie de la BBDD. Ver `logic.md §26` para la justificación completa.
+>
+> **Implementación basada en deltas de tiempo absolutos** — no usa `setTimeout`.
+> Esto garantiza la detección correcta cuando el SO pausa el navegador (tablet dormida):
+> un `setTimeout` de 20 min se congela durante el sueño; `Date.now()` siempre avanza.
 
 ```typescript
 interface UseIdleTimeout {
-  // Estado
-  isActivo:       boolean   // true si el timer de inactividad está corriendo
-  isIdle:         boolean   // true si el timeout expiró (estado_0 forzado)
-  tiempoRestante: number    // segundos hasta expiración (0 si isIdle)
+  // Estado (Zustand + persist en localStorage)
+  isActivo:                 boolean    // true si el monitoreo está en marcha
+  isIdle:                   boolean    // true si el timeout ya expiró
+  ultimoEventoInteraccion:  number     // Date.now() del último evento DOM (ms epoch)
 
   // Acciones (llamadas por useTerminalAuth, no por componentes)
-  iniciar(): void           // activa monitoreo al detectar rol invitado
-  detener(): void           // cancela timer (al cambiar a rol no-invitado o logout)
-  resetTimer(): void        // reinicia contador a 1200s (llamado por los event listeners)
+  iniciar(): void     // activa monitoreo al entrar en estado_1 con rol invitado
+  detener(): void     // desactiva (al elevar rol o destuir cookie)
+  registrarInteraccion(): void   // actualiza ultimoEventoInteraccion = Date.now()
 }
 ```
+
+**Nota:** `tiempoRestante` ha sido eliminado de la interfaz — no es computable sin
+`setTimeout`. Los componentes que necesiten mostrar un aviso de inactividad inminente
+pueden calcular `Math.max(0, IDLE_MS - (Date.now() - ultimoEventoInteraccion))` en
+un `useSyncExternalStore` con actualización periódica si fuese necesario.
 
 ### Condición de activación
 
@@ -2063,7 +2175,7 @@ interface UseIdleTimeout {
 isActivo = true   sii   tipoSesion ∈ { 'galleta_pequeña', 'galleta' }
                   ∧     rolActivo === 'invitado'
 
-useTerminalAuth llama a iniciar() cuando detecta esta condición.
+useTerminalAuth llama a iniciar() al detectar esta condición.
 useTerminalAuth llama a detener() cuando:
   - el rol sube (ID_nombre con rol propio hace checkin)
   - el usuario hace checkout y la cookie se autodestruye (galleta_pequeña)
@@ -2071,45 +2183,94 @@ useTerminalAuth llama a detener() cuando:
 
 ### Comportamiento
 
-**Event listeners DOM**
+**Listeners DOM — actualizar timestamp de interacción**
 
 ```typescript
-const IDLE_MS = 20 * 60 * 1000   // 20 minutos
+const IDLE_MS = 20 * 60 * 1000   // 20 minutos en ms
 
 useEffect(() => {
   if (!isActivo) return
 
   const eventos = ['click', 'keydown', 'touchstart', 'mousemove', 'scroll']
-  const reset = () => resetTimer()
+  const onInteraccion = () => registrarInteraccion()   // → Date.now()
 
-  eventos.forEach(e => window.addEventListener(e, reset, { passive: true }))
+  eventos.forEach(e => window.addEventListener(e, onInteraccion, { passive: true }))
 
   return () => {
-    eventos.forEach(e => window.removeEventListener(e, reset))
+    eventos.forEach(e => window.removeEventListener(e, onInteraccion))
   }
 }, [isActivo])
 ```
 
-**Al expirar el timer**
+**Listeners de visibilidad — detección de vuelta tras letargo**
+
+```typescript
+useEffect(() => {
+  if (!isActivo) return
+
+  const verificarIdleAlVolverVisible = () => {
+    // Se ejecuta al pasar de hidden → visible o al recibir focus
+    const delta = Date.now() - ultimoEventoInteraccion
+    if (delta >= IDLE_MS) {
+      // La tablet estuvo dormida más de 20 minutos — forzar estado_0 inmediatamente
+      isIdle = true
+      useTerminalStore.getState().forzarEstado0()
+      useAuthStore.getState().clearJwt()
+    }
+    // Si delta < IDLE_MS: la sesión sigue válida — no hacer nada
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') verificarIdleAlVolverVisible()
+  })
+  window.addEventListener('focus', verificarIdleAlVolverVisible)
+
+  return () => {
+    document.removeEventListener('visibilitychange', verificarIdleAlVolverVisible)
+    window.removeEventListener('focus', verificarIdleAlVolverVisible)
+  }
+}, [isActivo, ultimoEventoInteraccion])
+```
+
+**Por qué funciona correctamente tras el sueño del SO:**
+
+```
+Flujo cuando la tablet duerme:
+  1. Terminal en estado_1 con rol invitado — ultimoEventoInteraccion = T0
+  2. SO pausa el navegador → cualquier setTimeout quedaría congelado
+  3. Pasados 25 minutos → SO despierta la tablet
+  4. Navegador dispara visibilitychange (hidden → visible)
+  5. verificarIdleAlVolverVisible(): delta = Date.now() - T0 = 25 min >= 20 min
+  6. → isIdle = true → forzar estado_0 INMEDIATAMENTE (sin esperar ningún timer)
+
+Flujo de uso continuo (sin dormir):
+  Cada interacción del usuario → registrarInteraccion() → actualiza ultimoEventoInteraccion
+  Al volver a estar visible: delta es pequeño → no se dispara el idle
+```
+
+**Al forzar estado_0 por idle:**
 
 ```
 1. isIdle = true
 2. useTerminalStore.estado → 'estado_0'
 3. La cookie de BBDD NO se destruye:
-   - 'galleta_pequeña' → sigue en BBDD con su expires_at original
-   - 'galleta'         → sigue en BBDD como permanente
+   - 'galleta_pequeña' → sigue activa con su expires_at original
+   - 'galleta'         → permanece como cookie permanente
 4. useAuthStore → limpiado (JWT, rolActivo)
 5. UI presenta la pantalla de estado_0 con campo PIN preseleccionado
 6. Al reintroducir el PIN válido → useTerminalAuth.loginConPin() →
    valida cookie existente (no genera nueva) → estado_1 restaurado
 ```
 
-**Persistencia del timer**
+**Persistencia en localStorage:**
 
 ```
-El contador se guarda en Zustand (localStorage) para sobrevivir recargas
-del navegador. Si el usuario recarga la página con isActivo=true, el
-timer se restaura con el tiempo restante — no se reinicia a 20 minutos.
+ultimoEventoInteraccion persiste en Zustand (localStorage).
+Al recargar la página con isActivo=true:
+  → Se recupera ultimoEventoInteraccion de localStorage
+  → Se ejecuta verificarIdleAlVolverVisible() inmediatamente en el mount
+  → Si delta >= 20 min: estado_0 forzado en el mismo renderizado inicial
+  → Si delta < 20 min: sesión restaurada sin acción
 ```
 
 ### Stores: `useTerminalStore`, `useAuthStore`
@@ -2121,10 +2282,38 @@ timer se restaura con el tiempo restante — no se reinicia a 20 minutos.
 ## 16. useLocationListener
 
 > Hook activo en el terminal de vehículo que escucha eventos `ping_location`
-> en el canal Realtime `vehiculo:${ID_vehiculo}` y responde con la posición GPS
-> actual del dispositivo. Implementa un throttle de 15 segundos para proteger
-> el hardware GPS embarcado.
+> en el canal Realtime **`coordinacion:flota`** (canal global multiplexado).
+> Filtra los eventos por `payload.id_vehiculo` — solo procesa los dirigidos a su
+> propio vehículo. Responde con `pong_location` en el mismo canal.
+> Implementa un throttle de 15 segundos para proteger el hardware GPS embarcado.
 > Ver `logic.md §29` para la especificación completa del mecanismo.
+
+---
+
+## 19. useImageCompressor
+
+> Hook utilitario de compresión de imágenes con Canvas API nativa.
+> Reutilizable en cualquier flujo de adjuntos (Doc-7, Doc-11).
+
+```typescript
+interface UseImageCompressor {
+  comprimirImagen(file: File): Promise<Blob>
+  // Opciones por defecto: max 1200 px, WebP quality 0.70
+  // Opciones personalizables:
+  comprimirImagenConOpciones(
+    file: File,
+    opciones: { maxPx?: number; calidad?: number }
+  ): Promise<Blob>
+}
+```
+
+**Reglas arquitectónicas:**
+- Usa `createImageBitmap` (API nativa) para decodificar — no carga librerías externas.
+- Usa `OffscreenCanvas` para renderizar fuera del DOM — sin reflow ni repaint.
+- Devuelve siempre un `Blob` (nunca Base64 / data-URL).
+- Llamado **antes** de que el archivo toque Zustand o IndexedDB.
+- Ver `nucleo_flota_y_taller.md → Compresión de adjuntos Doc-7` para el
+  pipeline completo y las reglas de almacenamiento.
 
 ```typescript
 interface UseLocationListener {
@@ -2255,66 +2444,108 @@ async function ejecutarFallbackRPC(vehiculoId: string) {
 
 ```typescript
 interface UseBackgroundSyncStore {
-  // Estado (solo accesible por SW — nunca expuesto a componentes UI)
-  frozenJwt:      string | null     // JWT congelado del usuario que hizo checkout offline
+  // Estado reactivo en memoria (solo para la UI del banner — NUNCA expuesto a otros componentes)
   frozenUserId:   ID_nombre | null  // ID_nombre del propietario del JWT congelado
   hasFrozenJwt:   boolean           // true si hay JWT congelado pendiente de vaciado
+  // Nota: frozenJwt NO existe como campo Zustand — vive exclusivamente en IndexedDB.
+  // El Main Thread no lo lee; solo el Service Worker accede a él directamente.
 
   // Escritura — llamado exclusivamente por useCheckin.checkout() en CASO RETENCIÓN
-  congelarJwt(jwt: string, userId: ID_nombre): void
+  congelarJwt(jwt: string, userId: ID_nombre): Promise<void>
 
   // Lectura — consumida exclusivamente por el Service Worker
-  getFrozenJwt(): string | null
+  // (método async porque IndexedDB es asíncrono)
+  getFrozenJwt(): Promise<string | null>
 
   // Limpieza — llamada exclusivamente por useOfflineQueue.clearJwtAfterSync()
-  liberarJwt(): void
+  liberarJwt(): Promise<void>
 }
+```
+
+### Motor de persistencia: IndexedDB
+
+`localStorage` no es accesible desde el Service Worker. La única API de almacenamiento
+asíncrono compartida entre el Main Thread y el SW es **IndexedDB**.
+
+El JWT congelado se almacena en el object store `bgs_tokens` de la base IndexedDB `u24_offline`:
+
+```
+Object store: bgs_tokens
+  Clave: 'frozen_jwt'          (clave fija — siempre hay como máximo una entrada)
+  Campos: {
+    key:      'frozen_jwt',
+    jwt:      string,          // JWT completo en texto plano
+    userId:   ID_nombre,       // dueño del token
+    savedAt:  ISOString,       // para debug / auditoría
+  }
 ```
 
 ### Comportamiento
 
 ```
-congelarJwt(jwt, userId):
-  1. frozenJwt   = jwt
-  2. frozenUserId = userId
-  3. hasFrozenJwt = true
-  4. Persiste en localStorage con clave aislada 'bgs_frozen_jwt'
-     (clave distinta de la sesión estándar — nunca mezclada con el store de auth)
+congelarJwt(jwt, userId):  [async]
+  1. frozenUserId = userId     (Zustand en memoria — solo para el banner)
+  2. hasFrozenJwt = true
+  3. await db.put('bgs_tokens', { key: 'frozen_jwt', jwt, userId, savedAt: NOW() })
+     ← IndexedDB: accesible tanto desde Main Thread como desde SW
 
-liberarJwt():
-  1. frozenJwt   = null
-  2. frozenUserId = null
-  3. hasFrozenJwt = false
-  4. Elimina 'bgs_frozen_jwt' de localStorage
-  5. No afecta en ningún caso al JWT de sesión activa de cualquier otro usuario
+liberarJwt():  [async]
+  1. frozenUserId = null
+  2. hasFrozenJwt = false
+  3. await db.delete('bgs_tokens', 'frozen_jwt')
+  4. No afecta en ningún caso al JWT de sesión activa de cualquier otro usuario
+
+getFrozenJwt():  [async — llamado exclusivamente por el SW]
+  1. const record = await db.get('bgs_tokens', 'frozen_jwt')
+  2. return record?.jwt ?? null
+```
+
+### Acceso desde el Service Worker
+
+```javascript
+// service-worker.ts
+// El SW abre la misma base IndexedDB que el Main Thread
+async function getFrozenJwtFromIDB(): Promise<string | null> {
+  const db = await openDB('u24_offline', DB_VERSION)
+  const record = await db.get('bgs_tokens', 'frozen_jwt')
+  return record?.jwt ?? null
+}
+
+// Antes de procesar la cola offline:
+self.addEventListener('sync', async (event) => {
+  if (event.tag === 'offline-queue-sync') {
+    const jwt = await getFrozenJwtFromIDB()
+    if (!jwt) return  // sin JWT congelado — nada que hacer
+    await procesarColaConJwt(jwt)
+  }
+})
 ```
 
 ### Garantías de aislamiento
 
 | Propiedad | Garantía |
 |---|---|
-| Inicio de sesión de Usuario B | No modifica ni lee `frozenJwt` — opera con su propia sesión en `useAuthStore` |
-| Logout de Usuario B | No elimina `frozenJwt` — el SW puede seguir vaciando la cola de Usuario A |
-| Expiración de sesión de Usuario B | No afecta al `frozenJwt` retenido |
-| TTL del JWT congelado | TTL natural del token (`shift_start + 36h`). Si expira antes de que se vacíe la cola, las mutaciones fallan con 401 y se marcan `fallido` |
+| Inicio de sesión de Usuario B | No modifica ni lee `bgs_tokens` — opera con su propia sesión en `useAuthStore` |
+| Logout de Usuario B | No elimina la entrada `frozen_jwt` de IndexedDB — el SW puede seguir vaciando la cola de Usuario A |
+| Expiración de sesión de Usuario B | No afecta al JWT congelado en IndexedDB |
+| TTL del JWT congelado | TTL natural del token (`shift_start + 36h`). Si expira antes de vaciarse la cola, las mutaciones fallan con 401 y se marcan `fallido` |
+| Acceso desde SW | Directo a IndexedDB — sin pasar por postMessage ni por el store de UI activa |
 
-### Stores: `useBackgroundSyncStore` (Zustand + persist en localStorage, clave aislada)
+### Stores: `useBackgroundSyncStore` (Zustand en memoria, sin persist — la persistencia real está en IndexedDB)
 
-### Dependencias: ninguna (store primitivo, sin dependencias de otros hooks)
+### Dependencias: IndexedDB `u24_offline` (object store `bgs_tokens`)
 
 ---
 
 ## 18. useAuthStore — Mapa de JWT por sesión de usuario
 
 > En terminales compartidos, múltiples `ID_nombre` pueden estar con `checkin_on`
-> simultáneamente. **No es posible usar el cliente Supabase por defecto** para
-> mutaciones, ya que gestiona una única sesión activa y asigna las operaciones
-> al último usuario autenticado.
+> simultáneamente. El cliente Supabase JS gestiona una única sesión de auth global.
 >
-> `useAuthStore` mantiene un mapa `{ [ID_nombre]: JWT_string }` con el token
-> de cada usuario activo. Toda mutación debe inyectar explícitamente el JWT
-> del ejecutor en los `Headers` de la petición, puenteando el control automático
-> de sesión de la librería Supabase JS.
+> La solución es un **cliente Singleton con interceptor de fetch dinámico** —
+> un único `supabaseClient` cuyo `fetch` custom lee el JWT del ejecutor desde
+> `useAuthStore` en el momento exacto de cada petición de red.
+> Esto elimina la necesidad de instanciar un nuevo `createClient` por mutación.
 
 ```typescript
 interface UseAuthStore {
@@ -2325,65 +2556,109 @@ interface UseAuthStore {
   // (usado solo para navegación y permisos de UI — no para mutaciones)
   rolActivo: string | null
 
-  // Escritura del mapa (llamado en login/checkin de cada ID_nombre)
   addJwt(id: ID_nombre, jwt: string): void
-
-  // Lectura del JWT de un usuario concreto (llamado por cada mutación)
   getJwtFor(id: ID_nombre): string | null
-
-  // Eliminación del JWT de un usuario (llamado en checkout)
   removeJwt(id: ID_nombre): void
-
-  // Limpieza completa del store (llamado al salir el último ID_nombre
-  // o por useBackgroundSyncStore.liberarJwt() tras sync offline)
   clearJwt(): void
 }
 ```
 
-### Patrón de inyección en mutaciones (TanStack Query)
-
-Toda mutación que escribe datos en Supabase debe construir un cliente temporal
-con el JWT del usuario ejecutor. **Nunca** usar el cliente singleton global para
-operaciones mutables en terminales compartidos.
+### Patrón Singleton con interceptor de fetch
 
 ```typescript
-// Utilidad compartida — crear cliente Supabase con JWT explícito
-function crearClienteConJwt(jwt: string) {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${jwt}`
-      }
-    },
-    auth: {
-      autoRefreshToken: false,   // el token es gestionado por useAuthStore
-      persistSession:  false     // no sobreescribir la sesión global del terminal
+// lib/supabaseClient.ts — instancia única, exportada globalmente
+// ────────────────────────────────────────────────────────────────
+
+// Variable de contexto del ejecutor activo para la petición en curso.
+// JS es single-threaded: el valor se establece justo antes de que Supabase
+// invoque el fetch interceptor, y se limpia en el finally del wrapper.
+let _ejecutorIdActual: string | null = null
+
+// Custom fetch: intercepta TODAS las peticiones del cliente singleton
+const customFetch: typeof fetch = async (url, options = {}) => {
+  const ejecutorId = _ejecutorIdActual
+  if (ejecutorId) {
+    const jwt = useAuthStore.getState().getJwtFor(ejecutorId)
+    if (!jwt) throw new Error(`jwt_no_disponible: ${ejecutorId}`)
+    options.headers = {
+      ...options.headers,
+      Authorization: `Bearer ${jwt}`,
     }
-  })
+  }
+  return fetch(url, options)   // delega al fetch nativo del navegador
 }
 
-// Ejemplo de mutación en TanStack Query:
-const { mutate } = useMutation({
-  mutationFn: async ({ ejecutorId, data }: { ejecutorId: ID_nombre, data: unknown }) => {
-    const jwt = useAuthStore.getState().getJwtFor(ejecutorId)
-    if (!jwt) throw new Error('jwt_no_disponible_para_ejecutor')
+// Singleton: único cliente para toda la aplicación
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { fetch: customFetch },
+  auth: {
+    autoRefreshToken: false,  // tokens gestionados por useAuthStore
+    persistSession:   false,  // no sobreescribir sesión entre pestañas
+  },
+})
 
-    const client = crearClienteConJwt(jwt)
-    const { error } = await client.from('tabla').insert(data)
-    if (error) throw error
+// Wrapper para mutaciones: establece el contexto del ejecutor, ejecuta fn(),
+// y limpia el contexto en el finally (incluso si fn() lanza error).
+export async function conEjecutor<T>(
+  ejecutorId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  _ejecutorIdActual = ejecutorId
+  try {
+    return await fn()
+  } finally {
+    _ejecutorIdActual = null
   }
+}
+```
+
+**Uso en mutaciones (TanStack Query):**
+
+```typescript
+const { mutate } = useMutation({
+  mutationFn: ({ ejecutorId, data }: { ejecutorId: ID_nombre; data: unknown }) =>
+    conEjecutor(ejecutorId, () =>
+      supabase.from('tabla').insert(data).throwOnError()
+    )
 })
 ```
+
+**Uso en la cola offline (useOfflineQueue.procesarCola):**
+
+```typescript
+// El ejecutorId y su snapshot de JWT se congelan en el payload al encolar.
+// Al drenar, conEjecutor inyecta el JWT congelado (recuperado del payload)
+// mediante useAuthStore.addJwt(ejecutorId, mutation.payload.jwt) antes de llamar.
+await conEjecutor(mutation.payload.ejecutorId, () =>
+  supabase.rpc(mutation.tipo, mutation.payload.data)
+)
+```
+
+**Por qué es seguro en JS single-threaded:**
+El motor JS garantiza que, entre `_ejecutorIdActual = ejecutorId` y la primera
+`await` dentro de `fn()`, no puede ejecutarse ningún otro código. El Supabase SDK
+invoca `customFetch` sincrónicamente como parte de la cadena de promesas iniciada por
+`fn()`. El valor de `_ejecutorIdActual` en ese momento es siempre el del ejecutor
+que llamó a `conEjecutor`. El `finally` lo limpia al resolverse o rechazarse `fn()`.
+
+**Nota sobre mutaciones realmente concurrentes:**
+Si dos `conEjecutor` se llaman en paralelo (ej. dos `Promise.all` con distintos ejecutores),
+el segundo sobreescribiría `_ejecutorIdActual` antes de que el primero haya llegado al fetch.
+Para ese caso excepcional — que en la práctica no ocurre porque TanStack Query serializa
+las mutaciones — el interceptor delega al JWT del ejecutor activo en ese momento (que es
+correcto para el segundo). La primera llamada ya habrá iniciado su fetch antes de ser
+sobreescrita. En caso de necesitar garantías estrictas de concurrencia, usar el patrón
+de UUID de petición (ver `logic.md §34.6`).
 
 ### Reglas de uso
 
 | Regla | Descripción |
 |---|---|
-| Lectura de datos (SELECT) | Puede usar el cliente global (lectura sin RLS de escritura) |
-| Escritura de datos (INSERT / UPDATE / DELETE) | **Obligatorio** `crearClienteConJwt(jwt)` con el JWT del ejecutor |
-| `ejecutorId` en mutaciones | El `ID_nombre` del usuario que inicia la acción — no el "usuario activo de la UI" |
-| Mutaciones offline (encoladas en useOfflineQueue) | El `ejecutorId` y su JWT se congelan en el payload de la mutación en el momento del encolado |
-| Expiración del JWT en el mapa | Si `getJwtFor()` devuelve `null` (token expirado), abortar la mutación con `throw Error('sesion_expirada')` y forzar re-login del ejecutor |
+| SELECT (lectura) | `supabase.from(...)` sin `conEjecutor` — sin RLS de escritura |
+| INSERT / UPDATE / DELETE | `conEjecutor(ejecutorId, () => supabase.from(...).op(...))` |
+| Edge Functions | `conEjecutor(ejecutorId, () => supabase.functions.invoke(...))` |
+| Cola offline | JWT congelado en payload; reconstruido con `addJwt` temporal antes de drenar |
+| Expiración de JWT | `getJwtFor()` devuelve `null` → throw `'jwt_expirado'`, forzar re-login |
 
 ### Stores: `useAuthStore` (Zustand + persist en sessionStorage)
 
@@ -2628,38 +2903,92 @@ self.onmessage = async (event: MessageEvent<{ docDefinition: object; filename: s
 ```
 
 ```typescript
-// usePdfGenerator — hook de llamada al worker
+// usePdfGenerator — hook de llamada al worker con fallback servidor
 function usePdfGenerator() {
-  const workerRef = useRef<Worker | null>(null)
+  const workerRef       = useRef<Worker | null>(null)
+  const workerFailedRef = useRef<boolean>(false)
 
   useEffect(() => {
-    workerRef.current = new Worker(
-      new URL('./workers/pdf.worker.ts', import.meta.url),
-      { type: 'module' }
-    )
+    try {
+      workerRef.current = new Worker(
+        new URL('./workers/pdf.worker.ts', import.meta.url),
+        { type: 'module' }
+      )
+      // Capturar errores de inicialización (ej. CSP bloqueando new Worker)
+      workerRef.current.onerror = () => {
+        workerFailedRef.current = true
+        workerRef.current = null
+      }
+    } catch {
+      // new Worker() lanzó sincrónicamente (CSP strict-dynamic, etc.)
+      workerFailedRef.current = true
+    }
     return () => workerRef.current?.terminate()
   }, [])
 
-  const generarPdf = useCallback(
-    (docDefinition: object, filename: string): Promise<Blob> =>
-      new Promise((resolve, reject) => {
-        if (!workerRef.current) { reject(new Error('pdf_worker_no_disponible')); return }
-        workerRef.current.onmessage = (e) => resolve(e.data.blob)
-        workerRef.current.onerror   = (e) => reject(e)
-        workerRef.current.postMessage({ docDefinition, filename })
-      }),
+  const generarPdfEnServidor = useCallback(
+    async (docDefinition: object, filename: string): Promise<{ signed_url: string }> => {
+      // Fallback: enviar docDefinition al backend para generación server-side
+      // Edge Function `generar_pdf_server` devuelve un enlace firmado (~5 min TTL)
+      const { data, error } = await supabase.functions.invoke('generar_pdf_server', {
+        body: { docDefinition, filename },
+      })
+      if (error) throw new Error(`pdf_server_error: ${error.message}`)
+      return data as { signed_url: string }
+    },
     []
   )
 
-  return { generarPdf }
+  const generarPdf = useCallback(
+    (docDefinition: object, filename: string): Promise<Blob | { signed_url: string }> => {
+
+      // RUTA A — Web Worker disponible (caso nominal)
+      if (workerRef.current && !workerFailedRef.current) {
+        return new Promise((resolve, reject) => {
+          workerRef.current!.onmessage = (e) => resolve(e.data.blob as Blob)
+          workerRef.current!.onerror   = async () => {
+            // El worker falló en tiempo de ejecución → marcar como fallido y usar fallback
+            workerFailedRef.current = true
+            workerRef.current = null
+            try { resolve(await generarPdfEnServidor(docDefinition, filename)) }
+            catch (err) { reject(err) }
+          }
+          workerRef.current!.postMessage({ docDefinition, filename })
+        })
+      }
+
+      // RUTA B — Worker no disponible (CSP bloqueó la inicialización)
+      return generarPdfEnServidor(docDefinition, filename)
+    },
+    [generarPdfEnServidor]
+  )
+
+  return { generarPdf, workerDisponible: !workerFailedRef.current }
 }
 ```
+
+**Rutas de generación:**
+
+| Ruta | Condición | Resultado | Uso en UI |
+|---|---|---|---|
+| A — Web Worker | Worker inicializado sin errores | `Blob` | `URL.createObjectURL(blob)` → `<a download>` |
+| B — Edge Function `generar_pdf_server` | Worker bloqueado por CSP o fallo en runtime | `{ signed_url }` | `window.open(signed_url)` o `<a href={signed_url} download>` |
+
+**Edge Function `generar_pdf_server`:**
+- Recibe `{ docDefinition: object, filename: string }` en el body.
+- Genera el PDF con pdfMake en Deno (entorno sin restricciones CSP).
+- Sube el PDF al bucket de Supabase Storage (`pdfs_temporales/`).
+- Devuelve `{ signed_url: string }` con TTL de 5 minutos.
+- El archivo en Storage se purga automáticamente por política de retención del bucket
+  (TTL de 10 minutos para evitar acumulación).
 
 **Reglas:**
 - Prohibido llamar a `pdfMake.createPdf()` directamente desde cualquier componente o hook del Main Thread.
 - El worker recibe el árbol de datos JSON del documento (`docDefinition`) y devuelve un `Blob`.
-- El componente receptor del `Blob` puede abrirlo con `URL.createObjectURL` o descargarlo directamente.
-- Si el worker no está disponible (error de inicialización), mostrar toast de error y permitir reintento.
+- El componente receptor del `Blob` puede abrirlo con `URL.createObjectURL` o descargarlo.
+- El componente receptor de `{ signed_url }` debe abrir/descargar desde la URL firmada directamente.
+- El caller no necesita conocer qué ruta se usó — el comportamiento de descarga/apertura
+  se adapta comprobando si el resultado es `Blob` (`instanceof Blob`) o tiene `signed_url`.
 
 ### Bloqueo de Persistencia de Almacenamiento — `navigator.storage.persist()`
 

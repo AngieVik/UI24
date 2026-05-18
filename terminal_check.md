@@ -12,8 +12,11 @@
   * Se muestra la opción: "Sin conexión — Acceso de consulta".
   * Campos requeridos: `ID_nombre` + `Contraseña` (ambos obligatorios).
     No existe bypass de contraseña en modo offline.
-  * Verificación local contra `password_hash` almacenado en `u24_offline_session`
-    (bcrypt.compare — hash calculado en servidor durante el check-in online previo).
+  * Verificación local contra `password_hash` + `password_salt` almacenados en
+    `u24_offline_session` usando `crypto.subtle.deriveBits` (PBKDF2-SHA-256,
+    100.000 iteraciones) — operación nativa del navegador, sin bundle externo,
+    sin bloqueo del Main Thread. El hash fue derivado en el servidor durante el
+    check-in online previo.
   * Si la verificación es válida → `estado_1` en modo DEGRADADO (solo lectura).
     Banner visible: "⚠️ Modo sin conexión — Solo lectura".
   * Si cualquier validación falla → mensaje genérico "Credenciales incorrectas

@@ -9,18 +9,25 @@
           - ID_vehiculo (si existe)
           - ID_nombre dotación (todos los que entraron al DRP)
       * Registro_asistencias (tabla dinámica, append-only):
+          - id (UUID v4, generado en cliente con crypto.randomUUID() — PRIMARY KEY en Supabase)
           - timestamp_registro
           - ID_nombre_registrador
           - p_filiacion (Nombre y apellidos, Edad, DNI/NIE/Pasaporte, Ciudad de residencia, Sexo, Teléfono)
           - Si menor: Datos Padre/Madre/Tutor (Nombre y apellidos, DNI/NIE/Pasaporte)
           - Motivo_asistencia (texto libre)
           - Resolucion (texto libre)
+      * Idempotencia de inserción:
+          - El UUID se genera en el cliente antes de encolar la mutación offline.
+          - Al reconectar, si el RPC recibe un UUID ya existente (reenvío de la cola),
+            PostgreSQL rechaza el INSERT con error de clave duplicada (PK violation).
+            El handler de cola interpreta este error como éxito idempotente y elimina
+            la mutación de IndexedDB sin reintentar. La asistencia no se duplica.
       * Funcion:
           1. Al crear un DRP, se genera automáticamente un Doc-1 vinculado. Estado inicial: Planificado_Pendiente.
           2. Al activarse el DRP (estado En_Curso), el Doc-1 pasa a Activo_En_Curso. Los terminales activos en el DRP pueden añadir asistencias desde visual_info_drp.
           3. Cada asistencia añadida se registra con timestamp e ID_nombre del registrador. No se pueden editar ni eliminar entradas ya guardadas (trazabilidad completa).
           4. Si hay varios terminales en el mismo DRP, todos escriben en el mismo Doc-1.
-          5. Se guarda con copia de seguridad en IndexedDB y Supabase mientras está activo.
+          5. Se guarda con copia de seguridad en IndexedDB (store doc1_asistencias — ver hooks.md §9) y Supabase mientras está activo.
           6. Al finalizar el DRP manualmente, el Doc-1 pasa a Finalizado_Cerrado. Solo Gerencia, Coordinación y RRHH pueden consultarlo.
           7. Exportable a PDF.
       * Estados_Transaccion:
@@ -364,6 +371,10 @@
        - Chapa y Pintura
       - Descripcion_Detallada (texto libre)
       - Adjuntos (fotografías del daño o panel de mandos)
+          * Las fotografías se comprimen obligatoriamente en cliente antes de almacenarse.
+          * Formato de salida: WebP, calidad 70 %, dimensión máxima 1200 px (lado mayor).
+          * Se almacenan en IndexedDB como Blob (nunca como cadena Base64).
+          * Ver nucleo_flota_y_taller.md → Compresión de adjuntos Doc-7 para la spec completa.
       - Timestamp_reporte (auto)
       - ID_nombre_reportador (auto)
       - Timestamp_cambio_estado (auto — registrado en cada transición)

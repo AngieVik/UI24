@@ -209,6 +209,64 @@ Valores por defecto:
 
 ---
 
+## Compresión de adjuntos Doc-7
+
+Las fotografías adjuntas en un Doc-7 (daño o panel de mandos) deben comprimirse
+obligatoriamente en el cliente antes de que el archivo toque el store de Zustand
+o IndexedDB. La compresión ocurre en el hook `useImageCompressor` mediante la
+Canvas API nativa — sin librerías externas, sin coste de bundle.
+
+### Pipeline de compresión
+
+```typescript
+// useImageCompressor — hook reutilizable para cualquier adjunto de imagen
+async function comprimirImagen(file: File): Promise<Blob> {
+  const MAX_PX   = 1200   // píxeles en el lado mayor
+  const CALIDAD  = 0.70   // WebP quality 70 %
+
+  // 1. Decodificar a ImageBitmap (usa el decodificador nativo del navegador)
+  const bitmap = await createImageBitmap(file)
+
+  // 2. Calcular dimensiones manteniendo el aspect ratio
+  const escala  = Math.min(1, MAX_PX / Math.max(bitmap.width, bitmap.height))
+  const w = Math.round(bitmap.width  * escala)
+  const h = Math.round(bitmap.height * escala)
+
+  // 3. Renderizar en OffscreenCanvas (no bloquea el DOM)
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx    = canvas.getContext('2d')!
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close()  // liberar memoria del ImageBitmap
+
+  // 4. Exportar como WebP
+  return canvas.convertToBlob({ type: 'image/webp', quality: CALIDAD })
+}
+```
+
+### Reglas de almacenamiento
+
+| Regla | Descripción |
+|---|---|
+| Formato en memoria | `Blob` — nunca `string` (Base64 o data-URL) |
+| Motor de persistencia | IndexedDB object store `document_drafts` — campo `adjuntos: Blob[]` |
+| Prohibición explícita | Ningún adjunto puede almacenarse como cadena Base64 en Zustand ni en IndexedDB. Una cadena Base64 de 1 MB ocupa ≈1,37 MB en RAM tras la deserialización JSON, contra ≈1 MB de un Blob — y el Blob no pasa por el parser JSON |
+| Lectura para previsualización | `URL.createObjectURL(blob)` — revocado con `URL.revokeObjectURL` al desmontar el componente |
+| Lectura para upload | `supabase.storage.from('adjuntos_doc7').upload(path, blob, { contentType: 'image/webp' })` |
+
+### Comportamiento en la UI
+
+1. El usuario selecciona una o varias fotografías (`<input type="file" accept="image/*" multiple>`).
+2. Por cada archivo: `useImageCompressor.comprimirImagen(file)` → `Blob` comprimido.
+3. El `Blob` se añade al array de adjuntos del draft en IndexedDB.
+4. El componente renderiza una miniatura con `URL.createObjectURL(blob)`.
+5. Al guardar el Doc-7:
+   - Si online: upload a Supabase Storage + INSERT del path en el registro del Doc-7.
+   - Si offline: el `Blob` permanece en IndexedDB; la mutación se encola con el path
+     temporal. Al reconectar: upload primero, luego INSERT con path real.
+6. El `Blob` en IndexedDB se elimina una vez confirmada la sincronización con Supabase.
+
+---
+
 ## Documentos *(referencia)*
 
 * Doc-7 — Informe de avería.

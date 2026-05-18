@@ -1773,7 +1773,18 @@ la integridad de datos.
 Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disponible):
 
 ```
-1. El servidor genera un payload firmado:
+1. El servidor (Edge Function check-in) genera el derivado de contraseña:
+   a. Genera una sal aleatoria de 16 bytes:
+        salt = crypto.getRandomValues(new Uint8Array(16))   ← Deno/Node
+   b. Deriva el hash usando PBKDF2-SHA-256:
+        hash = await crypto.subtle.deriveBits(
+          { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 },
+          await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']),
+          256   // bits de salida
+        )
+   c. Serializa ambos como base64url: password_hash_b64, salt_b64
+
+2. El servidor genera un payload firmado:
    {
      user_id:         ID_nombre,
      role:            string,
@@ -1781,22 +1792,27 @@ Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disp
      shift_start:     ISOString,
      expires_at:      ISOString (shift_start + 36h),
      device_id:       fingerprint del terminal,
-     password_hash:   bcrypt(password, cost=12)
-                      — truncado a 72 bytes (límite estándar de bcrypt)
-                      — calculado en el servidor durante el check-in online
+     password_hash:   base64url(PBKDF2-SHA-256(password, salt, 100_000 iterations, 256 bits))
+     password_salt:   base64url(salt de 16 bytes)
+                      — ambos calculados en el servidor, nunca en cliente
                       — NUNCA se transmite la contraseña en texto plano al cliente
    }
 
-2. Firma: HMAC-SHA256 con clave rotante diaria (gestionada en Supabase Vault)
+3. Firma: HMAC-SHA256 con clave rotante diaria (gestionada en Supabase Vault)
 
-3. El payload firmado se guarda en localStorage:
+4. El payload firmado se guarda en localStorage:
    'u24_offline_session': base64(payload + signature)
 ```
 
 **Seguridad del `password_hash`:**
-- `bcrypt` con factor de coste 12 — resiste ataques de fuerza bruta locales.
-- El hash se calcula en el servidor (Edge Function) durante el check-in online.
-  El cliente nunca recibe ni almacena la contraseña en claro.
+- PBKDF2-SHA-256 con 100.000 iteraciones — resiste ataques de fuerza bruta locales
+  sin requerir la librería `bcrypt` (coste de bundle ≈ 0, sin bloqueo del Main Thread).
+- La derivación se ejecuta con `crypto.subtle` nativo del navegador: delegado a C++,
+  asíncrono, sin impacto en el hilo de UI.
+- La sal es única por sesión de check-in — distintas sesiones del mismo usuario
+  producen hashes distintos, evitando ataques de precómputo de tabla.
+- El hash se calcula en el servidor durante el check-in online. El cliente solo
+  recibe el hash y la sal ya derivados — nunca la contraseña en claro.
 - Si el usuario cambia su contraseña online, el payload previo queda invalidado
   automáticamente porque la firma HMAC será inconsistente en el próximo ciclo de clave.
 - El hash no se sincroniza entre terminales — cada terminal genera el suyo propio
@@ -1819,8 +1835,20 @@ Si al intentar autenticarse el terminal no tiene red:
    a. HMAC del payload con la clave diaria cached (también en localStorage)
    b. expires_at > NOW()
    c. device_id coincide con el terminal actual
-   d. bcrypt.compare(contraseña_introducida, payload.password_hash) === true
-      ← Verificación local de contraseña contra el hash almacenado
+   d. Verificación PBKDF2 local de contraseña (operación asíncrona):
+        const keyMaterial = await crypto.subtle.importKey(
+          'raw', encoder.encode(contraseña_introducida), 'PBKDF2', false, ['deriveBits']
+        )
+        const derivedBits = await crypto.subtle.deriveBits(
+          { name: 'PBKDF2', hash: 'SHA-256',
+            salt: base64urlDecode(payload.password_salt),
+            iterations: 100_000 },
+          keyMaterial,
+          256
+        )
+        const candidateHash = base64urlEncode(derivedBits)
+        candidateHash === payload.password_hash  ← comparación en tiempo constante (timingSafeEqual)
+      ← crypto.subtle es nativo, sin bundle extra, sin bloqueo del Main Thread
 6. Si todo válido:
    - Terminal pasa a estado_1 en modo DEGRADADO
    - Rol: solo lectura del snapshot de claims
@@ -1878,7 +1906,8 @@ el acceso degradado sería imposible para ellos.
             shift_start:     ISOString (inicio del turno SIGUIENTE),
             expires_at:      shift_start + 36h,
             device_id:       fingerprint del terminal destino,
-            password_hash:   bcrypt hash ya almacenado en servidor para ese usuario
+            password_hash:   PBKDF2-SHA-256 hash ya almacenado en servidor para ese usuario
+            password_salt:   sal correspondiente al hash almacenado
           }
        b. Firma el payload con HMAC-SHA256:
           — Clave del día siguiente si el turno cruza medianoche.
@@ -2101,36 +2130,50 @@ responde una única vez usando la Geolocation API nativa.
 
 ### 29.2 Flujo
 
+**Canal único multiplexado:** todos los eventos de GPS (ping y pong de todos los
+vehículos) fluyen por un único canal Realtime global `coordinacion:flota`.
+Esto evita abrir N canales paralelos (uno por vehículo) en el cliente coordinador,
+que en una flota mediana-grande agotaría los límites de conexiones simultáneas de Supabase.
+
 ```
 COORDINADOR (VisorSeguimientoOperativo)
   │
+  ├─ Al montar el componente: suscripción única a canal `coordinacion:flota`
+  │   └─ Escucha: `pong_location`, `pong_error`
+  │       El handler extrae id_vehiculo del payload y actualiza
+  │       solo la tarjeta correspondiente via reducer local (ver abajo).
+  │
   ├─ Pulsa "Solicitar Ubicación" en la tarjeta de ID_vehiculo
   │
-  └─ Publica evento en canal Realtime:
-       canal:    `vehiculo:${ID_vehiculo}`
+  └─ Publica evento en canal `coordinacion:flota`:
        evento:   `ping_location`
-       payload:  { solicitante_id: ID_nombre_coordinador, timestamp_ping: now() }
+       payload:  {
+         id_vehiculo:     ID del vehículo objetivo,
+         solicitante_id:  ID_nombre_coordinador,
+         timestamp_ping:  now()
+       }
 
 ──────────────────────────────────────────
 
 TERMINAL DE VEHÍCULO (hook useLocationListener — activo mientras el terminal
                        tiene checkin_on y estado_operativo ≠ 'desactivado')
   │
-  ├─ Recibe evento `ping_location` en canal `vehiculo:${ID_vehiculo}`
+  ├─ Recibe evento `ping_location` en canal `coordinacion:flota`
+  ├─ Filtra: si payload.id_vehiculo ≠ este terminal → ignorar silenciosamente
   │
   ├─ Llama navigator.geolocation.getCurrentPosition({ timeout: 5000 })
   │   (una sola petición — sin watchPosition)
   │
-  ├─ Éxito → publica respuesta en el mismo canal:
+  ├─ Éxito → publica respuesta en el mismo canal `coordinacion:flota`:
   │     evento:  `pong_location`
-  │     payload: { lat, lon, accuracy, timestamp_gps: now() }
+  │     payload: { id_vehiculo, lat, lon, accuracy, timestamp_gps: now() }
   │
   ├─ Éxito → INSERT en tabla `gps_historial`:
   │     { id_vehiculo, lat, lon, accuracy, timestamp_gps, origen: 'ping' }
   │
   └─ Fallo (timeout, hardware no disponible, permiso denegado):
        No publica `pong_location`.
-       En su lugar publica inmediatamente en el mismo canal:
+       En su lugar publica inmediatamente en `coordinacion:flota`:
          evento:  `pong_error`
          payload: { id_vehiculo, codigo: err.code, mensaje: err.message, timestamp: now() }
        (err.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT)
@@ -2140,9 +2183,13 @@ TERMINAL DE VEHÍCULO (hook useLocationListener — activo mientras el terminal
 
 ──────────────────────────────────────────
 
-COORDINADOR — recibe `pong_location`
+COORDINADOR — recibe `pong_location` o `pong_error` en `coordinacion:flota`
   │
-  └─ Cancela el timer de fallback y actualiza tarjeta del vehículo
+  └─ Extrae id_vehiculo del payload
+  └─ Despacha acción al store local (reducer) del VisorSeguimientoOperativo:
+       dispatch({ type: 'GPS_PONG', id_vehiculo, lat, lon, accuracy, timestamp_gps })
+       → Solo la tarjeta de ese id_vehiculo se re-renderiza (React.memo + selector granular)
+  └─ Cancela el timer de fallback para ese id_vehiculo y actualiza su tarjeta
        con lat/lon frescos (estado `success`)
 ```
 
@@ -2161,35 +2208,66 @@ En ambos casos el coordinador:
 2. Invoca la función RPC `get_ultima_ubicacion_vehiculo($id_vehiculo)`:
 
    ```sql
-   -- La función hace UNION ALL entre telemetría y eventos operativos
-   -- y devuelve la posición matemáticamente más reciente, sin importar la fuente.
+   -- La función consulta las dos tablas secuencialmente con índice dedicado
+   -- y compara los timestamps en PL/pgSQL para evitar el sort implícito del UNION ALL.
+   -- Ver §29.6 para el índice B-Tree y la política de particionado de gps_historial.
 
    CREATE OR REPLACE FUNCTION get_ultima_ubicacion_vehiculo(p_id_vehiculo TEXT)
    RETURNS TABLE(lat NUMERIC, lon NUMERIC, accuracy NUMERIC,
                  timestamp_gps TIMESTAMPTZ, origen TEXT)
    AS $$
-     SELECT lat, lon, accuracy, timestamp_gps, 'telemetria' AS origen
-       FROM gps_historial
-      WHERE id_vehiculo = p_id_vehiculo
+   DECLARE
+     v_lat_tel  NUMERIC;
+     v_lon_tel  NUMERIC;
+     v_acc_tel  NUMERIC;
+     v_ts_tel   TIMESTAMPTZ;
+     v_lat_op   NUMERIC;
+     v_lon_op   NUMERIC;
+     v_ts_op    TIMESTAMPTZ;
+   BEGIN
+     -- 1. Telemetría: posición más reciente de gps_historial
+     --    Usa índice B-Tree (id_vehiculo, timestamp_gps DESC) — ver §29.6
+     SELECT g.lat, g.lon, g.accuracy, g.timestamp_gps
+       INTO v_lat_tel, v_lon_tel, v_acc_tel, v_ts_tel
+       FROM gps_historial g
+      WHERE g.id_vehiculo = p_id_vehiculo
+      ORDER BY g.timestamp_gps DESC
+      LIMIT 1;
 
-     UNION ALL
+     -- 2. Evento operativo: última coordenada registrada en cambios de estado
+     SELECT d.coords_lat, d.coords_lon, d.timestamp_evento
+       INTO v_lat_op, v_lon_op, v_ts_op
+       FROM doc8_eventos d
+      WHERE d.id_vehiculo = p_id_vehiculo
+        AND d.coords_lat  IS NOT NULL
+      ORDER BY d.timestamp_evento DESC
+      LIMIT 1;
 
-     SELECT coords_lat, coords_lon, NULL AS accuracy, timestamp_evento,
-            'cambio_operativo' AS origen
-       FROM doc8_eventos
-      WHERE id_vehiculo = p_id_vehiculo
-        AND coords_lat IS NOT NULL
-
-     ORDER BY timestamp_gps DESC
-     LIMIT 1;
-   $$ LANGUAGE sql STABLE;
+     -- 3. Devolver la fuente con mayor timestamp; sin datos → tabla vacía
+     IF v_ts_tel IS NULL AND v_ts_op IS NULL THEN
+       RETURN;
+     ELSIF v_ts_op IS NULL
+        OR (v_ts_tel IS NOT NULL AND v_ts_tel >= v_ts_op) THEN
+       RETURN QUERY SELECT v_lat_tel, v_lon_tel, v_acc_tel,
+                           v_ts_tel, 'telemetria'::TEXT;
+     ELSE
+       RETURN QUERY SELECT v_lat_op, v_lon_op, NULL::NUMERIC,
+                           v_ts_op, 'cambio_operativo'::TEXT;
+     END IF;
+   END;
+   $$ LANGUAGE plpgsql STABLE;
    ```
 
-   **Justificación del UNION ALL:** `gps_historial` contiene posiciones de telemetría
-   (pings explícitos). `doc8_eventos` contiene las coordenadas GPS capturadas en cada
-   cambio de estado operativo (activación, ruta, alerta…). El sistema devuelve siempre
-   la posición más reciente disponible, independientemente de si fue generada por un
-   ping de coordinación o por un cambio operativo del pilot.
+   **Motivo del cambio a lógica secuencial:** el `UNION ALL` anterior forzaba a
+   PostgreSQL a materializar ambos conjuntos de filas, generar un sort compuesto y
+   aplicar `LIMIT 1` sobre el resultado combinado — imposibilitando el uso del índice
+   en cada tabla por separado. Con la variante PL/pgSQL, cada `SELECT … LIMIT 1`
+   puede aprovechar su propio índice B-Tree de forma independiente, y la comparación
+   de timestamps ocurre en memoria sobre dos escalares, no sobre un heap ordenado.
+   `gps_historial` contiene posiciones de telemetría (pings explícitos).
+   `doc8_eventos` contiene coordenadas GPS capturadas en cada cambio de estado
+   operativo (activación, ruta, alerta…). El sistema sigue devolviendo siempre la
+   posición más reciente independientemente de la fuente.
 
 3. Muestra las coordenadas en la tarjeta con estado `fallback`:
    * Opacidad reducida (`opacity-60`).
@@ -2199,30 +2277,32 @@ En ambos casos el coordinador:
 
 ### 29.4 Throttle local en el terminal de vehículo
 
-El terminal embarcado almacena el `timestamp` del último ping procesado.
-Si recibe un nuevo evento `ping_location` antes de que transcurran **15 segundos**
-desde el anterior, el evento se ignora silenciosamente — sin ejecutar
-`getCurrentPosition`, sin publicar `pong_location`.
+El terminal embarcado almacena el `timestamp` del último ping procesado para su
+propio `id_vehiculo`. Si recibe un nuevo evento `ping_location` dirigido a él
+antes de que transcurran **15 segundos** desde el anterior, el evento se ignora
+silenciosamente — sin ejecutar `getCurrentPosition`, sin publicar `pong_location`.
 
 ```
 useLocationListener — pseudocódigo de throttle:
 
   lastPingProcessed: ISOString | null = null   // persistido en useVehiculoStore
 
-  on('ping_location'):
+  on('ping_location') en canal 'coordinacion:flota':
+    if payload.id_vehiculo ≠ miVehiculoId:
+      return  // no es para este terminal — ignorar
     now = Date.now()
     if lastPingProcessed && (now - lastPingProcessed) < 15_000:
-      return  // ignorar — throttle activo
+      return  // throttle activo — ignorar este ping
     lastPingProcessed = now
     // → continuar con getCurrentPosition (ver §29.2)
 ```
 
-**Efecto en coordinación:** como el `pong_location` se emite al canal general
-`vehiculo:${ID_vehiculo}`, todos los coordinadores suscritos a ese canal reciben
-la respuesta del primer ping de forma simultánea y actualizan su interfaz al mismo
-tiempo. Los pings duplicados enviados en los primeros 15 segundos no sobrecargan
-el hardware del vehículo y, a su vez, todos los coordinadores ya dispondrán de las
-coordenadas actualizadas gracias al pong del primer ping.
+**Efecto en coordinación:** como `pong_location` se emite al canal global
+`coordinacion:flota`, todos los coordinadores suscritos reciben la respuesta
+simultáneamente y cada uno actualiza solo la tarjeta del vehículo correspondiente
+(selector granular por `id_vehiculo`). Los pings duplicados dentro de la ventana
+de 15 s no sobrecargan el hardware del vehículo y todos los coordinadores disponen
+ya de las coordenadas actualizadas gracias al pong del primer ping.
 
 **Justificación:** el hardware GPS de los terminales embarcados (especialmente
 en tablets de gama media) tarda entre 2 y 8 segundos en obtener un fix preciso.
@@ -2287,6 +2367,63 @@ en una operación de emergencia activa. No es configurable en tiempo de ejecuci�
   sobre el resultado del fallback RPC — no modifica ni depura la tabla
   `gps_historial` ni `doc8_eventos`.
 
+### 29.6 Índice B-Tree y Particionado de `gps_historial`
+
+#### 29.6.1 Índice de cobertura para el fallback RPC
+
+```sql
+-- Cubre la consulta SELECT … WHERE id_vehiculo = ? ORDER BY timestamp_gps DESC LIMIT 1
+-- sin heap fetch: lat, lon, accuracy incluidos en el índice.
+CREATE INDEX idx_gps_historial_vehiculo_ts
+  ON gps_historial (id_vehiculo, timestamp_gps DESC)
+  INCLUDE (lat, lon, accuracy);
+```
+
+El planner selecciona este índice para `LIMIT 1` directamente (Index Scan Forward),
+evitando un Seq Scan sobre una tabla que puede acumular millones de filas con el tiempo.
+
+#### 29.6.2 Política de particionado por rango de fecha
+
+```sql
+-- Tabla maestra particionada por mes (RANGE sobre timestamp_gps)
+CREATE TABLE gps_historial (
+  id           UUID          DEFAULT gen_random_uuid() PRIMARY KEY,
+  id_vehiculo  TEXT          NOT NULL,
+  lat          NUMERIC       NOT NULL,
+  lon          NUMERIC       NOT NULL,
+  accuracy     NUMERIC,
+  timestamp_gps TIMESTAMPTZ NOT NULL
+) PARTITION BY RANGE (timestamp_gps);
+
+-- Partición activa — mes en curso (renovada por job mensual)
+CREATE TABLE gps_historial_2026_05
+  PARTITION OF gps_historial
+  FOR VALUES FROM ('2026-05-01') TO ('2026-06-01');
+
+-- Índice de cobertura replicado en cada partición automáticamente
+-- (PostgreSQL 11+ propaga índices declarados en la tabla maestra)
+```
+
+#### 29.6.3 Purga automática
+
+Job programado en Supabase (Edge Function `purgar_gps_historial`, ejecución
+mensual el día 1):
+
+```
+1. Identificar la partición del mes anterior:
+   gps_historial_YYYY_MM donde YYYY_MM = mes_actual - 1
+2. DETACH PARTITION gps_historial_YYYY_MM
+3. DROP TABLE gps_historial_YYYY_MM
+   (elimina físicamente sin afectar la tabla maestra ni las particiones activas)
+4. Crear la partición del mes siguiente si no existe
+```
+
+| Parámetro | Valor |
+|---|---|
+| Retención | 1 mes de historial activo + mes en curso |
+| Impacto en RPC | Ninguno — la consulta LIMIT 1 siempre apunta a la partición reciente |
+| Volumen estimado | ~500 pings/vehículo/mes × N vehículos; una partición mensual acota el crecimiento |
+
 ---
 
 ## 30. Retención de JWT para sincronización offline post-checkout
@@ -2319,9 +2456,10 @@ CASO RETENCIÓN (offline + pendientes):
      - Banner persistente: "Sincronizando datos... No cierre el navegador"
      - Contador visible: "N operaciones pendientes de envío"
 
-  2. MOTOR — JWT congelado en store aislado:
-     - useBackgroundSyncStore.congelarJwt(jwt, ID_nombre)
-       ↳ JWT escrito en 'bgs_frozen_jwt' (localStorage aislado — NUNCA en la sesión de UI)
+  2. MOTOR — JWT congelado en IndexedDB:
+     - useBackgroundSyncStore.congelarJwt(jwt, ID_nombre)  [await]
+       ↳ JWT escrito en IndexedDB object store 'bgs_tokens' clave 'frozen_jwt'
+          (IndexedDB es la única API accesible tanto desde Main Thread como desde SW)
        ↳ useAuthStore NO retiene el JWT: puede recibir un nuevo usuario libremente
      - useTerminalStore.estado = 'estado_0'  ← UI bloqueada para el usuario que hizo checkout
      - El resto del flujo_checkout_automatico se ejecuta con normalidad
@@ -2329,8 +2467,8 @@ CASO RETENCIÓN (offline + pendientes):
      - EXCEPCIÓN: useAuthStore.clearJwt() NO se llama todavía para ese usuario
 
   3. SERVICE WORKER — vaciado de cola:
-     - Al recuperar conexión, el SW lee useBackgroundSyncStore.getFrozenJwt()
-       (acceso directo al store aislado — no pasa por la sesión de UI activa)
+     - Al recuperar conexión, el SW abre directamente IndexedDB 'u24_offline' y lee
+       bgs_tokens['frozen_jwt'].jwt — sin postMessage, sin pasar por la sesión de UI activa
      - Ejecuta procesarCola() con el JWT congelado del usuario que hizo checkout
      - Cada mutación procesada con HTTP 200 se elimina de IndexedDB
      - Si alguna falla → marcada como 'fallido'; el resto continúa
@@ -2340,11 +2478,12 @@ CASO RETENCIÓN (offline + pendientes):
   4. DESTRUCCIÓN DIFERIDA del JWT:
      - Cuando pendingCount === 0 (cola vacía):
        → useOfflineQueue.clearJwtAfterSync()
-         → useBackgroundSyncStore.liberarJwt()  ← elimina 'bgs_frozen_jwt' de localStorage
+         → useBackgroundSyncStore.liberarJwt()  [await]
+             ← DELETE bgs_tokens['frozen_jwt'] de IndexedDB
          → useAuthStore.clearJwt()              ← destruye la sesión del usuario A si sigue en estado_0
        → Banner actualizado: "Sincronización completada"
      - Si hay mutaciones en estado 'fallido':
-       → El JWT sigue congelado en useBackgroundSyncStore
+       → El JWT sigue congelado en IndexedDB (bgs_tokens)
        → Banner: "N operaciones fallidas — requieren atención"
        → El supervisor / next pilot puede revisar y descartar manualmente
 ```
@@ -2354,7 +2493,8 @@ CASO RETENCIÓN (offline + pendientes):
 * El JWT congelado **no eleva los permisos** de nadie: la UI del usuario que hizo
   checkout está en `estado_0` (bloqueada), ningún componente puede operar ni
   renderizar módulos protegidos.
-* El JWT solo es accesible por el Service Worker via `useBackgroundSyncStore.getFrozenJwt()`.
+* El JWT solo es accesible por el Service Worker, que lo lee directamente de IndexedDB
+  (`bgs_tokens['frozen_jwt']`) sin pasar por ningún store de UI ni por postMessage.
   No está expuesto a componentes UI ni al store de sesión activa.
 * **Aislamiento de hilos de sesión:** mientras el SW vacía la cola de Usuario A,
   Usuario B puede iniciar sesión, recibir su propio JWT en `useAuthStore` y operar
@@ -2369,7 +2509,7 @@ CASO RETENCIÓN (offline + pendientes):
 | Store | Campo / Método | Descripción |
 |---|---|---|
 | `useOfflineQueue` | `hasCriticalPending: boolean` | true si pendingCount > 0 y !isOnline en el momento del checkout |
-| `useBackgroundSyncStore` | `frozenJwt: string \| null` | JWT congelado del usuario que hizo checkout offline; solo accesible por SW |
+| `useBackgroundSyncStore` | `frozenJwt` | JWT congelado; almacenado en IndexedDB `bgs_tokens['frozen_jwt']` — no en Zustand; solo el SW lo lee directamente |
 | `useBackgroundSyncStore` | `hasFrozenJwt: boolean` | true mientras hay JWT congelado pendiente de vaciado |
 | `useBackgroundSyncStore` | `congelarJwt(jwt, userId)` | Escrito exclusivamente por `useCheckin.checkout()` en CASO RETENCIÓN |
 | `useBackgroundSyncStore` | `liberarJwt()` | Llamado por `useOfflineQueue.clearJwtAfterSync()` al vaciar la cola |
@@ -2605,43 +2745,59 @@ Cualquier mutación ejecutada por Usuario A a través del cliente global quedar�
 con el JWT de Usuario B — un fallo de identidad en el trail de auditoría y en las
 políticas RLS de escritura.
 
-### 34.2 Solución — mapa de tokens en `useAuthStore`
+### 34.2 Solución — cliente Singleton con interceptor de fetch dinámico
 
-`useAuthStore.jwtMap` contiene el token vigente de cada usuario con `checkin_on`.
-Toda operación mutable debe construir un cliente Supabase temporal con el JWT del
-ejecutor explícito en los headers. Ver `hooks.md §18` para la interfaz completa del
-store y el patrón de `crearClienteConJwt()`.
+En lugar de instanciar un cliente nuevo por mutación, U24 usa un **único cliente
+Supabase** cuyo custom `fetch` lee el JWT del ejecutor desde `useAuthStore` en el
+momento exacto de cada petición de red. Esto elimina la proliferación de clientes y
+concentra la lógica de autenticación en un único punto.
+
+Ver `hooks.md §18` para el código completo del singleton, el wrapper `conEjecutor`
+y la interfaz de `useAuthStore`.
 
 ### 34.3 Política de uso por tipo de operación
 
-| Tipo de operación | Cliente a usar | Motivo |
+| Tipo de operación | Patrón | Motivo |
 |---|---|---|
-| SELECT (consultas de lectura) | Cliente global singleton | Sin implicaciones de escritura; RLS de lectura acepta la sesión del terminal |
-| INSERT / UPDATE / DELETE | `crearClienteConJwt(getJwtFor(ejecutorId))` | RLS de escritura evalúa `auth.uid()` del JWT — debe ser el del ejecutor real |
-| Realtime (suscripciones) | Cliente global singleton | Suscripciones son de solo lectura; no generan eventos de escritura |
-| Edge Functions | Header `Authorization: Bearer <jwt>` explícito en el `fetch` | Las EF no usan el cliente local; el header es el único mecanismo de auth |
-| Cola offline (`useOfflineQueue`) | JWT congelado en el payload de la mutación | Al encolar, se copia `getJwtFor(ejecutorId)` en el objeto `Mutation.jwt`; al drenar, se usa ese JWT congelado — nunca el jwt activo del terminal |
+| SELECT (lectura) | `supabase.from(...)` sin wrapper | Sin RLS de escritura; cualquier sesión del terminal sirve |
+| INSERT / UPDATE / DELETE | `conEjecutor(ejecutorId, () => supabase.from(...).op(...))` | El interceptor inyecta el JWT correcto en el header `Authorization` |
+| Realtime (suscripciones) | `supabase.channel(...)` sin wrapper | Solo lectura; el interceptor no participa |
+| Edge Functions | `conEjecutor(ejecutorId, () => supabase.functions.invoke(...))` | El interceptor añade el header al invoke |
+| Cola offline | JWT congelado en payload; `addJwt` temporal antes de drenar | El interceptor lo lee igual — ver §34.5 |
 
 ### 34.4 Auditoría e imputación
 
-El `ejecutorId` y el JWT del ejecutor aseguran que:
-* La política RLS de INSERT/UPDATE evalúa el `auth.uid()` correcto.
-* Los campos automáticos `id_nombre_ejecutor` en las tablas se rellenan via `auth.jwt()`.
-* El log de auditoría imputa la acción al usuario real, no al propietario del terminal.
+El `ejecutorId` inyectado en cada petición asegura que:
+* La política RLS de INSERT/UPDATE evalúa el `auth.uid()` correcto del JWT.
+* Los campos automáticos `id_nombre_ejecutor` se rellenan via `auth.jwt()` en el servidor.
+* El log de auditoría imputa la acción al usuario real.
 
 ### 34.5 Flujo offline — JWT congelado por mutación
 
 ```
 Al encolar una mutación en useOfflineQueue:
-  payload.jwt = useAuthStore.getState().getJwtFor(ejecutorId)
-  // snapshot del token en el momento de la acción — inmutable desde ese punto
+  mutation.payload.ejecutorId = ejecutorId
+  mutation.payload.jwt = useAuthStore.getState().getJwtFor(ejecutorId)
+  // snapshot del token en el momento de la acción
 
 Al drenar la cola (SW o reconexión):
-  jwt = mutation.payload.jwt
-  client = crearClienteConJwt(jwt)
-  // Se usa el JWT de quien ejecutó la acción, no el JWT del usuario activo ahora
-  // Si el JWT ha expirado (> shift_start + 36h): mutation → estado 'fallido'
+  // Restaurar temporalmente el JWT congelado en el store para que el interceptor lo lea:
+  useAuthStore.getState().addJwt(mutation.payload.ejecutorId, mutation.payload.jwt)
+  await conEjecutor(mutation.payload.ejecutorId, () =>
+    supabase.rpc(mutation.tipo, mutation.payload.data)
+  )
+  useAuthStore.getState().removeJwt(mutation.payload.ejecutorId)
+  // Si el JWT ha expirado (> shift_start + 36h) → getJwtFor devuelve null
+  // → interceptor lanza 'jwt_no_disponible' → mutation → estado 'fallido'
 ```
+
+### 34.6 Concurrencia estricta — UUID de petición
+
+Para el caso excepcional de mutaciones verdaderamente paralelas (no serializado por TanStack Query),
+el interceptor puede extenderse con un `Map<requestId, ejecutorId>` donde el `requestId` viaja
+como un header interno (`x-u24-request-id`) que el interceptor lee y elimina antes de enviar la
+petición a Supabase. Este patrón resuelve cualquier condición de carrera entre dos `conEjecutor`
+concurrentes pero está fuera del scope de la implementación actual (no hay caso de uso confirmado).
 
 ---
 
@@ -3565,3 +3721,118 @@ $$ LANGUAGE plpgsql;
 ```
 
 ### 46.3 Flujo completo — ver `hooks.md §3 useVehiculo.quitarPersona`
+
+---
+
+## 47. Gasto Offline con Stock Insuficiente — RPC `forzar_gasto_con_descuadre`
+
+### 47.1 Problema
+
+Cuando un Doc-6 (gasto de material) se encola offline y se replica al reconectar,
+la RPC estándar `registrar_doc6_metadata` puede rechazarlo con `stock_insuficiente`
+si el `stock_real` en Supabase ya cayó por debajo de la cantidad solicitada —
+por ejemplo, porque otro terminal registró consumo del mismo ítem mientras el primero
+estaba sin cobertura.
+
+Abortar el gasto en ese punto sería incorrecto: el consumo físico ya ocurrió.
+El sistema debe registrar el gasto, permitir que el stock caiga a negativo de forma
+temporal, y delegar la regularización a logística.
+
+### 47.2 RPC `forzar_gasto_con_descuadre`
+
+```sql
+CREATE OR REPLACE FUNCTION forzar_gasto_con_descuadre(
+  p_location_id   UUID,
+  p_item_id       UUID,
+  p_cantidad      INTEGER,
+  p_terminal_id   TEXT,
+  p_mutation_uuid UUID
+)
+RETURNS VOID AS $$
+DECLARE
+  v_stock_nuevo INTEGER;
+BEGIN
+  -- 1. Descuento incondicional — el stock_real puede quedar negativo
+  UPDATE inventario_items
+     SET stock_real = stock_real - p_cantidad
+   WHERE location_id = p_location_id
+     AND id          = p_item_id
+  RETURNING stock_real INTO v_stock_nuevo;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'item_no_encontrado'
+      USING HINT = '404',
+            DETAIL = 'location_id=' || p_location_id || ' item_id=' || p_item_id;
+  END IF;
+
+  -- 2. Registrar descuadre — delega regularización a logística
+  INSERT INTO descuadres_inventario (
+    location_id,
+    item_id,
+    cantidad_descuadre,
+    motivo,
+    terminal_id,
+    mutation_uuid,
+    stock_resultante,
+    created_at
+  ) VALUES (
+    p_location_id,
+    p_item_id,
+    p_cantidad,
+    'gasto_offline_stock_insuficiente',
+    p_terminal_id,
+    p_mutation_uuid,
+    v_stock_nuevo,
+    NOW()
+  );
+
+  -- 3. Notificar a bandeja_entrada_logistica
+  --    El INSERT en descuadres_inventario dispara trigger
+  --    trg_descuadre_notificar_bandeja (ver §7) que genera la entrada
+  --    en bandeja con estado 'Emitida_Pendiente'.
+  --    No se requiere INSERT explícito aquí.
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### 47.3 Notas de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| Stock negativo | Permitido temporalmente — representa deuda física; logística reconcilia |
+| `mutation_uuid` | Idempotencia: re-envío del mismo UUID no genera doble descuadre (ver §47.4) |
+| Notificación logística | Vía trigger `trg_descuadre_notificar_bandeja` existente (§7) — consistente con flujos de Doc-10 |
+| Responsabilidad de regularización | Imputada al `terminal_id` del gasto — logística sabe qué terminal generó el conflicto |
+| Estado del Doc-6 en Supabase | La RPC no bloquea la inserción del Doc-6; la metadata del gasto se considera registrada |
+
+### 47.4 Idempotencia
+
+Para evitar doble descuento si la conexión cae justo tras el éxito del RPC pero
+antes del DELETE de IndexedDB:
+
+```sql
+-- Añadir restricción única en descuadres_inventario
+ALTER TABLE descuadres_inventario
+  ADD CONSTRAINT uq_descuadre_mutation_uuid UNIQUE (mutation_uuid);
+
+-- La RPC usa INSERT ... ON CONFLICT DO NOTHING cuando ya existe el UUID
+INSERT INTO descuadres_inventario ( ... )
+VALUES ( ... )
+ON CONFLICT (mutation_uuid) DO NOTHING;
+-- Si ya existe: la operación es no-op, el UPDATE de stock YA se aplicó
+-- (se asume que el UPDATE previo fue exitoso dado que el INSERT también lo fue)
+```
+
+> **Advertencia**: la idempotencia del `UPDATE inventario_items` no puede
+> garantizarse igual de trivialmente. El handler de cola debe comprobar
+> `descuadres_inventario WHERE mutation_uuid = p_mutation_uuid` antes de
+> llamar la RPC — si ya existe, saltar directamente a DELETE de IndexedDB
+> sin rellamar la RPC.
+>
+> Esta comprobación se añade al bloque RAMA ESPECIAL de
+> `hooks.md §9 useOfflineQueue.procesarCola`.
+
+### 47.5 Referencia cruzada
+
+Ver `hooks.md §9 useOfflineQueue.procesarCola — RAMA ESPECIAL` para el flujo
+del cliente que invoca esta RPC.
