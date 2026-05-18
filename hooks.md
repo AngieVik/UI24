@@ -106,7 +106,7 @@ Al montar useTerminalAuth (y al arrancar la PWA):
         → useAuthStore.galletaPersistente = true
         → El componente terminal_check renderiza el botón
           "Acceder como Invitado Operativo"
-
+          
 accederComoInvitado():
   1. Validar que galletaPersistente === true (guard)
   2. useAuthStore.rolActivo = 'invitado'
@@ -3401,6 +3401,7 @@ export function ahora(): number {
 ```
 
 **Uso:**
+
 - `ahora()` reemplaza a `Date.now()` en **toda captura de timestamp offline**
   (eventos Doc-8, timestamps de mutaciones encoladas, idle timeout `ultimoEventoInteraccion`).
 - `time_offset` se persiste en `useTerminalStore` (IndexedDB) y se recalcula al
