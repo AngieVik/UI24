@@ -7,53 +7,78 @@
   * Cualquier rol autorizado puede cambiar el estado de cualquier vehículo
     desde cualquier terminal.
   * Formato: lista o desplegable con `ID_vehiculo` + `Matricula` + `estado`.
-  * Si el vehículo tiene estado `Averiado`, se muestra como advertencia
-    visible en el selector pero no bloquea la activación.
+  * `condicion_tecnica` se muestra como badge secundario junto a cada vehículo:
+    * `averiado_leve` → badge amarillo informativo; no bloquea la activación.
+    * `inoperativo_critico` → badge rojo; la activación requiere confirmación
+      explícita de `gerencia` o `coordinación`.
 
 * **selector_estados_ID_vehiculo**
-  * Estados disponibles:
-    * `Activado`: operativo, con km de inicio registrados y personal emparejado.
-    * `Desactivado`: fuera de servicio temporal.
-    * `Averiado`: fallo reportado vía Doc-7. Solo informativo, no bloquea
-      la activación. Visible como advertencia en el selector.
 
-  * **Flujo de activación:**
-    1. Al seleccionar `Activado` → modal de confirmación:
-       "¿Activar vehículo `ID_vehiculo`?" — Sí | No.
-    2. Si confirmado → solicita `km_inicio`.
-    3. El sistema muestra los ID_nombre con `checkin_on` en ese terminal
-       y solicita asignar roles manualmente:
-       * `Pilot` → cualquier ID_nombre (no restringido a rol TES,
-         ya que quads, VIR y vehículos de asistencia móvil pueden
-         tener pilotos de otros perfiles).
+  El vehículo tiene dos dimensiones de estado independientes
+  (ver `estados.md §4`). El selector expone ambas.
+
+  * **Dimensión 1 — `estado_operativo`** (selector principal):
+    * `desactivado`: sin turno activo, sin Doc-8. Solo alcanzable por acción
+      manual explícita. El checkout del pilot **NO** produce este estado.
+    * `en_espera`: pilot asignado, Doc-8 activo, sin servicio ni movimiento.
+      Estado resultante del checkout del pilot (vehículo permanece disponible).
+    * `activado`: servicio activo despachado (`tipo_servicio` asignado).
+    * `ruta`: en tránsito. Captura GPS al iniciar y al finalizar.
+    * `estacionado`: parado fuera de base. Captura GPS al activar.
+    * `alerta`: respuesta a emergencia activa (luces/sirenas). Captura GPS
+      al activar y al desactivar.
+
+  * **Dimensión 2 — `condicion_tecnica`** (badge secundario, no selector manual):
+    * `operativo`: sin incidencias.
+    * `averiado_leve`: incidencia leve/moderada (Doc-7). Badge informativo amarillo.
+    * `inoperativo_critico`: fallo grave (Doc-7). Badge rojo. Activación
+      requiere confirmación explícita de `gerencia` o `coordinación`.
+
+  * **Flujo de activación** (`desactivado → en_espera`):
+    1. Modal: "¿Activar `ID_vehiculo`?" — Sí | No.
+    2. Si `condicion_tecnica = inoperativo_critico`: advertencia
+       bloqueante adicional. Requiere confirmación de rol autorizado.
+    3. Solicita `km_inicio` (obligatorio).
+    4. El sistema muestra los ID_nombre con `checkin_on` en ese terminal.
+       Asignación manual de roles:
+       * `Pilot` → cualquier ID_nombre.
        * `Carry` → resto de ID_nombre emparejados.
-       * La asignación es manual — el sistema no sugiere automáticamente.
-    4. La activación queda registrada con timestamp en Doc-8.
+    5. Activación registrada con timestamp en Doc-8.
 
-  * **Funciones operativas** (selector visible en home_area mientras
-    el vehículo está activado — actualizable en cualquier momento):
-    * Marcadas desde RRHH como referencia inicial:
-      `Programado`, `Dispositivo`, `Traslado`, `Guardia urgencias`, `DRP`.
-    * Gestionadas por el usuario en ruta:
-      * `Estacionado`: vehículo estacionado fuera de base, sin actividad.
-        Captura coordenadas GPS automáticamente y las sube a Supabase.
-      * `En espera`: emparejado con personal, pendiente de función.
-      * `Ruta`: en trayecto hacia un servicio o de vuelta a base.
-        Captura coordenadas GPS al activar y al desactivar el estado.
-    * Todos los cambios de función generan entrada de timestamp
-      inicio/fin en Doc-8.
-    * **Regla de coordenadas:** si el GPS no está disponible al
-      capturar, el sistema usa la última ubicación conocida, el
-      último evento con ubicación registrada, o cualquier dato
-      de localización disponible más reciente.
+  * **Selector `tipo_servicio`** (visible mientras `estado_operativo ≠ desactivado`):
+    * Valores: `Programado`, `Dispositivo`, `Traslado`, `Guardia urgencias`,
+      `DRP`, `Privado`, `Simulacro`, `Formacion`, `Sin_asignar`.
+    * Actualizable en cualquier momento del turno.
+    * Cada cambio genera entrada inicio/fin en Doc-8.
 
-  * **Flujo de desactivación:**
-    1. Al seleccionar `Desactivado` → modal de confirmación.
-    2. Si confirmado → solicita `km_fin`.
-    3. Elimina los estados `Pilot` y `Carry` de todos los
-       ID_nombre emparejados.
-    4. ID_vehiculo pasa a `Desactivado`.
-    5. Timestamp registrado para cierre de Doc-8.
+  * **Cambios manuales de `estado_operativo`** (en ruta):
+    * `en_espera` ↔ `ruta` ↔ `estacionado` ↔ `activado` ↔ `alerta`:
+      actualizables desde el panel de vehículo en home_area.
+    * Todos los cambios generan entrada inicio/fin en Doc-8.
+    * `ruta`, `alerta` y `estacionado` capturan coordenadas GPS (con cadena
+      de fallback — ver `logic.md §5`).
+    * **Interceptor DRP** — al intentar cambiar a `ruta` o `alerta`:
+      si el vehículo pertenece a un DRP activo sin timestamp de salida,
+      el sistema muestra: *"El vehículo pertenece al DRP [Nombre]. ¿Desea
+      registrar su salida del dispositivo?"*
+      → Sí: registra salida del DRP y ejecuta el cambio de estado.
+      → No: aborta el cambio. Ver `logic.md §28`.
+
+  * **Flujo de desactivación** (`en_espera → desactivado`) — **acción manual explícita únicamente**:
+
+    > Esta acción **no es consecuencia del checkout del pilot**. El checkout
+    > del pilot deja el vehículo en `en_espera`. `desactivado` se activa solo
+    > por decisión operativa explícita (ej. fin de jornada total sin pilot
+    > de relevo disponible, retirada del vehículo del servicio).
+
+    1. Modal de confirmación: *"¿Desactivar [ID_vehiculo]? El vehículo
+       quedará fuera de servicio."*
+    2. **Si hay pilot activo** (Doc-8 abierto): solicita `km_fin` (obligatorio).
+       Timestamp de cierre registrado en Doc-8. Doc-8 → `Enviado_Cerrado`.
+    3. **Si no hay pilot activo** (vehículo ya en `en_espera` tras checkout):
+       no se solicita `km_fin` (el Doc-8 ya fue cerrado por el pilot anterior).
+    4. Desempareja cualquier carry restante del vehículo.
+    5. `estado_operativo → desactivado`.
 
 * **Mantenimiento**
   * `Repostar_combustible`

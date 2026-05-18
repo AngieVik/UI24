@@ -31,6 +31,8 @@
       * `doc9_entrada` — entrada desde almacén externo
       * `ajuste_manual` — cuadre físico manual
       * `carga_inicial` — stock inicial al crear location
+      * `merma` — baja contable por pérdida o rotura (generado por RPC de Resolver_Manual)
+      * `recuperacion_descuadre` — alta contable por material localizado (ídem)
 
 * **`ultimos_movimientos`**: los N movimientos más recientes a través
   de todos los locations (panel de resumen rápido).
@@ -174,9 +176,14 @@ Acceso desde `inventario_maestro → Gestionar plantillas`.
 |---|---|
 | `Operativo` | Disponible para asignar a un nuevo DRP o PSA. |
 | `Asignado` | Vinculado a un DRP o PSA activo. |
-| `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación. No asignable. |
+| `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación. Asignación estándar bloqueada. |
+| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. El stock registrado en ese momento actúa como stock inicial del nuevo DRP. La responsabilidad del descuadre pendiente se transfiere a la nueva dotación. |
 
-Flujo: `Operativo` → `Asignado` → `En_Transito` → `Operativo`.
+Flujo estándar: `Operativo` → `Asignado` → `En_Transito` → `Operativo`.
+
+Flujo condicionado: `En_Transito` → `Operativo_Condicionado` → `Asignado` (nuevo DRP).
+
+Ver `logic.md §9.1` para el flujo completo de reasignación condicionada.
 
 ### Gestión de locations *(RBAC: `logistica`, `gerencia`)*
 
@@ -284,7 +291,12 @@ pasa a estado `En_Transito` (ver `logic.md §9`):
   `ID_origen`, `ID_destino`, `timestamp_generado`.
 * Visibles en `bandeja_entrada_logistica` y en `black_column → Logística → Descuadres`.
 * Acciones: `Resolver_Manual` | `Archivar`.
-* Al resolver: registra `ID_nombre_resolutor` y `timestamp_resolucion`.
+* **`Resolver_Manual`** — obliga a clasificar el destino contable mediante RPC:
+  * `Pérdida/Rotura` → el sistema registra una entrada de `merma` en `auditoria_inventario`. Sin cambio de `stock_real`.
+  * `Recuperación` → el sistema suma la cantidad faltante al `ID_origen` o `ID_destino` elegido por el operario. Registra `recuperacion_descuadre` en `auditoria_inventario`.
+  * Ver `logic.md §7.3` para el flujo RPC completo.
+* **`Archivar`**: cierra sin clasificación contable. Solo para casos sin impacto de stock.
+* Al resolver o archivar: registra `ID_nombre_resolutor` y `timestamp_resolucion`.
 
 ---
 

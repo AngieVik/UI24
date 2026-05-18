@@ -41,6 +41,21 @@
     * Registra timestamp de salida por cada elemento
       que sale.
 
+  * **DRPs Finalizados (Últimas 48h):**
+    * Sección segregada al final del visor, separada visualmente
+      de los DRPs activos.
+    * Muestra DRPs en estado `Finalizado` cuyo `timestamp_finalizacion`
+      está dentro de las últimas 48 horas (antes del archivado automático).
+    * Renderizado con `opacity-60` para distinguirlos de los DRPs activos.
+    * **Solo lectura** — ninguna mutación de estado disponible. Todos
+      los controles de acción (Entrar, Salir, Editar recursos, Finalizar)
+      están deshabilitados.
+    * Operaciones permitidas exclusivamente:
+      * Consulta del Doc-1 completo (GET — lectura).
+      * Descarga del PDF de resumen del DRP.
+    * Pasadas 48h desde `timestamp_finalizacion`, el DRP pasa a `Archivado`
+      automáticamente (job Supabase) y desaparece de esta sección.
+
 * **selector_estados_drp** *(RBAC modificar: `coordinación`, `gerencia`)*
   * `En espera`: estado por defecto al crear el DRP. Registra `timestamp_creacion`.
   * `En preparación`: se activa automáticamente 1h antes
@@ -99,9 +114,15 @@
     `stock_real`, `stock_objetivo`.
 
   * **bandeja_entrada_logistica_drp**
-    * Flujo completo de estados, confirmación de material en tránsito
-      y alertas de stock: ver `componentes.md → flujos_transicion
-      → bandeja_entrada_logistica_drp`.
+    * Bandeja mixta con dos tipos de mensajes de distinta naturaleza:
+      * **Doc-10 pendiente de recepción**: flujo interactivo con confirmación
+        ítem a ítem. Acciones de estado habilitadas.
+        Ver `componentes.md → flujos_transicion → bandeja_entrada_logistica_drp`.
+      * **Alertas de stock mínimo**: solo lectura (`isReadOnly=true`). Sin botones
+        de mutación de estado. El mensaje desaparece automáticamente al cerrar el modal
+        (auto-dismiss) — sin transición a `Solucionada_Archivada`.
+        Objetivo: informar sin interrumpir la actividad asistencial.
+        Ver `componentes.md → flujos_transicion → Modo isReadOnly`.
 
   * Desde esta vista se puede registrar un Doc-6
     (Gasto de material) directamente. El usuario

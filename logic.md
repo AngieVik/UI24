@@ -345,11 +345,48 @@ descuadres_inventario:
 
 Desde `black_column → Logística → Descuadres`:
 
-* **Resolver_Manual**: logística registra la resolución (causa + acción tomada).
-  Registra `ID_nombre_resolutor` y `timestamp_resolucion`. Estado → `Resuelto`.
-* **Archivar**: cierra el descuadre sin resolución formal. Estado → `Archivado`.
+* **Resolver_Manual** — llama obligatoriamente a una Función RPC que fuerza la clasificación contable del descuadre antes de cerrarlo. El operario debe elegir una de dos opciones mutuamente excluyentes:
 
-Los descuadres no bloquean operaciones posteriores — solo requieren gestión manual.
+  **Opción A — Pérdida / Rotura**
+
+  ```
+  El operario indica: "El material está perdido o inutilizable."
+  RPC ejecuta en transacción atómica:
+    1. stock_real no se modifica (material definitivamente fuera del sistema)
+    2. INSERT auditoria_inventario:
+         tipo_movimiento    = 'merma'
+         cantidad_delta     = -(diferencia)           ← negativo: baja contable
+         ID_origen          = descuadre.ID_origen
+         motivo             = 'descuadre_resuelto_perdida'
+         ID_nombre_resolutor, timestamp_resolucion
+    3. descuadre → Resuelto
+  ```
+
+  **Opción B — Recuperación**
+
+  ```
+  El operario indica: "El material se ha localizado / recuperado."
+  El operario selecciona el destino de la recuperación:
+    → ID_origen  (vuelve al location de origen del envío)
+    → ID_destino (se acredita en el location de destino)
+
+  RPC ejecuta en transacción atómica:
+    1. UPDATE stock_real += diferencia  en el location elegido
+    2. INSERT auditoria_inventario:
+         tipo_movimiento         = 'recuperacion_descuadre'
+         cantidad_delta          = +(diferencia)       ← positivo: alta contable
+         ID_destino_recuperacion = location elegido
+         ID_nombre_resolutor, timestamp_resolucion
+    3. descuadre → Resuelto
+  ```
+
+* **Archivar**: cierra el descuadre sin clasificación contable. Estado → `Archivado`.
+  No genera entrada en `auditoria_inventario`. Para casos donde el descuadre no requiere
+  acción contable (ej. error de registro ya corregido por otros medios).
+
+> La clasificación contable es obligatoria en `Resolver_Manual` para garantizar la
+> trazabilidad de mermas y recuperaciones. El RPC impide cerrar el descuadre sin
+> haber elegido el destino del material.
 
 ---
 
@@ -375,8 +412,10 @@ AFTER UPDATE ON inventario
 
 * Si la alerta afecta a un location asignado al DRP activo (vehículo, backpack, subinventario DRP):
   → Alerta también a `bandeja_entrada_logistica_drp`.
-* Las alertas en `bandeja_entrada_logistica_drp` son **solo lectura** (sin acciones de estado).
-  Solo informativas para el equipo logístico en el DRP.
+* Las alertas de stock mínimo en `bandeja_entrada_logistica_drp` se renderizan con `isReadOnly=true`
+  (ver `componentes.md → flujos_transicion → Modo isReadOnly`). El personal de campo recibe
+  la información sin necesidad de gestionar manualmente el archivado de la notificación.
+  El mensaje desaparece automáticamente al cerrar el modal — sin transición a `Solucionada_Archivada`.
 
 ### 8.3 Configuración de umbrales
 
@@ -406,8 +445,49 @@ Al cerrar un módulo PSA o al finalizar el DRP vinculado:
      → mismo flujo que §7 (Descuadre_Pendiente_Revision)
 ```
 
-**Restricción:** Un subinventario en estado `En_Transito` no puede asignarse a un nuevo DRP/PSA
-hasta completar la reconciliación.
+### 9.1 Reasignación condicionada — estado Operativo_Condicionado
+
+Cuando un subinventario se requiere urgentemente antes de que logística complete el cuadre,
+el sistema no bloquea el recurso material. En cambio, ofrece una reasignación condicionada:
+
+```
+Petición de asignación de subinventario en estado En_Transito a nuevo DRP/PSA:
+
+  → Modal:
+    "El subinventario [ID] tiene una reconciliación pendiente del DRP [nombre].
+     ¿Reasignar igualmente?
+     El stock registrado actualmente se tomará como stock inicial del nuevo DRP.
+     La responsabilidad del descuadre pasa a la nueva dotación."
+
+  → SÍ:
+      1. Congela snapshot: stock_inicio_condicionado = stock_real actual
+      2. Descuadre del DRP anterior queda abierto, marcado como 'condicionado'
+      3. Subinventario → Operativo_Condicionado
+      4. Asignación al nuevo DRP/PSA ejecutada → Asignado
+         (el nuevo DRP parte del stock_inicio_condicionado como referencia)
+
+  → NO:
+      Subinventario permanece en En_Transito hasta que logística complete el cuadre.
+```
+
+**Reconciliación posterior (DRP anterior finaliza reconciliación mientras subinventario ya está en Asignado):**
+
+```
+1. La reconciliación se aplica contra el snapshot stock_inicio_condicionado
+2. Si hay diferencia residual → descuadre generado formalmente con referencia al nuevo DRP
+   como responsable (nuevo ID_nombre_resolutor requerido)
+3. El descuadre del DRP anterior se cierra automáticamente (marcado como transferido)
+4. El subinventario permanece en Asignado — el DRP nuevo no se ve interrumpido
+```
+
+Transiciones del estado condicionado:
+```
+En_Transito          → Operativo_Condicionado  (reasignación aceptada antes de cuadre)
+Operativo_Condicionado → Asignado              (asignación inmediata al nuevo DRP)
+Asignado (condicionado) → Asignado             (reconciliación completada, descuadre transferido)
+```
+
+Ver `estados.md §7` para el mapa completo de transiciones del subinventario.
 
 ---
 
@@ -635,7 +715,19 @@ ID_nombre con estado `pilot` activo sobre un `ID_vehiculo` ejecuta `check_out`.
 El modal de `km_fin` **bloquea** el checkout. No se puede continuar sin introducirlo.
 Esto garantiza que Doc-8 siempre cierra con el dato del odómetro final.
 
-### 15.3 Implicaciones sobre carries
+### 15.3 Estado final del vehículo — regla estricta
+
+**El checkout del pilot transiciona SIEMPRE el vehículo a `en_espera`.** Nunca a `desactivado`.
+
+Justificación: un entorno asistencial continuo no puede perder la disponibilidad del vehículo
+como efecto secundario del cambio de turno del personal. La ambulancia permanece operativa y
+disponible para un nuevo pilot de relevo. `desactivado` es una decisión operativa explícita
+(retirada del vehículo del servicio), completamente independiente del ciclo de personal.
+
+El Doc-8 se cierra al checkout del pilot (registrando km_fin). Si un nuevo pilot activa el
+vehículo posteriormente, se abre un nuevo Doc-8 independiente para ese turno.
+
+### 15.4 Implicaciones sobre carries
 
 Al ejecutar el checkout del pilot:
 
@@ -690,15 +782,15 @@ Al recuperar conexión:
 | Crear asistencia | Doc-1 | UUID pre-generado en cliente |
 | Guardar informe | Doc-2, Doc-3, Doc-4, Doc-5 | UUID pre-generado en cliente |
 | Guardar aviso | Doc-11 | |
-| Registrar gastos (sin stock) | Doc-6 metadata | Solo el registro; el stock se aplica al reconectar via RPC |
-| Envío de material (sin stock) | Doc-10 metadata | Ídem |
+| Registrar gastos (sin stock) | Doc-6 metadata | Solo el registro; el stock se aplica vía optimismo local + RPC al reconectar |
 
 ### 17.3 Mutaciones que NO soportan cola offline
 
 | Tipo | Motivo |
 |---|---|
 | Cambio real de stock (Doc-6 RPC) | Requiere transacción atómica en Supabase |
-| Confirmación recepción Doc-10 | Ídem |
+| **Emisión Doc-10 (envío de material)** | Requiere guard atómico `stock_real >= p_cantidad` en el momento exacto de la transferencia. Un Doc-10 encolado offline podría ejecutarse después de que otro terminal haya consumido el stock, generando stock negativo. Conexión sincrónica obligatoria. |
+| Confirmación recepción Doc-10 | Requiere transacción atómica en Supabase |
 | Login / check-in | Requiere validación JWT en tiempo real |
 | Generación de token de emergencia | Requiere reautenticación |
 | Cambio de estado DRP | Requiere sincronización inmediata multi-terminal |
@@ -848,6 +940,293 @@ Al desactivar:
   → RRHH las gestiona desde bandeja_entrada_rrhh
 ```
 
+---
+
+## 24. Stock optimista local (Optimistic UI)
+
+### 24.1 Motivación
+
+Las operaciones de stock requieren un RPC en Supabase (atómico, §6).
+En condiciones de red lenta o intermitente, el usuario percibe latencia
+al registrar un Doc-6. El stock optimista elimina esa fricción visual
+manteniendo la integridad atómica en la base de datos.
+
+### 24.2 Modelo de doble capa
+
+```
+useInventarioStore (Zustand / localStorage):
+  items[locationId][itemId]:
+    stock_real_local:   number    ← valor optimista en caché
+    sync_pending:       boolean   ← true mientras el RPC no confirma
+    pending_delta:      number    ← cantidad descontada pendiente de confirmar
+```
+
+### 24.3 Flujo Doc-6 con stock optimista
+
+```
+Usuario registra gasto en Doc-6 (ítem X, cantidad N):
+
+  PASO 1 — Descuento local inmediato (sin esperar red):
+    useInventarioStore[location][item].stock_real_local -= N
+    useInventarioStore[location][item].sync_pending = true
+    useInventarioStore[location][item].pending_delta = N
+    → UI muestra el nuevo valor con badge visual "⏳ sincronizando"
+
+  PASO 2 — Llamada RPC (en paralelo):
+    supabase.rpc('registrar_gasto_material', { location, item, cantidad: N })
+
+  PASO 3a — RPC exitoso:
+    stock_real_autorizado = respuesta del RPC (valor definitivo del servidor)
+    useInventarioStore[location][item].stock_real_local = stock_real_autorizado
+    useInventarioStore[location][item].sync_pending = false
+    useInventarioStore[location][item].pending_delta = 0
+    → Badge "⏳" desaparece
+
+  PASO 3b — RPC falla (ej. stock insuficiente, error de red):
+    useInventarioStore[location][item].stock_real_local += N  (revertir)
+    useInventarioStore[location][item].sync_pending = false
+    useInventarioStore[location][item].pending_delta = 0
+    → UI muestra error: "No se pudo registrar el gasto. Inténtalo de nuevo."
+    → El Doc-6 no se guarda
+```
+
+### 24.4 Reglas del stock optimista
+
+* Solo aplica a **Doc-6** (gastos/deducciones unilaterales).
+* **No aplica** a Doc-10 (transferencias multi-parte — el receptor también verá el impacto).
+* Si hay múltiples Doc-6 pendientes de sync simultáneos sobre el mismo ítem,
+  los `pending_delta` se acumulan en la capa local. El RPC los resuelve secuencialmente.
+* El badge `sync_pending` es visible en la vista de inventario y en el formulario Doc-6.
+* Tras recuperar red, `useOfflineQueue` puede disparar RPCs pendientes en cola.
+  Al completarse, `stock_real_local` se reconcilia con el valor del servidor.
+* **Invariante:** `stock_real_local` puede ser temporalmente incorrecto
+  (optimismo). `stock_real` en Supabase siempre es la fuente de verdad.
+
+---
+
+## 25. Modo degradado read-only (acceso sin red)
+
+### 25.1 Motivación
+
+Las ambulancias operan en zonas sin cobertura. Si un terminal queda sin red,
+el personal necesita acceso de consulta a información vital (inventario, doc8,
+dotaciones DRP) sin poder escribir. El modo degradado lo permite sin comprometer
+la integridad de datos.
+
+### 25.2 Generación del hash de sesión (al inicio del turno)
+
+Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disponible):
+
+```
+1. El servidor genera un payload firmado:
+   {
+     user_id:         ID_nombre,
+     role:            string,
+     claims_snapshot: { ...claims del JWT },
+     shift_start:     ISOString,
+     expires_at:      ISOString (shift_start + 12h),
+     device_id:       fingerprint del terminal
+   }
+
+2. Firma: HMAC-SHA256 con clave rotante diaria (gestionada en Supabase Vault)
+
+3. El payload firmado se guarda en localStorage:
+   'u24_offline_session': base64(payload + signature)
+```
+
+### 25.3 Activación del modo degradado
+
+Si al intentar autenticarse el terminal no tiene red:
+
+```
+1. El formulario terminal_check detecta timeout de red (> 5s)
+2. Muestra opción: "Sin conexión — Acceso de consulta"
+3. El usuario introduce su ID_nombre
+4. El sistema busca 'u24_offline_session' en localStorage
+5. Valida:
+   - HMAC del payload con la clave diaria cached (también en localStorage)
+   - expires_at > NOW()
+   - device_id coincide con el terminal actual
+6. Si válido:
+   - Terminal pasa a estado_1 en modo DEGRADADO
+   - Rol: solo lectura del snapshot de claims
+   - Banner visible: "⚠️ Modo sin conexión — Solo lectura"
+7. Si inválido o expirado:
+   - Acceso denegado hasta recuperar red
+```
+
+### 25.4 Restricciones en modo degradado
+
+| Operación | Disponible offline |
+|---|---|
+| Ver inventario (snapshot en localStorage) | ✅ |
+| Ver Doc-8 activo (IndexedDB) | ✅ |
+| Ver dotaciones DRP activo (localStorage) | ✅ |
+| Ver bandejas (cache local) | ✅ (sin actualizaciones) |
+| Registrar Doc-6 / Doc-10 | ❌ (requiere RPC) |
+| Registrar asistencias Doc-1 / Doc-2 | ✅ (cola offline, §17) |
+| Cambiar estado DRP | ❌ |
+| Check-in / Check-out | ❌ |
+
+### 25.5 Auditoría del acceso degradado
+
+```
+Al entrar en modo degradado:
+  → INSERT en tabla offline_access_log (IndexedDB local):
+    { user_id, timestamp_acceso, device_id, modo: 'degradado' }
+
+Al recuperar red:
+  → Sync automático: INSERT en tabla 'offline_access_log' en Supabase
+  → El registro queda en auditoría permanente
+```
+
+---
+
+## 26. Idle timeout para rol invitado
+
+### 26.1 Condición de aplicación
+
+Solo aplica cuando:
+- `useTerminalStore.tipoSesion ∈ ['galleta_pequeña', 'galleta']`
+- `useAuthStore.rolActivo === 'invitado'` (nadie ha hecho check-in aún)
+
+### 26.2 Comportamiento
+
+```
+Inicio del timer: cuando el terminal entra a estado_1 con rol invitado
+Duración: 20 minutos sin interacción con el DOM
+
+Eventos que resetean el timer (cualquier interacción del usuario):
+  - click, keydown, touchstart, mousemove, scroll
+
+Al expirar el timer:
+  1. useTerminalStore.estado → 'estado_0'
+  2. Limpia useAuthStore (rol invitado eliminado)
+  3. El estado del localStorage del terminal se preserva
+  4. La cookie de emergencia en Supabase NO se destruye:
+     - 'galleta_pequeña': permanece activa (puede reutilizarse con el mismo PIN)
+     - 'galleta': permanece activa (cookie permanente)
+  5. UI vuelve a estado_0: formulario de login centrado
+  6. Si alguien introduce el PIN de emergencia de nuevo → vuelve a estado_1
+```
+
+### 26.3 Implementación (hook useIdleTimeout)
+
+```typescript
+// Solo se monta si tipoSesion es de emergencia y rol = 'invitado'
+// Ver hooks.md § useIdleTimeout
+```
+
+### 26.4 Justificación
+
+La cookie de emergencia **no se destruye** porque su propósito es hacer operativo
+un terminal en situación de emergencia. Forzar al personal a regenerar el PIN
+por una pantalla olvidada encendida sería un obstáculo operativo injustificado.
+El timeout solo protege contra acceso no autorizado en un terminal desatendido.
+
+---
+
+## 27. Claims — inyección en el JWT
+
+### 27.1 Flujo de generación de claims
+
+```
+Usuario se autentica → Supabase Auth emite JWT
+  → Edge Function 'set_claims' ejecutada (Supabase Auth Hook):
+      1. Lee user_id del token preliminar
+      2. Consulta tabla user_profiles: { role }
+      3. Mapea role → claims booleanos (ver rbac_y_permisos.md §2)
+      4. Embebe claims en el JWT bajo la clave 'app_claims':
+         { app_claims: { can_edit_inventory: true, can_view_drp: false, ... } }
+  → JWT final contiene: { role, app_claims: { ... } }
+```
+
+### 27.2 Actualización de claims
+
+Si el rol de un usuario cambia (RBAC panel en coordinación):
+- El JWT activo no se invalida inmediatamente.
+- Los nuevos claims se aplican al **siguiente JWT** emitido (refresh o nuevo login).
+- Para forzar aplicación inmediata: `supabase.auth.refreshSession()` desde el cliente
+  o revocar la sesión desde el panel de Supabase.
+
+### 27.3 Claims en el frontend (cosmético)
+
+```typescript
+// En useAuthStore:
+const claims = useAuthStore(s => s.claims)  // tipado desde el JWT
+
+// En componentes:
+if (claims.can_edit_inventory) {
+  // mostrar botón de edición
+}
+```
+
+Los claims en el frontend son solo cosméticos (para ocultar/mostrar UI).
+Las políticas RLS en Supabase son la capa de seguridad real.
+
 **Nota:** El formulario Doc-12 en `black_column → Gestión y RRHH → Doc-12` no es
 para que el empleado solicite vacaciones — es la acción de activación/desactivación
 del periodo por parte de RRHH/Gerencia.
+
+---
+
+## 28. Interceptor de estado: coherencia vehículo-DRP
+
+### 28.1 Problema
+
+Un vehículo puede salir físicamente del DRP (cambia de `activado` a `ruta` o `alerta`)
+sin registrar su `timestamp_salida_drp`. Esto deja un registro inconsistente en PostgreSQL:
+el vehículo figura como activo en el DRP mientras ya no forma parte operativa de él.
+
+### 28.2 Condición de disparo
+
+```
+nuevoEstado ∈ { 'ruta', 'alerta' }
+∧ vehiculo.timestamp_entrada_drp IS NOT NULL
+∧ vehiculo.timestamp_salida_drp IS NULL
+```
+
+### 28.3 Flujo del interceptor (frontend — useVehiculo.setEstadoOperativo)
+
+```
+ANTES de ejecutar el cambio de estado:
+
+1. Consultar useVehiculoStore[id]:
+   - drpId = vehiculo.drpId
+   - drpNombre = useDRPStore.getDRP(drpId).nombre_drp
+
+2. Mostrar modal bloqueante:
+   "El vehículo [ID_vehiculo] pertenece al DRP [nombre_drp].
+    ¿Desea registrar su salida del dispositivo?"
+   [Sí, salir del DRP] [No, cancelar]
+
+3. SÍ → useDRP.salirConVehiculo(drpId, vehiculoId)
+        Registra timestamp_salida_drp para:
+          - ID_vehiculo
+          - Todos los ID_nombre emparejados al vehículo en ese momento
+        → Procede con el cambio de estado a 'ruta' o 'alerta'
+
+4. NO → Aborta setEstadoOperativo. Estado permanece sin cambio.
+        No se genera ninguna entrada en Doc-8.
+```
+
+### 28.4 Justificación
+
+La integridad relacional en PostgreSQL requiere que cada `timestamp_entrada_drp`
+tenga su correspondiente `timestamp_salida_drp` al abandonar el DRP. Sin este
+dato, los cálculos de duración de dotación, informes de recursos del DRP y el
+Doc-1 quedarían con timestamps incompletos.
+
+El interceptor actúa en el frontend como guardia de consistencia. La política RLS
+en Supabase no puede interceptar este caso (es un cambio de `estado_operativo`,
+no de `drp_dotaciones`), por lo que la responsabilidad recae en el hook.
+
+### 28.5 Casos límite
+
+| Caso | Comportamiento |
+|---|---|
+| `ruta → alerta` sin haber salido del DRP | El interceptor ya se disparó en el cambio anterior a `ruta`. Si el vehículo ya tiene `timestamp_salida_drp`, no se dispara de nuevo. |
+| `en_espera → ruta` sin DRP activo | No se dispara (condición no cumplida). |
+| `en_espera → alerta` sin DRP activo | No se dispara. |
+| Vehículo en DRP cambia a `estacionado` | No se dispara (solo aplica a `ruta` y `alerta`). |
+| DRP finaliza con vehículo dentro | La finalización del DRP asigna `timestamp_salida_drp` automáticamente (ver `logic.md §12`). El interceptor no es necesario. |

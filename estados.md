@@ -86,57 +86,107 @@ carry        → pilot                   (promoción manual desde visual_info_ho
 
 ---
 
-## 4. vehiculo — estado operativo
+## 4. vehiculo — dos dimensiones ortogonales
 
-Estado principal de cada `ID_vehiculo`. Independiente del estado funcional.
+El estado del vehículo se modela con **dos variables independientes** en la BD y en Zustand.
+Pueden combinarse libremente (ej. `ruta` + `averiado_leve` es válido y habitual).
 
-| Estado | Descripción | Bloquea activación |
+---
+
+### 4a. estado_operativo — disponibilidad y movimiento
+
+| Estado | Descripción | Captura GPS |
 |---|---|---|
-| `Desactivado` | Fuera de servicio temporal o sin turno. | No |
-| `Activado` | Operativo. Con `km_inicio` y al menos un pilot asignado. | — |
-| `Averiado` | Fallo reportado vía Doc-7 de criticidad Grave. Solo informativo. | No |
+| `desactivado` | Sin pilot. Sin Doc-8 activo. Fuera de turno. | No |
+| `en_espera` | Pilot asignado, Doc-8 activo. Sin servicio activo ni movimiento. | No |
+| `activado` | Servicio activo despachado (`tipo_servicio` asignado). | No |
+| `ruta` | En tránsito hacia servicio o vuelta a base. | Al activar y al desactivar |
+| `estacionado` | Parado fuera de base, sin actividad de servicio. | Al activar |
+| `alerta` | Respuesta a emergencia activa (luces/sirenas en marcha). | Al activar y al desactivar |
 
 **Transiciones:**
-
 ```
-Desactivado → Activado     (confirmación + km_inicio + asignación de pilot/carry)
-Activado    → Desactivado  (confirmación + km_fin → Doc-8 cierra Enviado_Cerrado)
-cualquier   → Averiado     (Doc-7 Grave guardado — automático, no bloquea)
-Averiado    → Activado     (Doc-7 pasa a Reparada_Operativa en flota)
+desactivado → en_espera      (activación: km_inicio + pilot asignado)
+en_espera   → activado       (servicio despachado)
+en_espera   → ruta           (inicio de movimiento)
+en_espera   → alerta         (despacho urgente)
+en_espera   → estacionado    (para fuera de base)
+activado    → ruta           (sale hacia el servicio)
+activado    → alerta         (escalada a emergencia)
+activado    → en_espera      (servicio finalizado)
+alerta      → ruta           (respuesta en curso, modo normal)
+alerta      → en_espera      (emergencia resuelta)
+ruta        → alerta         (escalada a emergencia)
+ruta        → en_espera      (llega al destino)
+ruta        → estacionado    (para fuera de base)
+estacionado → en_espera      (reanuda)
+estacionado → ruta           (inicia movimiento)
+cualquier   → en_espera      (checkout pilot → flujo_checkout_automatico)
+en_espera   → desactivado    (acción manual explícita: fin de jornada del vehículo)
 ```
 
-**Nota:** `Averiado` es una bandera superpuesta, no excluyente.
+> ⚠ **`desactivado` es alcanzable SOLO por acción manual explícita** (fin de jornada total
+> del vehículo). El checkout del pilot transiciona SIEMPRE a `en_espera`. Ver `logic.md §15`.
+>
+> ⚠ **Interceptor DRP:** cambiar a `ruta` o `alerta` mientras el vehículo tiene
+> `timestamp_entrada_drp` sin `timestamp_salida_drp` genera modal de confirmación
+> de salida del dispositivo antes de ejecutar el cambio. Ver `logic.md §28`.
+
+Cada cambio genera entrada en Doc-8 con `timestamp_inicio` y `timestamp_fin`.
+
 **Zustand:** `useVehiculoStore → estadoOperativo`
 
 ---
 
-## 5. vehiculo — función operativa
+### 4b. condicion_tecnica — estado mecánico
 
-Estado funcional mientras el vehículo está `Activado`. Cada cambio genera entrada en Doc-8 con `timestamp_inicio` y `timestamp_fin`.
+Variable **ortogonal** a `estado_operativo`. Se actualiza de forma independiente.
 
-### Asignadas por RRHH (tipo de servicio del turno)
+| Estado | Descripción | Disparado por |
+|---|---|---|
+| `operativo` | Sin incidencias mecánicas. Estado por defecto. | — |
+| `averiado_leve` | Incidencia leve o moderada reportada. Informativo. | Doc-7 Leve/Moderada guardado |
+| `inoperativo_critico` | Fallo grave confirmado. Advertencia bloqueante. | Doc-7 Grave guardado |
 
-| Función | Descripción |
+**Transiciones:**
+```
+operativo           → averiado_leve       (Doc-7 Leve/Moderada)
+operativo           → inoperativo_critico (Doc-7 Grave)
+averiado_leve       → operativo           (Doc-7 → Reparada_Operativa)
+inoperativo_critico → operativo           (Doc-7 → Reparada_Operativa)
+averiado_leve       → inoperativo_critico (Doc-7 escalado a Grave)
+```
+
+**Efecto en activación:**
+- `operativo` / `averiado_leve` → activación permitida, badge informativo visible.
+- `inoperativo_critico` → advertencia bloqueante. Requiere confirmación explícita
+  de `gerencia` o `coordinación` para proceder con la activación.
+
+**Zustand:** `useVehiculoStore → condicionTecnica`
+
+---
+
+## 5. vehiculo — tipo_servicio
+
+Servicio asignado por RRHH. Ortogonal a `estado_operativo` y `condicion_tecnica`.
+Cada cambio genera entrada en Doc-8 con `timestamp_inicio` y `timestamp_fin`.
+
+| Tipo | Descripción |
 |---|---|
 | `Programado` | Servicio sanitario programado en cuadrante. |
 | `Dispositivo` | En dispositivo preventivo. |
 | `Traslado` | Traslado de paciente a centro sanitario. |
 | `Guardia_urgencias` | Guardia de urgencias activa. |
 | `DRP` | Adscrito a Dispositivo de Riesgo Previsible. |
+| `Privado` | Servicio privado. |
+| `Simulacro` | Simulacro de intervención. |
+| `Formacion` | Actividad de formación. |
+| `Sin_asignar` | Turno activo sin tipo de servicio definido aún. |
 
-### Gestionadas por el usuario en ruta
+**Regla GPS fallback:** GPS no disponible → último historial del vehículo
+→ último evento con ubicación → coordenadas disponibles más recientes → NULL (sin bloquear).
 
-| Función | Descripción | Captura GPS |
-|---|---|---|
-| `En_espera` | Personal emparejado, pendiente de función. | No |
-| `Estacionado` | Estacionado fuera de base sin actividad. | Al activar |
-| `Ruta` | En trayecto hacia servicio o de vuelta a base. | Al activar y al desactivar |
-
-**Regla GPS fallback:**
-Si GPS no disponible al capturar → última ubicación conocida del vehículo
-→ último evento con ubicación registrada → cualquier dato de localización disponible más reciente.
-
-**Zustand:** `useVehiculoStore → funcionOperativa`
+**Zustand:** `useVehiculoStore → tipoServicio`
 
 ---
 
@@ -175,15 +225,27 @@ Estado de cada slot de subinventario para DRP o PSA.
 |---|---|
 | `Operativo` | Disponible para asignar a un nuevo DRP o PSA. |
 | `Asignado` | Vinculado a un DRP o PSA activo. |
-| `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación por logística. No asignable. |
+| `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación. Asignación estándar bloqueada. |
+| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. Stock actual congelado como stock inicial del nuevo DRP. Descuadre pendiente transferido a nueva dotación. |
 
-**Flujo:**
+**Flujo estándar:**
 
 ```
-Operativo → Asignado     (creación de DRP/PSA seleccionando este ID_DRP)
-Asignado  → En_Transito  (Cerrar_módulo_PSA o finalización del DRP vinculado)
-En_Transito → Operativo  (logística confirma reconciliación de stock)
+Operativo              → Asignado              (asignación a DRP/PSA)
+Asignado               → En_Transito           (Cerrar_módulo_PSA o finalización del DRP)
+En_Transito            → Operativo             (logística confirma reconciliación)
 ```
+
+**Flujo condicionado (reasignación urgente antes de reconciliar):**
+
+```
+En_Transito            → Operativo_Condicionado  (operario acepta reasignación anticipada)
+Operativo_Condicionado → Asignado                (asignación al nuevo DRP/PSA)
+Asignado (condicionado)→ Asignado                (reconciliación del DRP anterior completada;
+                                                  descuadre transferido, subinventario sigue activo)
+```
+
+Ver `logic.md §9.1` para el flujo de modal y la mecánica de snapshot de stock.
 
 **Zustand:** `useInventarioStore → subinventarios` (mapa `{ [ID_DRP]: EstadoSubinventario }`)
 
@@ -348,10 +410,10 @@ Estado global que habilita o bloquea el formulario Doc-12 para todos los emplead
 
 | Estado | Transición disparadora |
 |---|---|
-| `Abierto_En_Turno` | Al activar el vehículo (asignación de pilot) |
-| `Enviado_Cerrado` | Checkout del pilot (`flujo_checkout_automatico`) o desactivación manual |
+| `Abierto_En_Turno` | Al activar el vehículo (asignación de pilot + km_inicio) |
+| `Enviado_Cerrado` | Checkout del pilot (`flujo_checkout_automatico`, registra km_fin) **o** desactivación manual explícita con pilot activo |
 
-Se genera uno por vehículo por turno. Varios ID_nombre pueden compartir el mismo Doc-8 si comparten vehículo en el turno.
+Se genera uno por vehículo por turno de pilot. Si el pilot hace checkout y un nuevo pilot activa el mismo vehículo después, se crea un nuevo Doc-8 independiente.
 
 ---
 
@@ -424,7 +486,7 @@ Se genera uno por vehículo por turno. Varios ID_nombre pueden compartir el mism
 | `useTerminalStore` | `terminal.estado`, `sesion_terminal.tipo` | `localStorage` |
 | `useAuthStore` | ID_nombre activo, rol, JWT, permisos | `sessionStorage` |
 | `usePersonaStore` | `checkin_on`, `pilot`, `carry` por ID_nombre | `localStorage` |
-| `useVehiculoStore` | `estadoOperativo`, `funcionOperativa`, GPS, km activos | `localStorage` |
+| `useVehiculoStore` | `estadoOperativo`, `condicionTecnica`, `tipoServicio`, GPS, km activos | `localStorage` |
 | `useDRPStore` | `estado` DRP activo, dotaciones, timestamps | `localStorage` |
 | `useInventarioStore` | stock por location, `subinventariosEstado`, descuadres | Supabase (no persist local) |
 | `useBandejasStore` | mensajes por instancia, contadores sin leer | Supabase Realtime |

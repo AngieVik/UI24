@@ -165,8 +165,8 @@ Precondición: ID_nombre tiene estado 'pilot'
    - Actualiza useVehiculoStore[vehiculoId].km_fin
 
 2. Cierre de estados del vehículo
-   - useVehiculo.cerrarFuncionOperativaActiva(vehiculoId, timestamp_checkout)
-   - Doc-8: cierra todos los bloques de estado abiertos con timestamp_fin
+   - useVehiculo.cerrarEstadosActivos(vehiculoId, timestamp_checkout)
+   - Doc-8: cierra todos los bloques de estado_operativo y tipo_servicio abiertos con timestamp_fin
 
 3. Salida de DRP (si aplica)
    - Si useVehiculoStore[vehiculoId].drpId !== null:
@@ -185,9 +185,10 @@ Precondición: ID_nombre tiene estado 'pilot'
           vehiculo.estadoOperativo = 'en_espera'
      NO  → desemparejado (usePersonaStore[carry].esCarry = false)
 
-6. Estado final del vehículo
-   - Si no quedan carries emparejados → vehiculo.estadoOperativo = 'en_espera'
-   - El vehículo NO pasa a 'Desactivado'
+6. Estado final del vehículo — **regla estricta**
+   - vehiculo.estadoOperativo = 'en_espera' SIEMPRE (con o sin carries)
+   - El vehículo NUNCA pasa a 'desactivado' como consecuencia del checkout del pilot
+   - 'desactivado' solo es alcanzable por acción manual explícita posterior (useVehiculo.desactivar)
 ```
 
 **`promoverCarryAPilot`**
@@ -197,7 +198,7 @@ Precondición: ID_nombre tiene estado 'pilot'
 2. Modal solicita km_inicio (si el vehículo no tiene km_inicio activo)
 3. useVehiculoStore[vehiculoId]:
    - pilot = ID_nombre
-   - estadoOperativo = 'Activado'
+   - estadoOperativo = 'en_espera'
 4. usePersonaStore[ID_nombre].esPilot = true, esCarry = false
 5. useDoc8.abrir(vehiculoId, ID_nombre, km_inicio)
 ```
@@ -211,31 +212,47 @@ Precondición: ID_nombre tiene estado 'pilot'
 ## 3. useVehiculo
 
 > Gestiona el ciclo de vida de ID_vehiculo: activación/desactivación,
-> funciones operativas, asignación de roles, selección en home_area.
+> las dos dimensiones de estado independientes (`estado_operativo` y
+> `condicion_tecnica`), el `tipo_servicio`, y la asignación de roles.
+> Ver `estados.md §4` para la definición completa de cada dimensión.
 
 ```typescript
 interface UseVehiculo {
   // Estado
-  vehiculos:       Vehiculo[]          // todos los vehículos del sistema
-  vehiculoActivo:  Vehiculo | null     // el seleccionado en este terminal
-  
+  vehiculos:      Vehiculo[]          // todos los vehículos del sistema
+  vehiculoActivo: Vehiculo | null     // el seleccionado en este terminal
+
   // Consultas
   getVehiculo(id: ID_vehiculo): Vehiculo | undefined
-  
+
   // Selección UI
   seleccionarVehiculo(id: ID_vehiculo): void
-  
-  // Ciclo de vida
+
+  // Ciclo de vida (desactivado ↔ en_espera)
   activar(id: ID_vehiculo, kmInicio: number): Promise<void>
   desactivar(id: ID_vehiculo, kmFin: number): Promise<void>
 
-  // Funciones operativas
-  setFuncionOperativa(
-    id: ID_vehiculo,
-    funcion: FuncionOperativa
+  // Dimensión 1 — estado operativo (cambios manuales en ruta)
+  setEstadoOperativo(
+    id:     ID_vehiculo,
+    estado: EstadoOperativo
   ): Promise<void>
-  cerrarFuncionOperativaActiva(
-    id: ID_vehiculo,
+
+  // Dimensión 2 — condición técnica (actualizada por Doc-7, no manual)
+  setCondicionTecnica(
+    id:       ID_vehiculo,
+    condicion: CondicionTecnica
+  ): Promise<void>
+
+  // Dimensión 3 — tipo de servicio (actualizable en cualquier momento del turno)
+  setTipoServicio(
+    id:   ID_vehiculo,
+    tipo: TipoServicio
+  ): Promise<void>
+
+  // Cierre de bloques activos (llamado por flujo_checkout_automatico)
+  cerrarEstadosActivos(
+    id:            ID_vehiculo,
     timestamp_fin: ISOString
   ): Promise<void>
 
@@ -245,57 +262,115 @@ interface UseVehiculo {
   quitarPersona(vehiculoId: ID_vehiculo, personaId: ID_nombre): Promise<void>
   intercambiarRoles(
     vehiculoId: ID_vehiculo,
-    personaA: ID_nombre,
-    personaB: ID_nombre
+    personaA:   ID_nombre,
+    personaB:   ID_nombre
   ): Promise<void>
 }
 
-type FuncionOperativa =
-  | 'Programado' | 'Dispositivo' | 'Traslado'
-  | 'Guardia_urgencias' | 'DRP'
-  | 'En_espera' | 'Estacionado' | 'Ruta'
+// Dimensión 1: estado físico/operativo del vehículo
+type EstadoOperativo =
+  | 'desactivado'     // sin turno activo, sin Doc-8 — solo acción manual explícita
+  | 'en_espera'       // pilot asignado, Doc-8 activo, sin servicio ni movimiento
+  | 'activado'        // servicio activo despachado (tipo_servicio asignado)
+  | 'ruta'            // en tránsito — captura GPS al iniciar y al finalizar
+  | 'estacionado'     // parado fuera de base — captura GPS al activar
+  | 'alerta'          // respuesta a emergencia activa (luces/sirenas) — captura GPS al activar y al desactivar
+
+// Dimensión 2: condición mecánica del vehículo (badge, no selector manual)
+type CondicionTecnica =
+  | 'operativo'           // sin incidencias
+  | 'averiado_leve'       // incidencia leve/moderada (Doc-7) — badge amarillo
+  | 'inoperativo_critico' // fallo grave (Doc-7) — badge rojo, confirmación requerida
+
+// Dimensión 3: tipo de servicio asignado al turno
+type TipoServicio =
+  | 'Programado' | 'Dispositivo' | 'Traslado' | 'Guardia_urgencias'
+  | 'DRP' | 'Privado' | 'Simulacro' | 'Formacion' | 'Sin_asignar'
 ```
 
 ### Comportamiento
 
-**`activar`**
+**`activar`** (`desactivado → en_espera`)
 
 ```
-1. Modal: "¿Activar ID_vehiculo?" — confirmación
-2. Solicita km_inicio (entrada manual, obligatorio)
-3. Muestra ID_nombre con checkin_on en terminal → asignar Pilot y Carry
-4. Si confirmado:
-   - useVehiculoStore[id].estadoOperativo = 'Activado'
+1. Modal: "¿Activar ID_vehiculo?" — Sí | No
+2. Si condicion_tecnica = 'inoperativo_critico':
+   - Advertencia bloqueante adicional
+   - Requiere confirmación de gerencia o coordinación (RBAC)
+3. Solicita km_inicio (obligatorio)
+4. Muestra ID_nombre con checkin_on en terminal → asignar Pilot y Carry
+5. Si confirmado:
+   - useVehiculoStore[id].estadoOperativo = 'en_espera'
    - useVehiculoStore[id].km_inicio = kmInicio
    - useDoc8.abrir(id, pilotId, kmInicio)
    - INSERT en vehiculo_sesiones con timestamp_activacion
 ```
 
-**`desactivar`**
+**`desactivar`** (`en_espera → desactivado`) — **acción manual explícita. NUNCA es consecuencia del checkout del pilot.**
 
 ```
-1. Modal: "¿Desactivar ID_vehiculo?" — confirmación
-2. Solicita km_fin
-3. Si confirmado:
-   - Cierra todos los bloques de función activos con timestamp_fin
-   - useVehiculoStore[id].estadoOperativo = 'Desactivado'
-   - Elimina pilot y carry del vehículo
+Precondición: estadoOperativo = 'en_espera'
+
+1. Modal: "¿Desactivar [ID_vehiculo]? El vehículo quedará fuera de servicio."
+
+2. CASO A — Hay pilot activo (Doc-8 abierto):
+   - Solicita km_fin (obligatorio)
+   - cerrarEstadosActivos(id, NOW())
    - useDoc8.cerrar(id, kmFin, NOW())
+   - Desempareja pilot del vehículo
+
+3. CASO B — No hay pilot activo (en_espera tras checkout previo, sin Doc-8):
+   - No se solicita km_fin (el Doc-8 ya fue cerrado por el pilot anterior)
+   - Sin operación sobre Doc-8
+
+4. Desempareja cualquier carry restante del vehículo
+5. useVehiculoStore[id].estadoOperativo = 'desactivado'
 ```
 
-**`setFuncionOperativa`**
+**`setEstadoOperativo`** (cambios manuales: en_espera ↔ activado ↔ ruta ↔ alerta ↔ estacionado)
 
 ```
-1. Si hay función activa → cerrar con timestamp_fin en Doc-8
-2. Si nueva función requiere GPS (Estacionado, Ruta):
-   - useGPS.capturar() → coordenadas con fallback chain
-3. Abrir nuevo bloque en Doc-8: { funcion, timestamp_inicio, coords? }
-4. useVehiculoStore[id].funcionOperativa = funcion
+INTERCEPTOR (ejecutar ANTES si nuevoEstado ∈ { 'ruta', 'alerta' }):
+  Condición: vehiculo.timestamp_entrada_drp !== null
+             ∧ vehiculo.timestamp_salida_drp === null
+  → Modal: "El vehículo pertenece al DRP [nombre_drp].
+            ¿Desea registrar su salida del dispositivo?"
+    SÍ → useDRP.salirConVehiculo(drpId, vehiculoId)
+         (registra timestamp_salida_drp para vehículo y todos los ID_nombre emparejados)
+         → continúa con el cambio de estado
+    NO → aborta la función. Estado permanece sin cambio.
+
+FLUJO PRINCIPAL:
+1. Si estado requiere GPS (ruta, alerta, estacionado):
+   - useGPS.capturar(id) → coordenadas con fallback chain
+2. Cierra el bloque de estado_operativo activo con timestamp_fin en Doc-8
+3. Abre nuevo bloque: { estado, timestamp_inicio, coords? }
+4. useVehiculoStore[id].estadoOperativo = estado
+
+Ver logic.md §28 para la justificación y los casos límite del interceptor.
 ```
 
-**`activar` y `desactivar` desde Supabase Realtime:**
-Los cambios de estado de vehículo se reciben via Realtime y actualizan
-`useVehiculoStore` para todos los terminales que muestran ese vehículo.
+**`setCondicionTecnica`**
+
+```
+Llamado exclusivamente por el flujo de Doc-7 (averías).
+1. UPDATE vehiculos SET condicion_tecnica = condicion en Supabase
+2. useVehiculoStore[id].condicionTecnica = condicion
+3. Sin entrada en Doc-8 (la avería ya genera Doc-7 propio)
+```
+
+**`setTipoServicio`**
+
+```
+1. Cierra el bloque de tipo_servicio activo con timestamp_fin en Doc-8
+2. Abre nuevo bloque: { tipo_servicio, timestamp_inicio }
+3. useVehiculoStore[id].tipoServicio = tipo
+Nota: visible solo mientras estadoOperativo ≠ 'desactivado'
+```
+
+**Propagación via Supabase Realtime:**
+Los cambios de `estadoOperativo`, `condicionTecnica` y `tipoServicio` se
+emiten por Realtime y actualizan `useVehiculoStore` en todos los terminales.
 
 ### Stores: `useVehiculoStore`, `usePersonaStore`
 
@@ -430,17 +505,17 @@ interface UseDoc8 {
     timestamp:  ISOString
   ): Promise<void>
 
-  // Escritura de eventos (llamados internamente)
-  registrarCambioFuncion(
+  // Escritura de eventos (llamados internamente por useVehiculo)
+  registrarCambioEstadoOperativo(
     vehiculoId:    ID_vehiculo,
-    funcion:       FuncionOperativa,
+    estado:        EstadoOperativo,
     timestamp_ini: ISOString,
-    coords?:       Coords
+    coords?:       Coords          // obligatorio si estado = 'ruta' | 'estacionado'
   ): Promise<void>
-  registrarCierreFuncion(
+  registrarCambioTipoServicio(
     vehiculoId:    ID_vehiculo,
-    timestamp_fin: ISOString,
-    coords?:       Coords
+    tipo:          TipoServicio,
+    timestamp_ini: ISOString
   ): Promise<void>
   registrarEntradaDRP(drpId: ID_drp, timestamp: ISOString): Promise<void>
   registrarSalidaDRP(drpId: ID_drp, timestamp: ISOString): Promise<void>
@@ -502,13 +577,22 @@ Si hay pérdida de conexión, los eventos se encolan y se replayan al reconectar
 > Las lecturas usan TanStack Query con revalidación via Supabase Realtime.
 
 ```typescript
+interface StockItem {
+  itemId:           string
+  stock_real:       number    // fuente de verdad en BBDD (última confirmación)
+  stock_real_local: number    // cache optimista en Zustand (puede diferir temporalmente)
+  stock_objetivo:   number
+  sync_pending:     boolean   // true → delta descontado localmente aún no confirmado por RPC
+  pending_delta:    number    // cantidad descontada pendiente de reconciliar (positivo = descuento)
+}
+
 interface UseInventario {
-  // Consultas (TanStack Query)
+  // Consultas (TanStack Query para stock_real; Zustand para stock_real_local)
   stockPorLocation: (locationId: string) => StockItem[]
   stockItem:        (locationId: string, itemId: string) => StockItem | undefined
   descuadres:       Descuadre[]
   enTransito:       ItemTransito[]
-  subinventariosEstado: Map<string, 'Operativo' | 'Asignado' | 'En_Transito'>
+  subinventariosEstado: Map<string, 'Operativo' | 'Operativo_Condicionado' | 'Asignado' | 'En_Transito'>
 
   // Mutaciones via RPC (siempre requieren conexión)
   registrarGasto(data: Doc6Input): Promise<void>
@@ -518,8 +602,9 @@ interface UseInventario {
     itemsRecibidos: ItemRecibido[]
   ): Promise<void>
   resolverDescuadre(
-    descuadreId: string,
-    resolucion:  string
+    descuadreId:           string,
+    clasificacion:         'perdida_rotura' | 'recuperacion',
+    destinoRecuperacion?:  'ID_origen' | 'ID_destino'  // obligatorio si clasificacion = 'recuperacion'
   ): Promise<void>
   archivarDescuadre(descuadreId: string): Promise<void>
 }
@@ -539,24 +624,61 @@ interface ItemRecibido {
 
 ### Comportamiento
 
-**`registrarGasto`** (Doc-6)
+**`registrarGasto`** (Doc-6) — flujo optimista en 3 pasos
 
 ```
-1. Validación cliente: stock_real >= cantidad solicitada (precheck visual)
-2. Llama RPC 'registrar_gasto_material' con los datos
-3. RPC ejecuta en transacción:
-   - UPDATE stock_real = stock_real - cantidad (con guard: stock_real >= cantidad)
-   - INSERT en auditoria_inventario
-   - Si stock_real < stock_objetivo → trigger notificación alerta
-4. Si RPC lanza error 'stock_insuficiente':
-   - throw Error('stock_insuficiente') → UI muestra aviso
-5. Invalida TanStack Query cache para el locationId
+PASO 1 — INMEDIATO (local, sin red):
+  - Precheck: stock_real_local >= cantidad (validación visual)
+  - Si falla precheck → throw Error('stock_insuficiente_local') sin llamar RPC
+  - Si OK:
+    · stock_real_local -= cantidad
+    · sync_pending = true
+    · pending_delta = cantidad
+    · UI muestra badge 'sincronizando...' en el item
+
+PASO 2 — PARALELO (llamada RPC en background):
+  - Llama RPC 'registrar_gasto_material' con los datos
+  - RPC ejecuta en transacción atómica:
+    · guard: stock_real >= cantidad (contra el valor de BBDD — fuente de verdad)
+    · UPDATE stock_real = stock_real - cantidad
+    · INSERT en auditoria_inventario
+    · Si stock_real_resultante < stock_objetivo → trigger notificación alerta
+
+PASO 3 — RECONCILIACIÓN:
+  A. RPC éxito:
+     · stock_real = valor devuelto por RPC
+     · stock_real_local = stock_real (sincronizado)
+     · sync_pending = false, pending_delta = 0
+     · Badge 'sincronizando' desaparece
+     · Invalida TanStack Query cache para locationId
+
+  B. RPC error 'stock_insuficiente' (race condition con otro terminal):
+     · REVERTIR: stock_real_local += pending_delta
+     · sync_pending = false, pending_delta = 0
+     · throw Error('stock_insuficiente') → UI muestra aviso
+
+  C. RPC error de red (timeout / offline):
+     · stock_real_local permanece decrementado (badge persiste)
+     · sync_pending = true
+     · Encola reintento via useOfflineQueue ('doc6_metadata')
+     · Al reconectar: useOfflineQueue replaya → PASO 2 y 3
+
+NOTA: El flujo optimista aplica exclusivamente a Doc-6 (gasto asistencial).
+      Doc-10 (envío entre locations) no usa optimismo — requiere confirmación
+      explícita del receptor antes de actualizar stock en destino.
 ```
 
-**`enviarMaterial`** (Doc-10)
+**`enviarMaterial`** (Doc-10) — **requiere conexión sincrónica obligatoria**
 
 ```
-1. Llama RPC 'emitir_doc10':
+PRECONDICIÓN: isOnline === true
+  Si offline → throw Error('doc10_requiere_conexion')
+  El guard atómico stock_real >= p_cantidad debe evaluarse en el instante exacto
+  de la transferencia. Un Doc-10 encolado offline podría ejecutarse cuando otro
+  terminal ya ha consumido el stock, generando stock negativo. Ver logic.md §17.3.
+
+1. Llama RPC 'emitir_doc10' (síncrono, sin optimismo local):
+   - Guard: stock_real >= p_cantidad (falla si no hay suficiente stock en DB)
    - Resta del location origen → inventario_en_transito
    - Doc-10 en estado 'En_Transito'
    - INSERT notificación a bandeja_entrada destino (Pendiente_Validacion)
@@ -582,9 +704,11 @@ Si todo coincidió → Doc-10 → 'Completado'
 Registra timestamp_confirmacion e ID_nombre_receptor_confirmador
 ```
 
-**Sin soporte offline:** `registrarGasto`, `enviarMaterial` y `confirmarRecepcion`
-requieren conexión activa. Si no hay red → UI muestra mensaje de error,
-la operación no se encola (riesgo de race condition al reproducir).
+**Soporte offline parcial:**
+- `registrarGasto` (Doc-6): soporte offline via optimismo local. El descuento es inmediato en Zustand; el RPC se encola y se replaya al reconectar (ver PASO 3-C arriba).
+- `enviarMaterial` (Doc-10): **sin soporte offline** — requiere conexión sincrónica para ejecutar el guard atómico `stock_real >= p_cantidad`. Ver justificación en `logic.md §17.3`.
+- `confirmarRecepcion`: sin soporte offline — la reconciliación de stock en destino es atómica.
+- `resolverDescuadre`: sin soporte offline — la RPC de clasificación contable (`merma` / `recuperacion_descuadre`) requiere transacción atómica en Supabase.
 
 ### Stores: `useInventarioStore`
 
@@ -838,11 +962,21 @@ useEffect(() => {
 | `doc4_create` | Alta voluntaria |
 | `doc5_create` | Descargo de responsabilidad |
 | `doc11_create` | Aviso urgente |
-| `doc6_metadata` | Metadata del gasto (stock se aplica al reconectar via RPC) |
+| `doc6_metadata` | Metadata del gasto (stock descontado localmente por optimismo; RPC reconcilia al reconectar) |
 
 **Operaciones NO aptas para cola:**
-Stock mutations (Doc-6 RPC, Doc-10 confirmación), login/checkin,
-cambios de estado DRP, generación de tokens. Ver `logic.md §17.3`.
+
+| Tipo | Motivo |
+| --- | --- |
+| Doc-6 RPC (stock) | Transacción atómica Supabase |
+| **Doc-10 completo** | Guard atómico `stock_real >= p_cantidad` debe evaluarse en tiempo real — riesgo de stock negativo si se encola |
+| Doc-10 confirmación | Transacción atómica Supabase |
+| `resolverDescuadre` | RPC contable (merma / recuperación) requiere transacción atómica |
+| Login / check-in | Validación JWT en tiempo real |
+| Tokens emergencia | Requiere reautenticación |
+| Cambios de estado DRP | Sincronización inmediata multi-terminal |
+
+Ver `logic.md §17.3` para la justificación completa.
 
 ### Persistencia: IndexedDB (via `idb` o similar)
 
@@ -1057,14 +1191,18 @@ function useDocumento<T>(tipo: TipoDocumento, id?: UUID): UseDocumento<T>
 1. Validación de campos obligatorios
 2. Si isOnline:
    - INSERT en Supabase con el UUID pre-generado
-   - Para Doc-6: llama useInventario.registrarGasto() via RPC (requiere online)
+   - Para Doc-6: llama useInventario.registrarGasto() — aplica flujo optimista local
    - estado = estado final según tipo de doc
    - DELETE borrador de IndexedDB
-3. Si offline (doc apto para cola):
-   - useOfflineQueue.enqueue(tipo, data)
-   - Borrador permanece en IndexedDB hasta confirmación
-4. Si offline (doc NO apto para cola como Doc-6):
-   - throw Error('requiere_conexion')
+3. Si offline (doc apto para cola — incluyendo Doc-6 via optimismo local):
+   - Doc-6: descuento ya aplicado localmente (PASO 1 del flujo optimista);
+     metadata encola en useOfflineQueue para sincronizar al reconectar
+   - Resto de docs aptos: useOfflineQueue.enqueue(tipo, data)
+   - Borrador permanece en IndexedDB hasta confirmación del RPC
+4. Si offline (doc NO apto para cola):
+   - **Doc-10**: throw Error('doc10_requiere_conexion') — el guard atómico
+     stock_real >= p_cantidad requiere conexión sincrónica. Ver logic.md §17.3.
+   - confirmarRecepcion y resolverDescuadre: throw Error('requiere_conexion')
 ```
 
 **`anular`**
@@ -1081,7 +1219,90 @@ Solo disponible en estado 'Borrador_En_Curso'.
 
 ---
 
-## 13. Árbol de dependencias entre hooks
+## 13. useIdleTimeout
+
+> Monitoriza la inactividad DOM en terminales con sesión de emergencia
+> (rol `invitado`). Si no hay interacción durante 20 minutos, fuerza
+> la regresión a `estado_0` sin destruir la cookie de la BBDD.
+> El terminal requiere reintroducir el PIN para volver a `estado_1`.
+> Ver `logic.md §26` para la justificación completa.
+
+```typescript
+interface UseIdleTimeout {
+  // Estado
+  isActivo:       boolean   // true si el timer de inactividad está corriendo
+  isIdle:         boolean   // true si el timeout expiró (estado_0 forzado)
+  tiempoRestante: number    // segundos hasta expiración (0 si isIdle)
+
+  // Acciones (llamadas por useTerminalAuth, no por componentes)
+  iniciar(): void           // activa monitoreo al detectar rol invitado
+  detener(): void           // cancela timer (al cambiar a rol no-invitado o logout)
+  resetTimer(): void        // reinicia contador a 1200s (llamado por los event listeners)
+}
+```
+
+### Condición de activación
+
+```
+isActivo = true   sii   tipoSesion ∈ { 'galleta_pequeña', 'galleta' }
+                  ∧     rolActivo === 'invitado'
+
+useTerminalAuth llama a iniciar() cuando detecta esta condición.
+useTerminalAuth llama a detener() cuando:
+  - el rol sube (ID_nombre con rol propio hace checkin)
+  - el usuario hace checkout y la cookie se autodestruye (galleta_pequeña)
+```
+
+### Comportamiento
+
+**Event listeners DOM**
+
+```typescript
+const IDLE_MS = 20 * 60 * 1000   // 20 minutos
+
+useEffect(() => {
+  if (!isActivo) return
+
+  const eventos = ['click', 'keydown', 'touchstart', 'mousemove', 'scroll']
+  const reset = () => resetTimer()
+
+  eventos.forEach(e => window.addEventListener(e, reset, { passive: true }))
+
+  return () => {
+    eventos.forEach(e => window.removeEventListener(e, reset))
+  }
+}, [isActivo])
+```
+
+**Al expirar el timer**
+
+```
+1. isIdle = true
+2. useTerminalStore.estado → 'estado_0'
+3. La cookie de BBDD NO se destruye:
+   - 'galleta_pequeña' → sigue en BBDD con su expires_at original
+   - 'galleta'         → sigue en BBDD como permanente
+4. useAuthStore → limpiado (JWT, rolActivo)
+5. UI presenta la pantalla de estado_0 con campo PIN preseleccionado
+6. Al reintroducir el PIN válido → useTerminalAuth.loginConPin() →
+   valida cookie existente (no genera nueva) → estado_1 restaurado
+```
+
+**Persistencia del timer**
+
+```
+El contador se guarda en Zustand (localStorage) para sobrevivir recargas
+del navegador. Si el usuario recarga la página con isActivo=true, el
+timer se restaura con el tiempo restante — no se reinicia a 20 minutos.
+```
+
+### Stores: `useTerminalStore`, `useAuthStore`
+
+### Dependencias: `useTerminalAuth` (orquesta inicio/detención)
+
+---
+
+## 14. Árbol de dependencias entre hooks
 
 ```
 useTerminalAuth
@@ -1125,6 +1346,12 @@ useNavigation
 useDocumento(tipo)
   ├── useOfflineQueue  (encola si offline)
   └── useInventario    (solo Doc-6 para RPC de stock)
+
+useIdleTimeout
+  ├── useTerminalStore (fuerza estado → 'estado_0' al expirar)
+  └── useAuthStore     (limpia JWT y rolActivo al expirar)
+  Condición: tipoSesion ∈ {galleta_pequeña, galleta} ∧ rolActivo = 'invitado'
+  Orquestado por: useTerminalAuth (llama a iniciar/detener)
 ```
 
 *`useModuloPSA` y `useModuloFiliacion` no están especificados en detalle aquí —
@@ -1132,17 +1359,36 @@ siguen el mismo patrón que `useDocumento` sobre `useModulosStore`.*
 
 ---
 
-## 14. Notas de implementación
+## 15. Notas de implementación
 
 ### TanStack Query vs Zustand
 
 | Dato | Gestión | Motivo |
 |---|---|---|
-| Estado de turno activo (checkin, vehiculo, DRP) | Zustand + localStorage | Sobrevive recargas, mutaciones optimistas |
-| Stock de inventario | TanStack Query + Supabase Realtime | Sin estado local — siempre fuente de verdad es BBDD |
+| Estado de turno activo (checkin, vehiculo, DRP) | Zustand + localStorage | Sobrevive recargas; dispositivos compartidos de flota |
+| Stock de inventario (fuente de verdad) | TanStack Query + Supabase Realtime | Sincronizado con BBDD; invalidado tras cada RPC |
+| Stock optimista local Doc-6 (`stock_real_local`) | Zustand (sin persist) | Revertible; no persiste en localStorage para evitar estado huérfano |
 | Formularios en progreso | Zustand + IndexedDB | Offline-first, borradores persistentes |
 | Mensajes de bandeja | Zustand + Supabase Realtime | Actualización en tiempo real sin polling |
 | Estado global (marquesina, tablón, vacaciones) | Zustand + Supabase Realtime | Broadcast a todos los terminales |
+| Timer de inactividad (`useIdleTimeout`) | Zustand + localStorage | Sobrevive recarga; tiempo restante recuperable |
+
+### Convención de persistencia
+
+```
+localStorage  → OBLIGATORIO para todos los estados operativos de turno:
+                estadoOperativo, condicionTecnica, tipoServicio, checkin_on,
+                pilot, carry, drp_activo, turno_iniciado, idle_timer.
+                Garantiza coherencia entre pestañas en dispositivos compartidos.
+
+sessionStorage → PROHIBIDO para estado operativo.
+                 Único uso permitido: JWT crudo en useAuthStore.
+                 (sessionStorage es por-pestaña y no garantiza coherencia
+                 en terminales de flota donde múltiples pestañas pueden
+                 estar abiertas simultáneamente.)
+
+Ver rules.md §3 para la directiva arquitectónica completa.
+```
 
 ### Gestión de errores
 

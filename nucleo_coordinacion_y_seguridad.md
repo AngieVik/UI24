@@ -39,21 +39,18 @@
     * Asignar o cambiar rol a usuario existente.
     * Cambiar contraseña de usuario.
     * Desactivar cuenta de usuario.
-  * Roles del sistema:
+  * Roles del sistema (ver `rbac_y_permisos.md` para la definición completa):
     * `gerencia`
     * `coordinación`
     * `logística`
-    * `responsable_logistica` *(todo lo de `logística` + gestión de catálogo)*
+    * `responsable_logistica`
     * `flota`
-    * `responsable_flota` *(todo lo de `flota` + mantenimiento preventivo)*
+    * `responsable_flota`
     * `tes`
     * `due`
     * `médico`
     * `rrhh`
-    * `mantenimiento`
-    * `responsable_equipo`
-    * `invitado` *(asignado automáticamente por cookie
-      de emergencia, sin gestión manual)*
+    * `invitado` *(asignado automáticamente por cookie de emergencia, sin gestión manual)*
 
 * **bandeja_entrada_coordinacion**
   * Recibe Doc-11 dirigidos a coordinación y otros mensajes

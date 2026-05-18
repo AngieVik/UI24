@@ -44,17 +44,43 @@
 * `timestamp_cambio_estado` registrado en cada transición.
 * Acciones base: Marcar_En_Proceso | Marcar_Solucionada | Archivar.
 
+### Modo isReadOnly
+
+Prop booleana `isReadOnly` inyectable por instancia o por tipo de mensaje.
+
+```tsx
+<flujos_transicion instancia="bandeja_entrada_logistica_drp" isReadOnly={true} />
+// O por tipo de mensaje individual:
+<flujos_transicion ... isReadOnly={mensaje.tipo === 'alerta_stock_minimo'} />
+```
+
+**Comportamiento cuando `isReadOnly={true}`:**
+
+* Los botones de mutación de estado (Marcar_En_Proceso, Marcar_Solucionada, Archivar)
+  están **deshabilitados** en el modal — el personal de campo solo lee la información.
+* El acuse de recibo (`timestamp_lectura`, `ID_nombre_lector`) **sí se registra** al abrir.
+* Al cerrar el modal, el mensaje **desaparece automáticamente** de la bandeja sin necesidad
+  de acción manual — no transiciona a `Solucionada_Archivada` (estado contaminante innecesario).
+* Mecanismo de purga: el mensaje se marca como `leido_auto_dismiss` en DB. Un trigger o
+  cron job lo elimina de la vista activa inmediatamente al detectar el cierre del modal
+  (o tras un TTL configurable, ej. 30 minutos, para bandejas sin confirmación de cierre).
+* El contador `unreadCount` del icono `ti-mail` se decrementa igual que en modo normal.
+
+**Justificación:** las alertas puramente informativas (ej. stock mínimo durante un DRP)
+no deben requerir gestión manual de archivado. Forzar al personal asistencial a archivar
+notificaciones informativas durante una emergencia aumenta la carga cognitiva sin aportar valor.
+
 ### Instancias y variantes
 
-| Instancia                       | Archivo de referencia                | Tipo         | Acciones adicionales                                                                                        |
-|---------------------------------|--------------------------------------|--------------|-------------------------------------------------------------------------------------------------------------|
-| `bandeja_entrada_flota`         | `nucleo_flota_y_taller.md`           | Estándar     | —                                                                                                           |
-| `bandeja_entrada_logistica`     | `nucleo_logistica_y_almacen.md`      | Estándar     | —                                                                                                           |
-| `bandeja_entrada_coordinacion`  | `nucleo_coordinacion_y_seguridad.md` | Estándar     | —                                                                                                           |
-| `bandeja_entrada_rrhh`          | `nucleo_gestion_y_rrhh.md`           | Estándar+    | Doc-12: Aprobar / Denegar — registra `timestamp_resolucion` e `ID_nombre_resolutor`. Doc-13: Marcar_Leida. |
-| `bandeja_entrada_logistica_drp` | `nucleo_drp.md`                      | Extendida    | Ver flujo específico abajo.                                                                                 |
-| `bandeja_entrada_vehiculo`      | `terminal_index.md`                  | Solo lectura | Visible al seleccionar ID_vehiculo. Sin acciones de estado — solo lectura de mensajes del sistema.         |
-| `bandeja_entrada_personal`      | `terminal_index.md`                  | Solo lectura | Un icono por ID_nombre con `checkin_on`. Icono `ti-mail` con iniciales. Sin acciones de estado.            |
+| Instancia                       | Archivo de referencia                | Tipo              | isReadOnly | Acciones adicionales                                                                                        |
+|---------------------------------|--------------------------------------|-------------------|------------|-------------------------------------------------------------------------------------------------------------|
+| `bandeja_entrada_flota`         | `nucleo_flota_y_taller.md`           | Estándar          | No         | —                                                                                                           |
+| `bandeja_entrada_logistica`     | `nucleo_logistica_y_almacen.md`      | Estándar          | No         | —                                                                                                           |
+| `bandeja_entrada_coordinacion`  | `nucleo_coordinacion_y_seguridad.md` | Estándar          | No         | —                                                                                                           |
+| `bandeja_entrada_rrhh`          | `nucleo_gestion_y_rrhh.md`           | Estándar+         | No         | Doc-12: Aprobar / Denegar — registra `timestamp_resolucion` e `ID_nombre_resolutor`. Doc-13: Marcar_Leida. |
+| `bandeja_entrada_logistica_drp` | `nucleo_drp.md`                      | Mixta             | Parcial    | Doc-10 pendiente: flujo extendido (ver abajo). Alertas stock mínimo: `isReadOnly=true` (auto-dismiss).     |
+| `bandeja_entrada_vehiculo`      | `terminal_index.md`                  | Solo lectura      | Sí         | Visible al seleccionar ID_vehiculo. Sin acciones de estado — solo lectura de mensajes del sistema.         |
+| `bandeja_entrada_personal`      | `terminal_index.md`                  | Solo lectura      | Sí         | Un icono por ID_nombre con `checkin_on`. Icono `ti-mail` con iniciales. Sin acciones de estado.            |
 
 ---
 
