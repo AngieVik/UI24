@@ -270,7 +270,7 @@ interface UseVehiculo {
 // Dimensión 1: estado físico/operativo del vehículo
 type EstadoOperativo =
   | 'desactivado'     // sin turno activo, sin Doc-8 — solo acción manual explícita
-  | 'en_espera'       // pilot asignado, Doc-8 activo, sin servicio ni movimiento
+  | 'en_espera'       // operativo y disponible — con pilot (Doc-8 activo) o sin pilot (sin Doc-8)
   | 'activado'        // servicio activo despachado (tipo_servicio asignado)
   | 'ruta'            // en tránsito — captura GPS al iniciar y al finalizar
   | 'estacionado'     // parado fuera de base — captura GPS al activar
@@ -354,9 +354,28 @@ Ver logic.md §28 para la justificación y los casos límite del interceptor.
 
 ```
 Llamado exclusivamente por el flujo de Doc-7 (averías).
-1. UPDATE vehiculos SET condicion_tecnica = condicion en Supabase
-2. useVehiculoStore[id].condicionTecnica = condicion
-3. Sin entrada en Doc-8 (la avería ya genera Doc-7 propio)
+
+PASO 1 — INMEDIATO (optimismo local, con o sin red):
+  - useVehiculoStore[id].condicionTecnica = condicion
+  - Badge de condicion_tecnica actualizado en la UI de este terminal
+
+PASO 2 — SEGÚN ESTADO DE RED:
+
+  CASO A — Online:
+    - INSERT Doc-7 en Supabase
+    - UPDATE vehiculos SET condicion_tecnica = condicion
+    - Si condicion = 'inoperativo_critico':
+        → Realtime propaga el bloqueo a todos los terminales que muestran el vehículo
+    - Sin entrada en Doc-8 (la avería genera Doc-7 propio)
+
+  CASO B — Offline:
+    - useOfflineQueue.enqueue('doc7_create', { vehiculoId: id, condicion, ...formData })
+    - El cambio de condicion_tecnica en Zustand ya es visible localmente (PASO 1)
+    - Al reconectar:
+        → useOfflineQueue replaya el Doc-7 → INSERT en Supabase
+        → Si condicion = 'inoperativo_critico':
+            Realtime propaga el bloqueo global a todos los terminales
+        → Auditoría del acceso offline registrada (ver logic.md §25)
 ```
 
 **`setTipoServicio`**
@@ -963,6 +982,7 @@ useEffect(() => {
 | `doc5_create` | Descargo de responsabilidad |
 | `doc11_create` | Aviso urgente |
 | `doc6_metadata` | Metadata del gasto (stock descontado localmente por optimismo; RPC reconcilia al reconectar) |
+| `doc7_create` | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `inoperativo_critico`. |
 
 **Operaciones NO aptas para cola:**
 

@@ -176,3 +176,56 @@ ID_nombre con `checkin_on` + estado `pilot` activo sobre un ID_vehiculo.
 | Checkout del último ID_nombre del terminal  | Terminal → `estado_0_terminal_bloqueado`                          |
 | Cookie de emergencia temporal (`galleta_pequeña`) activa | Cookie se destruye al salir el último ID_nombre    |
 | Vehículo con Doc-Checklist360 abierto       | Checklist se cierra con `timestamp_fin_revision` automáticamente  |
+
+---
+
+## visor_seguimiento_operativo
+
+> Panel de monitorización en tiempo real de la flota activa. Exclusivo de puestos
+> `coordinación` y `gerencia`. Implementar como componente de sólo lectura salvo las
+> acciones de ping de coordenadas. Ver especificación funcional en
+> `nucleo_coordinacion_y_seguridad.md → visor_seguimiento_operativo`.
+> Ver lógica del mecanismo de coordenadas en `logic.md §29`.
+
+### Tipografía
+
+Sigue `rules.md §1` estrictamente:
+
+* `Barlow Condensed` para: etiquetas de campo (`Pilot:`, `Carry:`, `Estado:`),
+  valores de `ID_vehiculo`, `matricula`, badges de `estado_operativo` y
+  `condicion_tecnica`, y toda la UI de control operativo.
+* `Barlow` (regular) para: coordenadas GPS (lat/lon), timestamps de último
+  ping y cualquier bloque de texto de más de dos líneas.
+* Pesos: `700` para IDs, matrículas y badges de estado. `300` para timestamps
+  y metadatos secundarios.
+
+### Densidad y espaciado
+
+Entorno de flota en monitor de coordinación — máxima densidad de información:
+
+* `gap-1` entre tarjetas de vehículo en la cuadrícula.
+* `p-2` de padding interno por tarjeta.
+* `text-xs` como tamaño base para todos los valores dentro de la tarjeta.
+* Badges de estado: `text-xs font-bold` con color semántico por estado
+  (`ruta` → azul, `alerta` → rojo, `en_espera` → gris, `activado` → verde,
+  `estacionado` → amarillo).
+
+### Iconografía permitida
+
+Sólo tres iconos en este componente:
+
+| Icono | Uso |
+|---|---|
+| `ti-map-pin` | Botón "Solicitar Ubicación" — estado inactivo y en error |
+| `ti-loader` | Animación de carga durante petición de ping activa |
+| `ti-copy` | Botón "Copiar Coordenadas" — estado inicial |
+| `ti-check` | Confirmación visual de copia al portapapeles (300 ms, luego vuelve a `ti-copy`) |
+
+### Estados del componente de coordenadas (por tarjeta)
+
+| Estado | Visual |
+|---|---|
+| `idle` | Muestra últimas coordenadas conocidas (lat, lon) + timestamp en `text-xs font-light`. Botones activos. |
+| `fetching` | Icono `ti-loader` animando. Botón "Solicitar Ubicación" deshabilitado. Coordenadas previas visibles en opacidad reducida (`opacity-50`). |
+| `success` | Coordenadas actualizadas en verde (`text-green-600`) durante 2 s, luego vuelven al color neutro. Timestamp actualizado. |
+| `fallback` | Coordenadas del historial con opacidad reducida (`opacity-60`) + badge `Ubicación offline` en gris. Indica que el vehículo no respondió al ping y se muestra la última posición conocida desde `gps_historial`. |

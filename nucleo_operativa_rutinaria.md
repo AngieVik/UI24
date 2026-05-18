@@ -20,8 +20,10 @@
   * **Dimensión 1 — `estado_operativo`** (selector principal):
     * `desactivado`: sin turno activo, sin Doc-8. Solo alcanzable por acción
       manual explícita. El checkout del pilot **NO** produce este estado.
-    * `en_espera`: pilot asignado, Doc-8 activo, sin servicio ni movimiento.
-      Estado resultante del checkout del pilot (vehículo permanece disponible).
+    * `en_espera`: vehículo operativo y disponible, sin servicio activo ni movimiento.
+      No requiere pilot para mantenerse en este estado.
+      Con pilot asignado: Doc-8 activo. Sin pilot (tras checkout): sin Doc-8.
+      Carries pueden permanecer emparejados.
     * `activado`: servicio activo despachado (`tipo_servicio` asignado).
     * `ruta`: en tránsito. Captura GPS al iniciar y al finalizar.
     * `estacionado`: parado fuera de base. Captura GPS al activar.

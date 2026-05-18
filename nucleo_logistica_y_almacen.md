@@ -177,7 +177,7 @@ Acceso desde `inventario_maestro → Gestionar plantillas`.
 | `Operativo` | Disponible para asignar a un nuevo DRP o PSA. |
 | `Asignado` | Vinculado a un DRP o PSA activo. |
 | `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación. Asignación estándar bloqueada. |
-| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. El stock registrado en ese momento actúa como stock inicial del nuevo DRP. La responsabilidad del descuadre pendiente se transfiere a la nueva dotación. |
+| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. Se apila un entry en la tabla `snapshots_reconciliacion` (cola FIFO). El stock en el momento de la reasignación actúa como referencia del nuevo DRP. La responsabilidad del descuadre se transfiere a la nueva dotación. Logística resuelve los snapshots en orden FIFO. |
 
 Flujo estándar: `Operativo` → `Asignado` → `En_Transito` → `Operativo`.
 

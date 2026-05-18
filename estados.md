@@ -98,7 +98,7 @@ Pueden combinarse libremente (ej. `ruta` + `averiado_leve` es válido y habitual
 | Estado | Descripción | Captura GPS |
 |---|---|---|
 | `desactivado` | Sin pilot. Sin Doc-8 activo. Fuera de turno. | No |
-| `en_espera` | Pilot asignado, Doc-8 activo. Sin servicio activo ni movimiento. | No |
+| `en_espera` | Vehículo operativo y disponible. Sin servicio activo ni movimiento. **Con pilot asignado:** Doc-8 activo. **Sin pilot:** sin Doc-8. No requiere pilot para mantener el estado. | No |
 | `activado` | Servicio activo despachado (`tipo_servicio` asignado). | No |
 | `ruta` | En tránsito hacia servicio o vuelta a base. | Al activar y al desactivar |
 | `estacionado` | Parado fuera de base, sin actividad de servicio. | Al activar |
@@ -226,7 +226,7 @@ Estado de cada slot de subinventario para DRP o PSA.
 | `Operativo` | Disponible para asignar a un nuevo DRP o PSA. |
 | `Asignado` | Vinculado a un DRP o PSA activo. |
 | `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación. Asignación estándar bloqueada. |
-| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. Stock actual congelado como stock inicial del nuevo DRP. Descuadre pendiente transferido a nueva dotación. |
+| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. Se apila un snapshot en `snapshots_reconciliacion` (FIFO). El stock en el momento de la reasignación actúa como referencia inicial del nuevo DRP. Descuadre pendiente transferido a nueva dotación. |
 
 **Flujo estándar:**
 

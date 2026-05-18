@@ -61,3 +61,24 @@
     * Mensajes internos entre roles *(a definir en detalle
       cuando se implemente el sistema de mensajería)*.
   * Flujo de estados y acciones: ver `componentes.md → flujos_transicion`.
+
+* **visor_seguimiento_operativo**
+  * RBAC: `coordinación`, `gerencia`.
+  * Panel principal de monitorización en tiempo real del estado de la flota activa.
+    Visible desde los puestos de coordinación y gerencia. No disponible en terminales
+    de vehículo.
+  * **Filtros rápidos:** `Solo en ruta` | `Solo DRP activos` | `Averiados` | `Todos`.
+  * **Estructura visual:** cuadrícula/lista densa con una tarjeta por cada `ID_vehiculo`
+    activo (no en estado `desactivado`). Cada tarjeta expone:
+    * `ID_vehiculo` y `matricula`.
+    * `ID_nombre` del pilot y carry activos (o "Sin pilot" / "Sin carry" si no aplica).
+    * Badge `estado_operativo`: `en_espera` | `activado` | `ruta` | `estacionado` | `alerta`.
+    * Badge `condicion_tecnica`: `operativo` | `averiado_leve` | `inoperativo_critico`.
+    * Coordenadas GPS (lat, lon) con timestamp del último ping o del historial
+      (ver `logic.md §29` para el mecanismo de obtención).
+  * **Acciones por tarjeta:**
+    * `Solicitar Ubicación` — icono `ti-map-pin`. Dispara el mecanismo de ping de
+      coordenadas descrito en `logic.md §29`. El botón se deshabilita durante la
+      solicitud activa para evitar pings duplicados.
+    * `Copiar Coordenadas` — icono `ti-copy` que transiciona a `ti-check` al copiar
+      lat/lon al portapapeles. Sólo activo si hay coordenadas disponibles.

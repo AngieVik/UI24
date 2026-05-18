@@ -102,7 +102,8 @@ const claims = buildClaims(userRole)
 
 | Entidad | INSERT | SELECT | UPDATE | DELETE/ARCHIVE |
 |---|---|---|---|---|
-| Doc-1 al Doc-5 (asistenciales) | `can_create_clinical_docs` | `can_view_clinical_docs` | Creador en Borrador | `can_manage_drp` o `gerencia` |
+| **`doc1_asistencias`** (append-only) | `can_create_clinical_docs` o `can_view_drp` (DRP `En_curso`) | `can_view_clinical_docs` | **`FALSE` incondicional — todos los roles** | **`FALSE` incondicional — todos los roles** |
+| Doc-2 al Doc-5 (asistenciales) | `can_create_clinical_docs` | `can_view_clinical_docs` | Creador en Borrador | `can_manage_drp` o `gerencia` |
 | Doc-3 (clínico SVA) | `can_create_clinical_docs_sva` | `can_view_clinical_docs` | Creador en Borrador | `gerencia` |
 | Doc-6 y Doc-10 (logística) | `can_edit_inventory` | `can_view_inventory` | `can_edit_inventory` | `can_edit_inventory` |
 | Doc-7 (averías) | `can_manage_fleet` o cualquier rol operativo | `can_manage_fleet` | `can_manage_fleet` | `can_manage_fleet` |
@@ -115,3 +116,10 @@ const claims = buildClaims(userRole)
 | Ajuste manual de stock | — | `can_view_inventory` | `can_edit_inventory` | — |
 | Mantenimiento preventivo | — | `can_manage_fleet` | `can_edit_maintenance` | — |
 | Módulos PSA / Filiación (crear/eliminar) | `can_manage_modules` | `can_use_modules` | `can_manage_modules` | `can_manage_modules` |
+
+> **Nota sobre `doc1_asistencias`:** Esta tabla está **aislada** de las políticas RLS genéricas
+> que aplican a Doc-2 al Doc-5. La regla "Creador en Borrador" **no aplica** a Doc-1, que
+> no tiene estado Borrador y se escribe de forma append-only concurrente desde múltiples terminales.
+> Las políticas RLS para UPDATE y DELETE en `doc1_asistencias` devuelven `FALSE` de forma
+> **estricta e incondicional** para todos los roles, garantizando la inmutabilidad a nivel de
+> motor SQL. Ver `logic.md §13.3` para la política RLS explícita.

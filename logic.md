@@ -448,7 +448,33 @@ Al cerrar un módulo PSA o al finalizar el DRP vinculado:
 ### 9.1 Reasignación condicionada — estado Operativo_Condicionado
 
 Cuando un subinventario se requiere urgentemente antes de que logística complete el cuadre,
-el sistema no bloquea el recurso material. En cambio, ofrece una reasignación condicionada:
+el sistema no bloquea el recurso material. En cambio, ofrece una reasignación condicionada.
+
+#### Estructura de datos: tabla `snapshots_reconciliacion`
+
+Un escalar (`stock_inicio_condicionado`) sería insuficiente: si el nuevo DRP finaliza antes
+de que logística resuelva el primer descuadre, se generaría un segundo snapshot que
+sobrescribiría el primero, corrompiendo la auditoría. La solución es una tabla relacional
+que apila snapshots en orden FIFO:
+
+```sql
+snapshots_reconciliacion:
+  id                UUID          PK
+  subinventario_id  TEXT          -- ej. 'ID_DRP3'
+  drp_origen_id     UUID          -- DRP cuya reconciliación fue interrumpida
+  drp_destino_id    UUID NULL     -- DRP al que se reasignó el subinventario
+  stock_snapshot    JSONB         -- { [item_id]: stock_real en el momento del snapshot }
+  created_at        TIMESTAMPTZ   -- orden FIFO obligatorio
+  estado            TEXT          -- 'pendiente' | 'resuelto'
+  resolved_at       TIMESTAMPTZ NULL
+  resolved_by       TEXT NULL     -- ID_nombre_resolutor
+```
+
+**Regla FIFO:** logística debe resolver los snapshots en orden `created_at ASC`.
+No se puede resolver un snapshot más reciente mientras exista uno anterior en estado `pendiente`.
+El sistema bloquea la acción y muestra: "Hay una reconciliación anterior pendiente del DRP [nombre]. Resuélvela primero."
+
+#### Flujo de reasignación condicionada
 
 ```
 Petición de asignación de subinventario en estado En_Transito a nuevo DRP/PSA:
@@ -456,35 +482,47 @@ Petición de asignación de subinventario en estado En_Transito a nuevo DRP/PSA:
   → Modal:
     "El subinventario [ID] tiene una reconciliación pendiente del DRP [nombre].
      ¿Reasignar igualmente?
-     El stock registrado actualmente se tomará como stock inicial del nuevo DRP.
+     El stock registrado actualmente se tomará como stock de referencia del nuevo DRP.
      La responsabilidad del descuadre pasa a la nueva dotación."
 
   → SÍ:
-      1. Congela snapshot: stock_inicio_condicionado = stock_real actual
-      2. Descuadre del DRP anterior queda abierto, marcado como 'condicionado'
-      3. Subinventario → Operativo_Condicionado
+      1. INSERT en snapshots_reconciliacion:
+           { subinventario_id, drp_origen_id, drp_destino_id (nuevo DRP),
+             stock_snapshot = stock_real actual por ítem, estado = 'pendiente' }
+      2. El descuadre del DRP anterior queda abierto, marcado con ref al snapshot
+      3. Subinventario → Operativo_Condicionado (transitorio)
       4. Asignación al nuevo DRP/PSA ejecutada → Asignado
-         (el nuevo DRP parte del stock_inicio_condicionado como referencia)
+         (el nuevo DRP parte del stock_snapshot del entry más reciente como referencia)
 
   → NO:
       Subinventario permanece en En_Transito hasta que logística complete el cuadre.
 ```
 
-**Reconciliación posterior (DRP anterior finaliza reconciliación mientras subinventario ya está en Asignado):**
+#### Reconciliación FIFO
 
 ```
-1. La reconciliación se aplica contra el snapshot stock_inicio_condicionado
-2. Si hay diferencia residual → descuadre generado formalmente con referencia al nuevo DRP
-   como responsable (nuevo ID_nombre_resolutor requerido)
-3. El descuadre del DRP anterior se cierra automáticamente (marcado como transferido)
-4. El subinventario permanece en Asignado — el DRP nuevo no se ve interrumpido
+Logística abre la cola de snapshots pendientes para un subinventario:
+  → Ordenados por created_at ASC (el más antiguo primero)
+  → Solo el primer snapshot está desbloqueado para edición
+
+Al resolver el snapshot más antiguo:
+  1. Logística aplica el cuadre físico contra el stock_snapshot del entry
+  2. Si hay diferencia → descuadre generado con referencia al nuevo DRP
+     (drp_destino_id) como responsable
+  3. El descuadre del DRP anterior se cierra (marcado como 'condicionado_transferido')
+  4. snapshot → estado = 'resuelto', resolved_at, resolved_by registrados
+  5. El siguiente snapshot en la cola queda desbloqueado para resolución
+  6. El subinventario no se interrumpe — sigue en Asignado si tiene DRP activo
 ```
 
 Transiciones del estado condicionado:
 ```
-En_Transito          → Operativo_Condicionado  (reasignación aceptada antes de cuadre)
-Operativo_Condicionado → Asignado              (asignación inmediata al nuevo DRP)
-Asignado (condicionado) → Asignado             (reconciliación completada, descuadre transferido)
+En_Transito            → Operativo_Condicionado  (reasignación aceptada, snapshot apilado)
+Operativo_Condicionado → Asignado                (asignación inmediata al nuevo DRP)
+Asignado (condicionado)→ Asignado                (snapshot resuelto, descuadre transferido)
+En_Transito            → Operativo_Condicionado  (posible segunda vez si el nuevo DRP
+                                                  también finaliza antes del cuadre —
+                                                  segundo snapshot apilado en cola FIFO)
 ```
 
 Ver `estados.md §7` para el mapa completo de transiciones del subinventario.
@@ -655,14 +693,36 @@ Varios terminales en el mismo DRP pueden añadir asistencias simultáneamente al
 * Si un terminal está offline cuando ocurre el INSERT remoto → al reconectarse,
   TanStack Query invalida el cache y re-fetches el estado completo del Doc-1.
 
-### 13.3 Inmutabilidad
+### 13.3 Inmutabilidad — RLS incondicional
 
+La tabla `doc1_asistencias` está **completamente aislada** de las políticas RLS genéricas
+aplicadas a los documentos clínicos (Doc-2 al Doc-5). La regla "Creador en Borrador" para
+UPDATE no existe en esta tabla — Doc-1 no tiene estado Borrador.
+
+```sql
+-- Política RLS para doc1_asistencias (UPDATE)
+CREATE POLICY "doc1_asistencias_no_update" ON doc1_asistencias
+  FOR UPDATE USING (FALSE);   -- RETURNS FALSE INCONDICIONAL. Todos los roles denegados.
+
+-- Política RLS para doc1_asistencias (DELETE)
+CREATE POLICY "doc1_asistencias_no_delete" ON doc1_asistencias
+  FOR DELETE USING (FALSE);   -- RETURNS FALSE INCONDICIONAL. Todos los roles denegados.
+
+-- Política RLS para doc1_asistencias (INSERT)
+CREATE POLICY "doc1_asistencias_insert" ON doc1_asistencias
+  FOR INSERT WITH CHECK (
+    (auth.jwt() -> 'app_claims' ->> 'can_create_clinical_docs')::boolean = true
+    OR
+    (auth.jwt() -> 'app_claims' ->> 'can_view_drp')::boolean = true
+    -- Adicionalmente: DRP debe estar en estado 'En_curso' (validado via JOIN o RPC)
+  );
 ```
-RLS Policy en tabla doc1_asistencias:
-  INSERT: permitido si user tiene rol operativo y DRP está En_curso
-  UPDATE: denegado para todos los roles
-  DELETE: denegado para todos los roles
-```
+
+La inmutabilidad es **criptográfica a nivel de motor SQL**, no dependiente de la capa
+de aplicación ni de claims. Ni coordinación ni gerencia pueden modificar ni eliminar
+entradas de asistencia — independientemente de sus claims.
+
+Ver `rbac_y_permisos.md §5` para la anotación en la matriz de permisos.
 
 ---
 
@@ -782,7 +842,8 @@ Al recuperar conexión:
 | Crear asistencia | Doc-1 | UUID pre-generado en cliente |
 | Guardar informe | Doc-2, Doc-3, Doc-4, Doc-5 | UUID pre-generado en cliente |
 | Guardar aviso | Doc-11 | |
-| Registrar gastos (sin stock) | Doc-6 metadata | Solo el registro; el stock se aplica vía optimismo local + RPC al reconectar |
+| Registrar gastos (sin stock) | Doc-6 metadata | Stock descontado localmente por optimismo; RPC reconcilia al reconectar |
+| **Informe de avería** | **Doc-7** | `condicion_tecnica` cambia optimistamente en Zustand de forma inmediata. El Doc-7 se encola en IndexedDB. Al reconectar: Doc-7 persiste en Supabase y, si `condicion_tecnica = inoperativo_critico`, el vehículo queda bloqueado globalmente vía Realtime. |
 
 ### 17.3 Mutaciones que NO soportan cola offline
 
@@ -1230,3 +1291,86 @@ no de `drp_dotaciones`), por lo que la responsabilidad recae en el hook.
 | `en_espera → alerta` sin DRP activo | No se dispara. |
 | Vehículo en DRP cambia a `estacionado` | No se dispara (solo aplica a `ruta` y `alerta`). |
 | DRP finaliza con vehículo dentro | La finalización del DRP asigna `timestamp_salida_drp` automáticamente (ver `logic.md §12`). El interceptor no es necesario. |
+
+---
+
+## 29. Mecanismo de Ping de Coordenadas (Supabase Realtime)
+
+### 29.1 Objetivo
+
+Obtener la posición GPS actualizada de un vehículo de forma **bajo demanda** sin
+recurrir a geolocalización continua ni polling periódico. Ambas alternativas
+degradan la batería de los terminales y saturan el canal Realtime.
+
+El coordinador solicita la ubicación explícitamente; el terminal del vehículo
+responde una única vez usando la Geolocation API nativa.
+
+### 29.2 Flujo
+
+```
+COORDINADOR (VisorSeguimientoOperativo)
+  │
+  ├─ Pulsa "Solicitar Ubicación" en la tarjeta de ID_vehiculo
+  │
+  └─ Publica evento en canal Realtime:
+       canal:    `vehiculo:${ID_vehiculo}`
+       evento:   `ping_location`
+       payload:  { solicitante_id: ID_nombre_coordinador, timestamp_ping: now() }
+
+──────────────────────────────────────────
+
+TERMINAL DE VEHÍCULO (hook useLocationListener — activo mientras el terminal
+                       tiene checkin_on y estado_operativo ≠ 'desactivado')
+  │
+  ├─ Recibe evento `ping_location` en canal `vehiculo:${ID_vehiculo}`
+  │
+  ├─ Llama navigator.geolocation.getCurrentPosition({ timeout: 5000 })
+  │   (una sola petición — sin watchPosition)
+  │
+  ├─ Éxito → publica respuesta en el mismo canal:
+  │     evento:  `pong_location`
+  │     payload: { lat, lon, accuracy, timestamp_gps: now() }
+  │
+  ├─ Éxito → INSERT en tabla `gps_historial`:
+  │     { id_vehiculo, lat, lon, accuracy, timestamp_gps, origen: 'ping' }
+  │
+  └─ Fallo (timeout o permiso denegado) → no publica `pong_location`
+       (el coordinador activa el fallback — ver §29.3)
+
+──────────────────────────────────────────
+
+COORDINADOR — recibe `pong_location`
+  │
+  └─ Actualiza tarjeta del vehículo con lat/lon frescos (estado `success`)
+```
+
+### 29.3 Cadena de fallback (timeout)
+
+Si el coordinador no recibe `pong_location` en **5 segundos**:
+
+1. Aborta el listener del evento `pong_location`.
+2. Ejecuta una consulta directa a Supabase:
+   ```sql
+   SELECT lat, lon, accuracy, timestamp_gps
+   FROM gps_historial
+   WHERE id_vehiculo = $1
+   ORDER BY timestamp_gps DESC
+   LIMIT 1
+   ```
+3. Muestra las coordenadas históricas en la tarjeta con estado `fallback`:
+   * Opacidad reducida (`opacity-60`).
+   * Badge `Ubicación offline` en gris.
+   * Timestamp de la lectura histórica visible para que el coordinador
+     evalúe la antigüedad de la posición.
+
+### 29.4 Consideraciones de seguridad y canal
+
+* El canal `vehiculo:${ID_vehiculo}` es privado. Las políticas RLS de Supabase
+  Realtime validan que solo terminales con `checkin_on` en ese `ID_vehiculo` y
+  roles `coordinación` / `gerencia` puedan suscribirse.
+* El `useLocationListener` no publica `pong_location` si el terminal no tiene
+  un `ID_nombre` activo con `checkin_on` — previene respuestas de terminales
+  ociosos o bloqueados.
+* La tabla `gps_historial` registra únicamente eventos de tipo `ping`
+  (solicitudes explícitas). El historial pasivo de ruta (si se implementa en
+  el futuro) usará `origen: 'track'` para distinguirlos.
