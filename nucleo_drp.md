@@ -41,6 +41,22 @@
     * Registra timestamp de salida por cada elemento
       que sale.
 
+  * **Exclusividad de vehículo:** un vehículo no puede estar activo en dos DRPs
+    simultáneamente. Intentar añadirlo a un segundo DRP activo devuelve el error
+    "El vehículo ya se encuentra desplegado en otro dispositivo activo."
+    Garantizado por el índice parcial `uq_vehiculo_drp_activo` (ver `logic.md §44`).
+
+  * **Transición Intra-DRP de Carry (desemparejamiento manual):**
+    Cuando un carry se desempareja manualmente de su vehículo estando el vehículo
+    en un DRP activo, el sistema presenta un modal de decisión:
+    * **Abandonar el dispositivo** → `timestamp_salida_drp` registrado, queda libre.
+    * **Permanecer como personal a pie** → transferencia atómica de `drp_dotaciones`
+      a `drp_personal_a_pie` preservando el `timestamp_entrada_drp` original.
+      El cómputo de horas del empleado en el DRP no se interrumpe.
+    Por checkout de fin de turno: siempre se registra `timestamp_salida_drp` automáticamente
+    sin modal (la intención de abandono es inequívoca).
+    Ver `hooks.md §3 useVehiculo.quitarPersona` y `logic.md §46`.
+
   * **DRPs Finalizados (Últimas 48h):**
     * Sección segregada al final del visor, separada visualmente
       de los DRPs activos.
@@ -89,6 +105,14 @@
       propio timestamp.
     * Se pueden abrir y rellenar varios documentos en
       paralelo durante el DRP.
+    * **Corrección de registros clínicos — Mecanismo de Enmienda:**
+      Los registros ya guardados (Doc-2/3/4/5, asistencias Doc-1) son inmutables
+      por diseño (trazabilidad médico-legal). Para corregir un registro erróneo,
+      el usuario selecciona "Enmendar" sobre el registro. El sistema crea un nuevo
+      registro corregido y enlaza el original mediante el campo `id_reemplazado_por`
+      — el original permanece en BBDD pero se oculta en la vista activa.
+      Ver `logic.md §43` para la especificación técnica completa (RLS, columna,
+      RPC atómica).
 
   * **Añadir asistencia al Doc-1:**
     * Abre modal ligero con los campos de `p_filiacion`:
@@ -167,6 +191,17 @@
     * Si el DRP tiene asistencias registradas en Doc-1,
       la opción Cancelar está bloqueada — solo se puede
       Finalizar.
+    * **Borrado en cascada estricto:** la cancelación ejecuta una
+      purga completa en este orden:
+      1. Pacientes en estado `en_espera` de cualquier módulo filiación
+         adherido → DELETE incondicional.
+      2. Módulos secundarios (PSA, filiación) → DELETE en cascada.
+      3. Subinventarios asociados → `Operativo` directamente, sin
+         pasar por `En_Transito`. Snapshots pendientes eliminados.
+         No se genera tarea de reconciliación logística.
+      Motivo: al no haberse activado el despliegue físico, no existe
+      consumo de stock ni actividad clínica que conservar.
+      Ver `logic.md §12.1`.
 
   * **Archivar DRP:**
     * Fuerza sincronización inmediata con Supabase.
@@ -183,7 +218,11 @@
   * Campos generales:
     * `nombre_drp`, `fecha`, `hora`, `ubicación`.
   * `agregar_dotacion_vehiculo` (repetible):
-    * `ID_vehiculo` — campo de texto.
+    * `ID_vehiculo` — **Combobox filtrado** (ver `componentes.md → selector_vehiculo_drp`).
+      * Excluye vehículos con `condicion_tecnica = 'inoperativo_critico'`.
+      * Excluye vehículos ya asignados a un DRP en estado `En_curso`.
+      * Los vehículos en `En_preparacion` se muestran con badge de advertencia
+        "Ya en DRP" — seleccionables pero con confirmación adicional.
     * `ID_nombre` — texto predictivo (los datos del
       ID_nombre se autocompletan desde Supabase al
       seleccionar).

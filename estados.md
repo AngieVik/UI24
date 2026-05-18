@@ -198,16 +198,19 @@ Cada cambio genera entrada en Doc-8 con `timestamp_inicio` y `timestamp_fin`.
 | `En_preparacion` | Job Supabase (1h antes) **o** primera dotación unida — lo primero que ocurra. | `timestamp_inicio_preparacion` |
 | `En_curso` | Activación manual por coordinación/gerencia. | `timestamp_inicio_curso` |
 | `Finalizado` | Cierre manual desde `resumen_drp`. | `timestamp_finalizacion` |
-| `Archivado` | Automático 48h después de `Finalizado` (job Supabase). | `timestamp_archivado` |
+| `Finalizado_Retenido` | El cron job de archivado detectó descuadres contables `Pendiente_Revision` asociados al DRP. El archivado queda bloqueado hasta que logística liquide todos los descuadres. | `timestamp_retencion` |
+| `Archivado` | Automático 48h después de `Finalizado` **o** cuando el DRP estaba en `Finalizado_Retenido` y el último descuadre pasa a `Resuelto`/`Archivado`. | `timestamp_archivado` |
 
 **Transiciones:**
 
 ```
-En_espera       → En_preparacion   (job 1h antes / primera dotación se une)
-En_preparacion  → En_curso         (acción manual coordinación/gerencia)
-En_curso        → Finalizado       (acción manual coordinación/gerencia)
-Finalizado      → Archivado        (job automático Supabase, +48h)
-En_espera       → [eliminado]      (Cancelar — bloqueado si Doc-1 tiene asistencias)
+En_espera            → En_preparacion      (job 1h antes / primera dotación se une)
+En_preparacion       → En_curso            (acción manual coordinación/gerencia)
+En_curso             → Finalizado          (acción manual coordinación/gerencia)
+Finalizado           → Archivado           (cron +48h — solo si sin descuadres pendientes)
+Finalizado           → Finalizado_Retenido (cron +48h — si descuadres Pendiente_Revision > 0)
+Finalizado_Retenido  → Archivado           (trigger: último descuadre del DRP resuelto/archivado)
+En_espera            → [eliminado]         (Cancelar — bloqueado si Doc-1 tiene asistencias)
 ```
 
 **Aviso automático:** si la hora de inicio programada llega y el DRP sigue en `En_preparacion`,
@@ -234,6 +237,15 @@ Estado de cada slot de subinventario para DRP o PSA.
 Operativo              → Asignado              (asignación a DRP/PSA)
 Asignado               → En_Transito           (Cerrar_módulo_PSA o finalización del DRP)
 En_Transito            → Operativo             (logística confirma reconciliación)
+```
+
+**Flujo de cancelación de DRP (reversión limpia):**
+
+```
+Asignado               → Operativo             (cancelación de DRP — bypass directo,
+                                                sin pasar por En_Transito)
+                                                Snapshots pendientes eliminados.
+                                                Sin tarea de reconciliación.
 ```
 
 **Flujo condicionado (reasignación urgente antes de reconciliar):**
@@ -264,11 +276,22 @@ Estado de cada registro de paciente dentro de `modulo_filiacion`.
 | `en_consulta` | Siendo atendido en un box. | `timestamp_inicio_consulta`, `ID_nombre_box` |
 | `archivado` | Atención finalizada. | `timestamp_fin_consulta` |
 
+**Campo adicional:** `revaluacion BOOLEAN DEFAULT FALSE`
+Inyectado automáticamente al ejecutar la transición inversa `en_consulta → en_espera`.
+Nunca se establece en la admisión inicial. Se conserva aunque el paciente vuelva a
+pasar por `en_consulta` (campo inmutable una vez `true`).
+
 **Transiciones:**
 
 ```
 en_espera   → en_consulta   (perfil_boxes abre el registro)
 en_consulta → archivado     (perfil_boxes cierra la atención)
+en_consulta → en_espera     (perfil_boxes — Revaluar paciente)
+                              → revaluacion = true
+                              → id_nombre_box = NULL
+                              → timestamp_inicio_consulta = NULL
+                              → timestamp_admision preservado (no se sobreescribe)
+                              → hilo Doc-3 preservado (no se crea nuevo Doc-3)
 ```
 
 **Zustand:** `useModulosStore → filiacion.pacientes[id].estado`
@@ -385,6 +408,7 @@ Estado global que habilita o bloquea el formulario Doc-12 para todos los emplead
 | `Borrador_En_Curso` | Al abrir el formulario |
 | `Completado_Firmado` | Al guardar con datos válidos |
 | `Anulado_Por_Error` | Anulación manual por el creador (solo en Borrador) |
+| `Anulado_Por_Error_Auto` | Checkout automático detecta el documento en `Borrador_En_Curso` sin firmar — eliminado automáticamente para evitar inyección de documentos incompletos. Ver `hooks.md §2.1`. |
 
 ---
 
@@ -427,6 +451,7 @@ Se genera uno por vehículo por turno de pilot. Si el pilot hace checkout y un n
 | `Pendiente_Recepcion` | Al crear el documento |
 | `Completado` | Al confirmar todos los ítems recibidos |
 | `Descuadre_Pendiente_Revision` | Discrepancia detectada en algún ítem |
+| `Rechazado_Devuelto` | Logística determina que el albarán no puede registrarse (material dañado, proveedor erróneo, discrepancia irreconciliable). **NO-OP contable**: ninguna operación sobre `stock_real`. Cierra el documento logísticamente. Ver `logic.md §38`. |
 
 ---
 
@@ -438,6 +463,7 @@ Se genera uno por vehículo por turno de pilot. Si el pilot hace checkout y un n
 | `Pendiente_Validacion` | Notificación enviada al receptor |
 | `Completado` | Receptor confirma sin discrepancias — stock sumado al destino |
 | `Descuadre_Pendiente_Revision` | Receptor detecta discrepancia — genera descuadre en logística |
+| `Redirigido_Por_Cierre_Destino` | El subinventario de destino está en `En_Transito` u `Operativo_Condicionado` en el momento de la confirmación. La suma física al destino original está denegada. Logística redirige el material al almacén central base y cancela el Doc-10 original. Ver `logic.md §7.1.2`. |
 
 ---
 
@@ -475,10 +501,18 @@ Se genera uno por vehículo por turno de pilot. Si el pilot hace checkout y un n
 
 | Estado | Transición disparadora |
 |---|---|
+| `Borrador_En_Curso` | Al abrir el formulario (solo en sesión activa — registro temporal) |
 | `Completado` | Al guardar sin campo `Incidencias_Detectadas` relleno |
 | `Completado_Con_Incidencias` | Al guardar con `Incidencias_Detectadas` relleno |
+| `Anulado_Por_Error_Auto` | Checkout automático detecta un Checklist360 en `Borrador_En_Curso` sin firmar — **Hard Delete preferido; `Anulado_Por_Error_Auto` si el registro ya existe en DB**. Jamás llega a `Completado`. Ver `hooks.md §2.1`. |
 
 `Timestamp_fin_revision` registrado automáticamente al guardar.
+
+**Escalado automático:** cuando el estado es `Completado_Con_Incidencias`, un trigger
+PostgreSQL (`trg_checklist_genera_doc7`) genera automáticamente un Doc-7 (Informe de
+Avería) con gravedad `Leve` y lo inyecta en `bandeja_entrada_flota`. El técnico de
+flota puede revisarlo y escalar la gravedad si lo considera necesario.
+Ver `logic.md §35` para el SQL completo del trigger.
 
 ---
 

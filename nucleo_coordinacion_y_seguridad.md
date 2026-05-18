@@ -32,6 +32,46 @@
     con `tipo`, `created_at`, `expires_at`, `id_terminal` y `consumido_at`.
     Edge Function purga automáticamente los expirados.
 
+* **dispositivos_validados**
+  * RBAC: `coordinación`, `gerencia`.
+  * Acceso desde `black_column → Coordinación → Dispositivos Validados`.
+  * **Propósito:** gestionar el inventario de tablets oficiales con galleta permanente
+    (`token_especial`) vinculadas a vehículos operativos. Permite revocar y reemplazar
+    la credencial hardware de un terminal dañado o robado sin acceso a bajo nivel a la BD.
+
+  * **Vista de tabla — columnas:**
+
+    | Columna | Contenido |
+    |---|---|
+    | `Descripción` | Nombre libre del terminal (ej. "Tablet Amb. 7 — 1234-ABC") |
+    | `Matrícula` | Matrícula del vehículo asociado (editable inline) |
+    | `ID Terminal` | Fingerprint del dispositivo donde se consumió el PIN |
+    | `Creada` | Fecha y hora de emisión de la galleta |
+    | `Creada por` | ID del coordinador que la generó |
+    | `Estado` | Badge `Activa` (verde) / `Revocada` (rojo) |
+
+  * **Acción "Revocar y Re-emitir":**
+    1. Botón disponible únicamente en filas con `Estado = Activa`.
+    2. Modal de confirmación con reautenticación del coordinador.
+    3. Campo `Descripción` para la nueva galleta (autorellenado con la descripción
+       anterior — editable antes de confirmar).
+    4. Al confirmar: RPC `revocar_y_reemitir_galleta(galleta_id, coordinador_id, descripcion)`:
+       * Marca la galleta existente como `revocada_at = NOW()`.
+       * Genera nuevo PIN de 6 dígitos con TTL de 10 minutos.
+       * El nuevo PIN se muestra **una única vez** en pantalla en un modal:
+         `"PIN de emparejamiento: 123456 — Válido 10 minutos"`.
+       * El coordinador comunica el PIN al operador de la nueva tablet
+         por canal externo (radio, teléfono).
+    5. El operador de la nueva tablet introduce el PIN en `terminal_check`
+       → mismo flujo que `token_especial` estándar → nueva galleta vinculada al dispositivo.
+    6. La fila en la tabla se actualiza automáticamente con `id_terminal` de la nueva tablet
+       al consumirse el PIN.
+    * Ver `logic.md §45` para la especificación SQL completa (RPC + tabla `galletas_terminales`).
+
+  * **Acción "Editar Descripción / Matrícula":**
+    Inline edit directo en la fila (campo descripción y matrícula). Guarda con debounce.
+    No requiere reautenticación — acción de bajo riesgo.
+
 * **rbac**
   * Gestión completa de usuarios y permisos del sistema.
   * Acciones disponibles para `gerencia` y `coordinación`:
@@ -58,9 +98,48 @@
   * Tipos de mensajes entrantes:
     * Doc-11 con destino `coordinación` (avisos urgentes
       y alertas críticas desde cualquier terminal).
+    * **`solicitud_desbloqueo_excepcional`** — notificación de alta prioridad
+      generada cuando un pilot intenta activar un vehículo con
+      `condicion_tecnica = inoperativo_critico`.
+      Contenido: ID_vehiculo, ID_piloto_solicitante, motivo_urgencia, timestamp.
+      Acciones disponibles directamente en la bandeja:
+      * **Autorizar** → Edge Function `conceder_desbloqueo`: inyecta
+        `override_critico = true` en la metadata del vehículo y emite
+        evento Realtime `desbloqueo_concedido` al terminal del pilot.
+        Genera Doc-11 automático de auditoría (activación bajo override).
+      * **Denegar** → emite evento `desbloqueo_denegado` al terminal.
+      La notificación expira en 10 minutos si no recibe respuesta
+      (el pilot deberá re-solicitarla si sigue siendo necesario).
+      Ver `logic.md §32` para el flujo completo.
+    * Avisos automáticos del sistema (ver `logic.md §18`): detención forzada de
+      vehículo por `inoperativo_critico`, DRP no activado a la hora programada, etc.
     * Mensajes internos entre roles *(a definir en detalle
       cuando se implemente el sistema de mensajería)*.
   * Flujo de estados y acciones: ver `componentes.md → flujos_transicion`.
+
+* **forzar_checkout_administrativo**
+  * RBAC: `coordinación`, `gerencia`.
+  * Accesible desde `visor_seguimiento_operativo` (tarjeta de vehículo)
+    y desde el panel de flota (`nucleo_flota_y_taller → Flota y taller`).
+  * **Propósito:** expulsar un pilot fantasma — persona con estado `pilot` activo
+    en base de datos cuyo terminal no responde (fallo de dispositivo, pérdida de
+    cobertura prolongada, abandono del turno sin checkout).
+  * **UI:** botón `Forzar checkout` visible en la tarjeta del vehículo cuando
+    `vehiculo.pilot_id != null` y el coordinador tiene los permisos necesarios.
+  * **Flujo:**
+    1. Modal de confirmación con reautenticación del coordinador (campo password).
+    2. Campo `km_fin` (obligatorio) — el coordinador introduce el kilómetro
+       estimado o real que conoce por comunicación externa.
+    3. Al confirmar: RPC `forzar_checkout_administrativo` cierra el Doc-8 con
+       `estado = 'Enviado_Cerrado_Administrativo'` y retira el `pilot_id` del vehículo.
+    4. El vehículo queda en `en_espera` disponible para nueva asignación.
+    5. Notificación automática en `bandeja_entrada_coordinacion` con el registro
+       de la acción (quién, qué vehículo, km_fin, timestamp).
+  * **Estado resultante del Doc-8:** `Enviado_Cerrado_Administrativo` — distinguible
+    del cierre normal para auditoría. El campo `cerrado_por_coordinador_id` registra
+    quién ejecutó la acción.
+  * Ver `hooks.md §3 forzarCheckoutAdministrativo` y `logic.md §42` para la
+    especificación técnica completa.
 
 * **visor_seguimiento_operativo**
   * RBAC: `coordinación`, `gerencia`.

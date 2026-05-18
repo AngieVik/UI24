@@ -45,12 +45,31 @@
     * `averiado_leve`: incidencia leve/moderada (Doc-7). Badge informativo amarillo.
     * `inoperativo_critico`: fallo grave (Doc-7). Badge rojo. Activación
       requiere confirmación explícita de `gerencia` o `coordinación`.
+      **Transición forzada:** si el vehículo se encuentra en `ruta` o `alerta`
+      cuando la condición muta a `inoperativo_critico`, el sistema fuerza
+      automáticamente `estado_operativo → estacionado` sin intervención manual.
+      Se capturan coordenadas GPS y se emite aviso de criticidad alta al canal
+      de coordinación. Ver `hooks.md §3 setCondicionTecnica PASO 1.5` y
+      `logic.md §18`.
 
   * **Flujo de activación** (`desactivado → en_espera`):
     1. Modal: "¿Activar `ID_vehiculo`?" — Sí | No.
-    2. Si `condicion_tecnica = inoperativo_critico`: advertencia
-       bloqueante adicional. Requiere confirmación de rol autorizado.
+    2. Si `condicion_tecnica = inoperativo_critico`:
+       * **Bloqueo estricto.** La activación directa está vedada.
+       * Botón disponible: "Solicitar Desbloqueo Excepcional".
+         → Envía notificación a bandeja de coordinación con opción Autorizar | Denegar.
+         → Si se autoriza: se inyecta `override_critico = true` en la metadata
+           del vehículo. El pilot recibe confirmación por Realtime y puede continuar.
+         → Si se deniega o no hay respuesta: activación cancelada.
+       * Si `override_critico = true` (ya autorizado): advertencia
+         informativa (no bloqueante) — "Activación bajo responsabilidad del centro de mando".
+         El override se consume en el momento de confirmar la activación.
+       * Ver `logic.md §32` para el flujo completo y la tabla `solicitudes_desbloqueo`.
     3. Solicita `km_inicio` (obligatorio).
+       **Guardia de integridad geométrica:** si el `km_inicio` es inferior al
+       `km_fin` registrado en el último Doc-8 cerrado de ese vehículo, el sistema
+       bloquea la activación y muestra el km de cierre anterior como referencia.
+       Ver `logic.md §31`.
     4. El sistema muestra los ID_nombre con `checkin_on` en ese terminal.
        Asignación manual de roles:
        * `Pilot` → cualquier ID_nombre.

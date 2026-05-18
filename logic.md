@@ -357,6 +357,107 @@ Receptor abre Doc-10 en bandeja_entrada_logistica_drp
       → registra timestamp_confirmacion e ID_nombre_receptor_confirmador
 ```
 
+### 7.1.1 Control de Concurrencia Optimista (OCC) en la liquidación
+
+**Problema:** si dos terminales tienen el mismo Doc-10 abierto simultáneamente
+(bandeja logística recargada en un terminal desconectado mientras otro opera),
+ambos hilos podrían ejecutar la RPC de liquidación casi al mismo tiempo. Sin guarda,
+el segundo hilo volvería a sumar el stock e insertaría un segundo descuadre fantasma,
+corrompiendo el inventario del destino.
+
+**Solución:** la RPC de liquidación añade `WHERE estado = 'En_Transito'` como guarda
+optimista antes de ejecutar cualquier mutación:
+
+```sql
+-- Guarda OCC: el UPDATE solo afecta a la fila si sigue En_Transito
+UPDATE doc10
+   SET estado                        = 'Completado',   -- o 'Descuadre_Pendiente_Revision'
+       timestamp_confirmacion        = NOW(),
+       id_nombre_receptor_confirmador = p_receptor_id
+ WHERE id     = p_doc10_id
+   AND estado = 'En_Transito';   -- ← GUARDA OCC
+
+GET DIAGNOSTICS v_filas_afectadas = ROW_COUNT;
+
+IF v_filas_afectadas = 0 THEN
+  -- El documento ya fue procesado por otro hilo — no es un error
+  RETURN 'already_processed';
+END IF;
+
+-- Solo si v_filas_afectadas = 1 → continuar con INSERT stock / descuadre
+```
+
+**Comportamiento frontend:**
+
+| Resultado RPC | Acción UI |
+|---|---|
+| `1 fila afectada` | Flujo normal — mostrar confirmación de éxito |
+| `0 filas afectadas` (`already_processed`) | Toast silencioso: "Este documento ya fue procesado por otro usuario." Sin reintentar. |
+
+**Invariante:** la suma de stock y el INSERT en `descuadres_inventario` solo se
+ejecutan dentro de la transacción si la guarda OCC devuelve 1 fila afectada.
+El hilo "fantasma" sale limpiamente sin efectos secundarios.
+
+### 7.1.2 Redirección Dinámica de Destino
+
+**Problema:** cuando un Doc-10 llega a su destino (subinventario DRP) para ser
+confirmado, ese subinventario puede haber transitado a `En_Transito` o
+`Operativo_Condicionado` desde que el Doc-10 fue emitido. Sumar stock a un
+subinventario en reconciliación activa contamina el snapshot e invalida el cuadre
+logístico en curso.
+
+**Validación pre-suma en la RPC de confirmación:**
+
+```sql
+-- Al inicio de la función de confirmación, antes de cualquier UPDATE de stock:
+SELECT estado INTO v_estado_destino
+  FROM subinventarios
+ WHERE id = p_id_destino;
+
+IF v_estado_destino IN ('En_Transito', 'Operativo_Condicionado') THEN
+  RAISE EXCEPTION 'destino_no_apto_para_recepcion'
+    USING HINT = '422',
+          DETAIL = v_estado_destino;
+END IF;
+-- Si pasa el guard → continúa con el flujo normal de confirmación
+```
+
+**Flujo frontend — modal de Redirección Forzosa:**
+
+```
+La RPC devuelve error 422 'destino_no_apto_para_recepcion'
+  → Modal de Redirección Forzosa (no cancelable):
+
+    "El subinventario de destino ([ID_DRP]) está en estado [estado_destino]
+     y no puede recibir material hasta completar la reconciliación.
+
+     El material puede redirigirse al almacén central base.
+
+     [ Redirigir al almacén central ]    [ Cancelar y mantener en tránsito ]"
+
+  OPCIÓN A — Redirigir al almacén central:
+    1. RPC 'redirigir_doc10_a_base(doc10Id, id_almacen_base)':
+         · UPDATE stock_real += cantidad en almacén_central_base
+         · Doc-10 → 'Redirigido_Por_Cierre_Destino'
+         · INSERT auditoria_inventario:
+             tipo_movimiento = 'redireccion_forzosa'
+             id_doc10_origen = doc10Id
+             id_destino_original = p_id_destino
+             id_destino_real = id_almacen_base
+             motivo = 'destino_en_' + estado_destino
+             timestamp = NOW()
+         · INSERT notificación a bandeja_entrada_logistica:
+             tipo = 'material_redirigido_a_base'
+             payload = { doc10Id, id_destino_original, id_almacen_base, cantidad }
+    2. Toast: "Material redirigido al almacén central. Doc-10 cancelado."
+
+  OPCIÓN B — Mantener en tránsito:
+    · El Doc-10 permanece en 'Pendiente_Validacion'
+    · El material sigue técnicamente en tránsito
+    · Logística puede reintentar la confirmación cuando el destino
+      vuelva a estado 'Asignado'
+```
+
 ### 7.2 Campos del descuadre generado
 
 ```
@@ -376,6 +477,10 @@ descuadres_inventario:
   estado                TEXT         (Pendiente_Revision | Resuelto | Archivado)
   ID_nombre_resolutor   TEXT         NULL hasta resolución
   timestamp_resolucion  TIMESTAMPTZ  NULL hasta resolución
+  multi_drp             BOOLEAN      DEFAULT FALSE
+    -- true → merma diluida entre varias dotaciones (no asignable a un único responsable)
+    -- Se activa automáticamente por la RPC de reconciliación si existen snapshots
+    -- con estado 'resuelto_por_transferencia' para ese subinventario. Ver §9.1.
 ```
 
 ### 7.3 Resolución de descuadres
@@ -399,23 +504,55 @@ Desde `black_column → Logística → Descuadres`:
     3. descuadre → Resuelto
   ```
 
-  **Opción B — Recuperación**
+  **Opción B — Recuperación Fraccionada**
 
   ```
-  El operario indica: "El material se ha localizado / recuperado."
-  El operario selecciona el destino de la recuperación:
-    → ID_origen  (vuelve al location de origen del envío)
-    → ID_destino (se acredita en el location de destino)
+  El operario indica: "El material se ha localizado / recuperado (total o parcialmente)."
 
-  RPC ejecuta en transacción atómica:
-    1. UPDATE stock_real += diferencia  en el location elegido
-    2. INSERT auditoria_inventario:
+  Campos obligatorios:
+    cantidad_recuperada: INT   (1 ≤ cantidad_recuperada ≤ diferencia)
+    destino_recuperacion: ID_origen | ID_destino
+
+  El sistema calcula automáticamente:
+    merma_definitiva = diferencia - cantidad_recuperada
+    (puede ser 0 si la recuperación es total)
+
+  RPC ejecuta en transacción atómica bajo un único UUID de transacción:
+
+    1. UPDATE stock_real += cantidad_recuperada  en el location elegido
+         (solo la cantidad efectivamente recuperada se reingresa al inventario)
+
+    2. INSERT auditoria_inventario — entrada de recuperación:
+         uuid_transaccion        = gen_random_uuid()   ← mismo UUID para ambas entradas
          tipo_movimiento         = 'recuperacion_descuadre'
-         cantidad_delta          = +(diferencia)       ← positivo: alta contable
-         ID_destino_recuperacion = location elegido
+         cantidad_delta          = +(cantidad_recuperada)   ← alta contable parcial o total
+         ID_destino_recuperacion = destino_recuperacion
+         id_descuadre_origen     = descuadre.id
          ID_nombre_resolutor, timestamp_resolucion
-    3. descuadre → Resuelto
+
+    3. SI merma_definitiva > 0:
+         INSERT auditoria_inventario — entrada de merma residual:
+           uuid_transaccion      = (mismo UUID que paso 2)
+           tipo_movimiento       = 'merma_definitiva_residual'
+           cantidad_delta        = -(merma_definitiva)   ← baja contable del diferencial
+           ID_origen             = descuadre.ID_origen
+           id_descuadre_origen   = descuadre.id
+           motivo                = 'descuadre_parcialmente_recuperado'
+           ID_nombre_resolutor, timestamp_resolucion
+
+    4. descuadre → Resuelto
+
+  Invariante: cantidad_recuperada + merma_definitiva = diferencia (siempre)
+  Ambas entradas en auditoria_inventario llevan el mismo uuid_transaccion,
+  permitiendo trazabilidad completa de la resolución fraccionada en auditoría.
   ```
+
+  **Validación frontend:**
+  - Campo `cantidad_recuperada` con rango `[1, diferencia]` (control numérico).
+  - Si `cantidad_recuperada = diferencia` → merma = 0, se muestra "Recuperación total".
+  - Si `cantidad_recuperada < diferencia` → merma residual visible en el formulario
+    antes de confirmar: "Se imputarán [N] unidades como merma definitiva."
+  - El operario debe confirmar explícitamente antes de ejecutar el RPC.
 
 * **Archivar**: cierra el descuadre sin clasificación contable. Estado → `Archivado`.
   No genera entrada en `auditoria_inventario`. Para casos donde el descuadre no requiere
@@ -514,6 +651,23 @@ El sistema bloquea la acción y muestra: "Hay una reconciliación anterior pendi
 #### Flujo de reasignación condicionada
 
 ```
+GUARD PREVIO — sync_pending (ejecutar ANTES de mostrar el modal de confirmación):
+
+  useInventarioStore.tieneSyncPendiente(subinventarioId) → boolean
+    Evalúa si algún StockItem del subinventario tiene sync_pending = true
+    (descuento de Doc-6 local aún no confirmado por RPC)
+
+  Si → true:
+    ABORTAR la cesión / finalización del módulo.
+    Error modal: "Imposible ceder recurso. Existen gastos pendientes de sincronización.
+                  Recupera la conexión de red primero."
+    No se procede al modal de confirmación de reasignación.
+
+  Si → false:
+    Continúa con el flujo normal de cesión.
+
+──────────────────────────────────────────
+
 Petición de asignación de subinventario en estado En_Transito a nuevo DRP/PSA:
 
   → Modal:
@@ -566,11 +720,33 @@ Al resolver el snapshot activo:
   1. Logística compara el stock_real físico contra el stock_snapshot del entry
   2. Cualquier diferencia cubre la merma acumulada de TODOS los DRP que
      manejaron el subinventario desde el último cuadre completo
-  3. Si hay diferencia → se aplica el flujo de §7 (Descuadre_Pendiente_Revision)
-     con responsabilidad asignada a la última dotación (drp_origen_id del snapshot)
+  3. Si hay diferencia → RPC aplica el flujo de §7 (Descuadre_Pendiente_Revision)
+     con la siguiente lógica de responsabilidad:
+
+     RPC evalúa:
+       SELECT COUNT(*) FROM snapshots_reconciliacion
+        WHERE subinventario_id = $1
+          AND estado = 'resuelto_por_transferencia'
+
+       → Si COUNT > 0 (hubo transferencias entre DRPs sin reconciliar):
+           descuadres_inventario.multi_drp = TRUE
+           descuadres_inventario.ID_nombre_resolutor = NULL
+           -- La merma es diluida e inasignable a un único individuo.
+           -- Gerencia recibirá el descuadre etiquetado como 'Descuadre_multi_DRP'
+           -- para investigación manual o absorción administrativa.
+
+       → Si COUNT = 0 (subinventario de un único DRP):
+           descuadres_inventario.multi_drp = FALSE
+           descuadres_inventario.ID_nombre_resolutor = pilot del drp_origen_id
+
   4. snapshot → estado = 'resuelto', resolved_at, resolved_by registrados
   5. El subinventario pasa a Operativo y queda disponible para nuevas asignaciones
 ```
+
+**Flag `Descuadre_multi_DRP`:** Cuando `multi_drp = TRUE`, el descuadre no aparece
+en las vistas de responsabilidad individual. Se enruta a una vista específica de gerencia
+con el badge `Multi-DRP` en naranja, indicando que requiere análisis contextual antes
+de tomar medidas disciplinarias o contables.
 
 Transiciones del estado condicionado:
 ```
@@ -608,14 +784,73 @@ OPCIÓN B (primera dotación unida):
                      timestamp_inicio_preparacion = NOW()
 ```
 
-### 10.2 Finalizado → Archivado
+### 10.2 Finalizado → Archivado (con Guarda Condicional de Retención)
 
 ```
-cron_job: cada hora, busca DRP en estado Finalizado
-  donde NOW() - timestamp_finalizacion >= 48 horas
-  → DRP pasa a Archivado
-  → timestamp_archivado = NOW()
-  → Fuerza sincronización final con Supabase
+cron_job: cada hora, busca DRP en estado Finalizado o Finalizado_Retenido
+  donde NOW() - timestamp_finalizacion >= 48 horas (para Finalizado)
+  o    DRP.estado = 'Finalizado_Retenido' (reevalúa en cada ciclo)
+
+  Para cada DRP candidato — EVALUACIÓN PRE-TRANSACCIONAL:
+
+    SELECT count(1) AS n_pendientes
+      FROM descuadres
+     WHERE id_drp = drp.id
+       AND estado = 'Pendiente_Revision';
+
+    SI n_pendientes > 0:
+      → DRP NO se archiva
+      → DRP pasa a 'Finalizado_Retenido' (si aún no lo estaba)
+      → timestamp_retencion = NOW()
+      → INSERT notificación en bandeja_entrada_logistica:
+          tipo    = 'drp_retenido_por_descuadres'
+          payload = { id_drp, nombre_drp, n_pendientes,
+                      timestamp_finalizacion, motivo: 'descuadres_contables_pendientes' }
+      → El DRP queda visible en visor_drp con badge 'Retenido' para
+        coordinación/gerencia (solo lectura — sin mutaciones de estado disponibles)
+
+    SI n_pendientes = 0:
+      → DRP pasa a 'Archivado'
+      → timestamp_archivado = NOW()
+      → Fuerza sincronización final con Supabase
+      → El DRP desaparece del visor activo
+```
+
+**Trigger complementario — resolución del último descuadre:**
+
+```sql
+-- Cuando el último descuadre de un DRP retenido pasa a Resuelto o Archivado,
+-- el trigger verifica si quedan descuadres pendientes y libera el DRP.
+CREATE OR REPLACE FUNCTION trg_fn_descuadre_libera_drp_retenido()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_pendientes INT;
+BEGIN
+  IF NEW.estado IN ('Resuelto', 'Archivado')
+     AND OLD.estado = 'Pendiente_Revision'
+     AND NEW.id_drp IS NOT NULL THEN
+
+    SELECT count(1) INTO v_pendientes
+      FROM descuadres
+     WHERE id_drp = NEW.id_drp
+       AND estado = 'Pendiente_Revision';
+
+    IF v_pendientes = 0 THEN
+      UPDATE drp
+         SET estado            = 'Archivado',
+             timestamp_archivado = NOW()
+       WHERE id    = NEW.id_drp
+         AND estado = 'Finalizado_Retenido';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_descuadre_libera_drp_retenido
+  AFTER UPDATE ON descuadres
+  FOR EACH ROW
+  EXECUTE FUNCTION trg_fn_descuadre_libera_drp_retenido();
 ```
 
 ### 10.3 Aviso de DRP no activado
@@ -678,6 +913,42 @@ Solo el ID_nombre seleccionado sale.
 El vehículo permanece en el DRP.
 ```
 
+### 11.5 Liquidación Universal de Salida — RPC `registrar_salida_drp_individual`
+
+La RPC aplica `timestamp_salida_drp` **a ambas tablas** para el `ID_nombre` que sale,
+independientemente de cómo entró al DRP. Un mismo ID_nombre puede tener registros en
+`drp_dotaciones` (si entró con vehículo) y en `drp_personal_a_pie` (si también se
+registró como personal a pie en distintos momentos del DRP). La salida debe liquidar
+ambas entradas.
+
+```sql
+CREATE OR REPLACE FUNCTION registrar_salida_drp_individual(
+  p_drp_id    UUID,
+  p_id_nombre TEXT
+)
+RETURNS VOID AS $$
+BEGIN
+  -- Liquidar en drp_dotaciones (entradas vehiculares)
+  UPDATE drp_dotaciones
+     SET timestamp_salida_drp = NOW()
+   WHERE drp_id    = p_drp_id
+     AND id_nombre = p_id_nombre
+     AND timestamp_salida_drp IS NULL;
+
+  -- Liquidar en drp_personal_a_pie (entradas a pie)
+  UPDATE drp_personal_a_pie
+     SET timestamp_salida_drp = NOW()
+   WHERE drp_id    = p_drp_id
+     AND id_nombre = p_id_nombre
+     AND timestamp_salida_drp IS NULL;
+
+  -- Ambos UPDATEs son idempotentes: 0 rows afectados ≠ error.
+END;
+$$ LANGUAGE plpgsql;
+```
+
+Ver `hooks.md §4 salirIndividual / exitarDRP` para el flujo completo en cliente.
+
 ### 11.4 Checkout desde terminal (flujo_checkout_automatico)
 
 Si un pilot hace checkout mientras su vehículo está en un DRP activo:
@@ -698,6 +969,41 @@ Ver `componentes.md → flujo_checkout_automatico` para el flujo completo.
 Al ejecutar "Finalizar DRP" desde `resumen_drp`:
 
 ```
+GUARD 0 — Pacientes clínicos activos (ejecutar ANTES que los demás guards):
+  SELECT COUNT(*) FROM filiacion_pacientes
+   WHERE filiacion_id IN (
+     SELECT id FROM modulo_filiacion WHERE drp_id = drpId
+   )
+     AND estado IN ('en_espera', 'en_consulta')
+  Si COUNT > 0:
+    ABORTAR la finalización.
+    Error clínico: "No es posible finalizar el DRP. Existen [N] paciente(s)
+                   activos (en espera o en consulta) sin dar de alta.
+                   Completa la atención o libera los boxes antes de cerrar
+                   el dispositivo."
+    → No hay bypass ni override para este error — requiere alta clínica real.
+    → Muestra el listado de pacientes con su estado actual y box asignado.
+
+GUARD 1 — Doc-10 en tránsito hacia este DRP (ejecutar segundo):
+  SELECT COUNT(*) FROM doc10
+   WHERE drp_destino_id = drpId
+     AND estado = 'Pendiente_Validacion'
+  Si COUNT > 0:
+    ABORTAR la finalización.
+    Error crítico: "Imposible finalizar el dispositivo. Existen [N] transferencia(s)
+                   de material en tránsito sin recepcionar. El receptor debe confirmar
+                   la recepción antes de poder cerrar el DRP."
+    → Muestra la lista de Doc-10 afectados con sus IDs y origen.
+    → No hay bypass ni override para este error — requiere resolución operativa real.
+
+GUARD 2 — sync_pending en subinventarios del DRP:
+  Para cada subinventario asignado al DRP (estado = 'Asignado', drp_id = este DRP):
+    useInventarioStore.tieneSyncPendiente(subinventarioId)
+  Si alguno → true:
+    ABORTAR la finalización.
+    Error: "Imposible finalizar el DRP. El subinventario [ID] tiene gastos pendientes
+            de sincronización. Recupera la conexión de red primero."
+
 1. Dotaciones que salieron vía visor_drp antes de finalizar:
    → Ya tienen su timestamp_salida_drp registrado. Sin cambio.
 
@@ -713,7 +1019,10 @@ Al ejecutar "Finalizar DRP" desde `resumen_drp`:
       → timestamp_cierre_modulo = timestamp_finalizacion
 
 4. Doc-1 pasa a estado Finalizado_Cerrado.
-   → Ya no se pueden añadir asistencias.
+   → Ya no se pueden añadir asistencias con timestamp_registro >= timestamp_finalizacion.
+   → Excepción: terminales que estaban offline durante el DRP pueden sincronizar
+     asistencias tardías si su timestamp_registro es anterior al cierre
+     (evaluado por la política RLS de INSERT — ver §13.3).
 
 5. Aviso automático si el DRP finaliza antes de la hora programada
    o si no tenía dotaciones activas al finalizar:
@@ -727,7 +1036,33 @@ Al ejecutar "Finalizar DRP" desde `resumen_drp`:
 |---|---|---|
 | Doc-1 sin asistencias | Permitido | Permitido |
 | Doc-1 con asistencias | **Bloqueado** | Permitido |
-| Efecto | El DRP desaparece del sistema | DRP pasa a Finalizado, visible para consulta |
+| Efecto sobre el DRP | El DRP desaparece del sistema | DRP pasa a Finalizado, visible para consulta |
+| Módulos secundarios (PSA, filiación) | **DELETE en cascada estricto** — los módulos son destruidos | Cierre controlado con timestamps |
+| Pacientes en `en_espera` | **DELETE incondicional** — purga total de pacientes admitidos no atendidos | No aplica (sólo si hay módulo abierto con pacientes pendientes) |
+| Pacientes en `en_consulta` o `archivado` | **Imposible** — habrían generado asistencias en Doc-1 → precondición bloquea | — |
+| Subinventarios asociados | Depende del estado — ver tabla §12.1b | → `En_Transito` (logística debe reconciliar stock físico) |
+| Reconciliación logística | Solo si el subinventario era `Operativo_Condicionado` — ver §12.1b | Requerida — el stock físico puede diferir del sistema |
+
+**§12.1b — Retroceso de subinventario en cancelación según estado previo:**
+
+| Estado del subinventario al cancelar | Acción sobre estado | Acción sobre snapshots |
+|---|---|---|
+| `Asignado` (nunca se desplazó físicamente) | → `Operativo` directamente | DELETE snapshots con `estado='pendiente'` |
+| `Operativo_Condicionado` (llegó vía transferencia de otro DRP/base) | → `En_Transito` (mantiene cadena de reconciliación) | UPDATE snapshots `resuelto_por_transferencia` → `pendiente` (reactiva) |
+
+**Justificación de la reversión limpia en cancelación (subinventario `Asignado`):**
+Al cancelar un DRP cuyo subinventario nunca salió de la base, el despliegue nunca ocurrió.
+No se consumió material y no hay diferencia entre el stock real y el sistema.
+Forzar el paso por `En_Transito` crearía una tarea de reconciliación logística vacía,
+generando carga operativa innecesaria y potenciales descuadres fantasma.
+
+**Justificación del retroceso a `En_Transito` (subinventario `Operativo_Condicionado`):**
+Un subinventario en `Operativo_Condicionado` llegó a este DRP mediante una transferencia
+de material (Doc-10) desde otro DRP o subinventario origen. Al cancelar el DRP destino,
+la transferencia queda sin efecto — el material debe volver al flujo logístico activo
+(`En_Transito`) para ser reconciliado por el DRP o base de origen. El snapshot marcado
+como `resuelto_por_transferencia` (la reconciliación que consideraba el material "entregado")
+se reactiva a `pendiente` para que logística complete el ciclo de forma explícita.
 
 ---
 
@@ -766,18 +1101,47 @@ CREATE POLICY "doc1_asistencias_no_delete" ON doc1_asistencias
   FOR DELETE USING (FALSE);   -- RETURNS FALSE INCONDICIONAL. Todos los roles denegados.
 
 -- Política RLS para doc1_asistencias (INSERT)
+-- Evalúa el tiempo real del evento (timestamp_registro), no el tiempo de sincronización.
 CREATE POLICY "doc1_asistencias_insert" ON doc1_asistencias
   FOR INSERT WITH CHECK (
-    (auth.jwt() -> 'app_claims' ->> 'can_create_clinical_docs')::boolean = true
-    OR
-    (auth.jwt() -> 'app_claims' ->> 'can_view_drp')::boolean = true
-    -- Adicionalmente: DRP debe estar en estado 'En_curso' (validado via JOIN o RPC)
+    -- Claim requerido (condición de identidad)
+    (
+      (auth.jwt() -> 'app_claims' ->> 'can_create_clinical_docs')::boolean = true
+      OR
+      (auth.jwt() -> 'app_claims' ->> 'can_view_drp')::boolean = true
+    )
+    AND
+    (
+      -- Caso normal: DRP activo en estado 'En_curso'
+      EXISTS (
+        SELECT 1 FROM drp
+        WHERE id = NEW.drp_id
+          AND estado = 'En_curso'
+      )
+      OR
+      -- Excepción offline: asistencia tardía cuyo timestamp_registro es
+      -- anterior al cierre del DRP. El evento ocurrió antes del cierre;
+      -- solo llega al servidor después por ausencia de conexión.
+      EXISTS (
+        SELECT 1 FROM drp
+        WHERE id = NEW.drp_id
+          AND estado IN ('Finalizado', 'Archivado')
+          AND NEW.timestamp_registro < timestamp_finalizacion
+      )
+    )
   );
 ```
 
-La inmutabilidad es **criptográfica a nivel de motor SQL**, no dependiente de la capa
-de aplicación ni de claims. Ni coordinación ni gerencia pueden modificar ni eliminar
-entradas de asistencia — independientemente de sus claims.
+**Excepción para asistencias tardías offline:**
+
+La inmutabilidad del Doc-1 evalúa el **tiempo real del evento** (`timestamp_registro`),
+no el tiempo de sincronización con el servidor. Si un terminal registró asistencias
+en local mientras estaba offline y el DRP se cerró antes de recuperar conexión, esas
+asistencias se aceptan al sincronizar siempre que `timestamp_registro < timestamp_finalizacion`.
+
+Rechazarlas destruiría información clínica real y válida. La excepción solo abre la
+ventana para eventos que físicamente ocurrieron antes del cierre; nadie puede insertar
+asistencias con `timestamp_registro` posterior al cierre del DRP.
 
 Ver `rbac_y_permisos.md §5` para la anotación en la matriz de permisos.
 
@@ -944,6 +1308,7 @@ se entregan a través de Supabase Realtime a los terminales afectados.
 | Doc-10 con discrepancia | "Descuadre pendiente de revisión: Doc-10 [id]." | `bandeja_entrada_logistica` |
 | PIN de emergencia no consumido próximo a expirar | (no aplica — PIN se genera y comparte por canal externo) | — |
 | DRP finaliza con dotaciones activas | Timestamps automáticos aplicados | Sin aviso adicional al usuario |
+| `condicion_tecnica → 'inoperativo_critico'` con `estado_operativo ∈ {ruta, alerta}` | "🚨 [ID_vehiculo] detenido automáticamente. Condición técnica: INOPERATIVO CRÍTICO. Estado anterior: [estado_anterior]. Coordenadas: [coords\|no disponibles]." | Canal `global:alertas_criticas` → terminales coordinación/gerencia + `bandeja_entrada_coordinacion` |
 
 ---
 
@@ -1035,6 +1400,219 @@ perfil_boxes selecciona box número N (1–10)
 El `orden` de atención (campo numérico en admisión) puede modificarse manualmente
 por el perfil_admision mientras el paciente está en `en_espera`. Una vez que pasa
 a `en_consulta`, el orden es inmutable.
+
+### 20.1 Race condition — reordenamiento simultáneo a llamada de box
+
+Si admisión altera el orden general de la lista en el mismo instante en que un box
+llama al siguiente paciente prioritario, la operación de reordenamiento puede aplicarse
+sobre un índice fantasma (el paciente ya pasó a `en_consulta`) o sobrescribir el
+estado de otro paciente, desincronizando la cola para el resto de boxes activos.
+
+**Solución: RPC Atómico de Reordenamiento**
+
+El cambio de orden **nunca** se implementa como un UPDATE directo desde el cliente.
+Toda modificación del orden de la cola se realiza via RPC que:
+1. Recibe el array de IDs con el orden deseado.
+2. Valida internamente que todos los pacientes involucrados siguen en `en_espera`.
+3. Si alguno ha pasado a `en_consulta` o `archivado` → `ROLLBACK` completo de la transacción.
+4. Si todos siguen en `en_espera` → aplica los UPDATEs de `orden` de forma atómica.
+
+```sql
+CREATE OR REPLACE FUNCTION reordenar_pacientes_espera(
+  p_filiacion_id UUID,
+  p_orden_ids    UUID[]   -- array de patient IDs en el nuevo orden deseado
+)
+RETURNS VOID AS $$
+DECLARE
+  v_id       UUID;
+  v_estado   TEXT;
+  v_nuevo_orden INT := 1;
+BEGIN
+  -- Fase 1: validar que todos los pacientes siguen en en_espera
+  FOREACH v_id IN ARRAY p_orden_ids LOOP
+    SELECT estado INTO v_estado
+      FROM filiacion_pacientes
+     WHERE id = v_id
+       AND filiacion_id = p_filiacion_id
+     FOR UPDATE;  -- bloqueo de fila para prevenir race condition
+
+    IF v_estado IS NULL THEN
+      RAISE EXCEPTION 'Paciente % no encontrado en este módulo de filiación', v_id;
+    END IF;
+
+    IF v_estado != 'en_espera' THEN
+      RAISE EXCEPTION
+        'Paciente % ya no está en espera (estado actual: %). Reordenamiento cancelado.',
+        v_id, v_estado;
+    END IF;
+  END LOOP;
+
+  -- Fase 2: aplicar el nuevo orden de forma atómica (solo si todos validan)
+  FOREACH v_id IN ARRAY p_orden_ids LOOP
+    UPDATE filiacion_pacientes
+       SET orden = v_nuevo_orden
+     WHERE id = v_id
+       AND filiacion_id = p_filiacion_id;
+    v_nuevo_orden := v_nuevo_orden + 1;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Nota de seguridad:** el `FOR UPDATE` en la fase de validación bloquea las filas
+durante la transacción, impidiendo que un box concurrente cambie el estado de un
+paciente entre la validación y el UPDATE de orden. Si el RPC falla con EXCEPTION,
+el frontend debe refrescar la lista completa desde Realtime antes de permitir
+un nuevo intento de reordenamiento.
+
+### 20.2 Acción de rescate — Liberación de box bloqueado
+
+**Problema:** si el terminal de un box pierde conexión, se bloquea o el profesional
+abandona el puesto sin cerrar la atención, el paciente permanece indefinidamente en
+estado `en_consulta`, invisible para el resto de los boxes y sin posibilidad de ser
+reatenido. No existe mecanismo automático de timeout (no se puede asumir que una
+atención larga es un fallo técnico).
+
+**Solución:** `perfil_admision` y roles de coordinación/gerencia pueden forzar la
+devolución del paciente a `en_espera` mediante la acción **LIBERAR BOX**.
+
+```sql
+CREATE OR REPLACE FUNCTION liberar_paciente_de_box(
+  p_paciente_id    UUID,
+  p_filiacion_id   UUID,
+  p_liberador_id   TEXT    -- ID_nombre de quien ejecuta la liberación
+)
+RETURNS VOID AS $$
+DECLARE
+  v_estado   TEXT;
+  v_box_id   TEXT;
+BEGIN
+  SELECT estado, id_nombre_box INTO v_estado, v_box_id
+    FROM filiacion_pacientes
+   WHERE id = p_paciente_id
+     AND filiacion_id = p_filiacion_id
+   FOR UPDATE;
+
+  -- Solo puede liberarse un paciente que esté en consulta
+  IF v_estado != 'en_consulta' THEN
+    RAISE EXCEPTION 'El paciente no está en consulta (estado actual: %)', v_estado;
+  END IF;
+
+  -- Devolver a en_espera y desvincular del box
+  UPDATE filiacion_pacientes
+     SET estado                 = 'en_espera',
+         id_nombre_box          = NULL,
+         timestamp_inicio_consulta = NULL,
+         -- Preservar el orden original para no perder su posición en la cola
+         timestamp_liberacion   = NOW(),
+         id_nombre_liberador    = p_liberador_id
+   WHERE id = p_paciente_id
+     AND filiacion_id = p_filiacion_id;
+
+  -- Registro de auditoría en tabla de eventos de filiación
+  INSERT INTO filiacion_eventos (
+    filiacion_id, paciente_id, tipo_evento, id_nombre_actor, timestamp_evento,
+    detalle
+  ) VALUES (
+    p_filiacion_id, p_paciente_id, 'liberacion_box', p_liberador_id, NOW(),
+    'Box liberado: ' || v_box_id
+  );
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Flujo UI:**
+
+```
+perfil_admision (o coordinación / gerencia)
+  1. Accede a sección "Pacientes en Box" dentro del módulo filiación
+     → Lista todos los pacientes con estado 'en_consulta':
+       [ Nombre | ID_nombre_box | Tiempo en consulta (NOW - timestamp_inicio) ]
+  2. Pulsa "LIBERAR BOX" en el paciente afectado
+  3. Modal de confirmación destructiva:
+       "¿Devolver [Nombre] a la lista de espera?
+        Esto desvinculará al paciente del box [N]."
+       [ Confirmar ] [ Cancelar ]
+  4. Si confirma: RPC liberar_paciente_de_box(paciente_id, filiacion_id, liberador_id)
+  5. Supabase Realtime notifica a TODOS los boxes:
+     → El paciente reaparece en la lista de espera en su posición de orden original
+     → El box [N] queda libre para seleccionar otro paciente
+```
+
+**RBAC:** `perfil_admision` del módulo activo (acceso directo) + `coordinación` +
+`gerencia` (acceso vía `nucleo_coordinacion_y_seguridad`).
+
+### 20.3 Transición cíclica — Revaluación de paciente
+
+**Caso de uso:** durante la atención en box, el profesional determina que el paciente
+necesita esperar un resultado (analítica, prueba de imagen, observación) antes de
+continuar la consulta. En lugar de archivar la atención y perder el contexto clínico,
+el box puede devolver al paciente a la lista de espera con el flag `revaluacion = true`.
+Esto preserva el `timestamp_admision` original y mantiene el hilo Doc-3 abierto.
+
+```sql
+CREATE OR REPLACE FUNCTION revaluar_paciente(
+  p_paciente_id   UUID,
+  p_filiacion_id  UUID,
+  p_box_id        TEXT    -- ID_nombre del box que ejecuta la revaluación
+)
+RETURNS VOID AS $$
+DECLARE
+  v_estado       TEXT;
+  v_box_actual   TEXT;
+BEGIN
+  SELECT estado, id_nombre_box INTO v_estado, v_box_actual
+    FROM filiacion_pacientes
+   WHERE id = p_paciente_id
+     AND filiacion_id = p_filiacion_id
+   FOR UPDATE;
+
+  -- Solo puede revaluar un paciente en consulta
+  IF v_estado != 'en_consulta' THEN
+    RAISE EXCEPTION 'El paciente no está en consulta (estado actual: %)', v_estado;
+  END IF;
+
+  -- Solo el box asignado puede ejecutar la revaluación
+  IF v_box_actual != p_box_id THEN
+    RAISE EXCEPTION 'El box % no tiene asignado este paciente (asignado a: %)',
+      p_box_id, v_box_actual;
+  END IF;
+
+  UPDATE filiacion_pacientes
+     SET estado                    = 'en_espera',
+         revaluacion               = TRUE,   -- inmutable una vez establecido
+         id_nombre_box             = NULL,
+         timestamp_inicio_consulta = NULL
+         -- timestamp_admision: NO se modifica (preservación del hilo)
+         -- orden: NO se modifica (mantiene su posición en la cola)
+   WHERE id = p_paciente_id
+     AND filiacion_id = p_filiacion_id;
+
+  -- Registro de auditoría
+  INSERT INTO filiacion_eventos (
+    filiacion_id, paciente_id, tipo_evento, id_nombre_actor, timestamp_evento,
+    detalle
+  ) VALUES (
+    p_filiacion_id, p_paciente_id, 'revaluacion', p_box_id, NOW(),
+    'Paciente devuelto a espera para revaluación desde box: ' || p_box_id
+  );
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Invariantes:**
+- `revaluacion = TRUE` es inmutable: una vez establecido no puede revertirse a `FALSE`.
+- `timestamp_admision` nunca se sobreescribe. La antigüedad real del paciente en el sistema
+  refleja su hora de entrada original.
+- El hilo Doc-3 es continuo: cuando el box reabre al paciente ve el mismo documento,
+  no uno nuevo. El profesional puede continuar el registro clínico donde lo dejó.
+- `orden` se conserva: el paciente no pierde su posición en la cola al ser revaluado.
+  El perfil_admision puede ajustar el orden manualmente si la prioridad clínica cambia.
+- La acción `revaluar_paciente` no interactúa con `liberar_paciente_de_box`:
+  son flujos distintos (box activo revalúa vs. administración rescata box bloqueado).
+
+**RBAC:** cualquier usuario con acceso al box activo (no limitado a roles específicos).
+Coordinación y gerencia pueden ejecutarlo vía el panel de "Pacientes en Box".
 
 ---
 
@@ -1155,6 +1733,30 @@ Usuario registra gasto en Doc-6 (ítem X, cantidad N):
 * **Invariante:** `stock_real_local` puede ser temporalmente incorrecto
   (optimismo). `stock_real` en Supabase siempre es la fuente de verdad.
 
+### 24.5 Reconciliación Bidireccional — handler Realtime vs delta pendiente
+
+**Problema:** cuando un terminal tiene `sync_pending = true` para un ítem (descuento
+optimista local pendiente de confirmación), puede llegar un evento Realtime de otro
+terminal que actualice `stock_real` del mismo ítem. Si el handler sobrescribe
+`stock_real_local` ciegamente con `server_value`, el descuento optimista local desaparece
+de la vista — el usuario ve stock incorrecto hasta que su propio RPC confirme.
+
+**Solución — invariante de reconciliación:**
+
+```
+stock_real_local = server_value - pending_delta
+```
+
+| Estado del store | Efecto del evento Realtime |
+|---|---|
+| `sync_pending = false`, `pending_delta = 0` | `stock_real_local = server_value` (coincide con server — reconciliación trivial) |
+| `sync_pending = true`, `pending_delta = N` | `stock_real_local = server_value - N` (preserva el descuento optimista local) |
+
+El handler Realtime **nunca toca** `sync_pending` ni `pending_delta` — esos campos
+solo los modifica el ciclo PASO 3 del RPC propio (§24.3).
+
+Ver `hooks.md §6 useInventario — Reconciliación Bidireccional` para el código del handler.
+
 ---
 
 ## 25. Modo degradado read-only (acceso sin red)
@@ -1178,7 +1780,11 @@ Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disp
      claims_snapshot: { ...claims del JWT },
      shift_start:     ISOString,
      expires_at:      ISOString (shift_start + 36h),
-     device_id:       fingerprint del terminal
+     device_id:       fingerprint del terminal,
+     password_hash:   bcrypt(password, cost=12)
+                      — truncado a 72 bytes (límite estándar de bcrypt)
+                      — calculado en el servidor durante el check-in online
+                      — NUNCA se transmite la contraseña en texto plano al cliente
    }
 
 2. Firma: HMAC-SHA256 con clave rotante diaria (gestionada en Supabase Vault)
@@ -1187,6 +1793,15 @@ Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disp
    'u24_offline_session': base64(payload + signature)
 ```
 
+**Seguridad del `password_hash`:**
+- `bcrypt` con factor de coste 12 — resiste ataques de fuerza bruta locales.
+- El hash se calcula en el servidor (Edge Function) durante el check-in online.
+  El cliente nunca recibe ni almacena la contraseña en claro.
+- Si el usuario cambia su contraseña online, el payload previo queda invalidado
+  automáticamente porque la firma HMAC será inconsistente en el próximo ciclo de clave.
+- El hash no se sincroniza entre terminales — cada terminal genera el suyo propio
+  en el momento del check-in.
+
 ### 25.3 Activación del modo degradado
 
 Si al intentar autenticarse el terminal no tiene red:
@@ -1194,17 +1809,25 @@ Si al intentar autenticarse el terminal no tiene red:
 ```
 1. El formulario terminal_check detecta timeout de red (> 5s)
 2. Muestra opción: "Sin conexión — Acceso de consulta"
-3. El usuario introduce su ID_nombre
+3. El usuario introduce:
+     - ID_nombre (usuario)
+     - Contraseña (campo password — tipo="password", no se muestra en claro)
+   Ambos campos son OBLIGATORIOS. No existe bypass de contraseña en modo offline.
 4. El sistema busca 'u24_offline_session' en localStorage
+   filtrado por user_id = ID_nombre introducido
 5. Valida:
-   - HMAC del payload con la clave diaria cached (también en localStorage)
-   - expires_at > NOW()
-   - device_id coincide con el terminal actual
-6. Si válido:
+   a. HMAC del payload con la clave diaria cached (también en localStorage)
+   b. expires_at > NOW()
+   c. device_id coincide con el terminal actual
+   d. bcrypt.compare(contraseña_introducida, payload.password_hash) === true
+      ← Verificación local de contraseña contra el hash almacenado
+6. Si todo válido:
    - Terminal pasa a estado_1 en modo DEGRADADO
    - Rol: solo lectura del snapshot de claims
    - Banner visible: "⚠️ Modo sin conexión — Solo lectura"
-7. Si inválido o expirado:
+7. Si cualquier validación falla (HMAC, expiración, device_id o contraseña):
+   - Mensaje genérico: "Credenciales incorrectas o sesión no disponible."
+     (No se especifica qué validación falló — prevención de enumeración)
    - Acceso denegado hasta recuperar red
 ```
 
@@ -1232,6 +1855,85 @@ Al recuperar red:
   → Sync automático: INSERT en tabla 'offline_access_log' en Supabase
   → El registro queda en auditoría permanente
 ```
+
+### 25.6 Pre-caché de tokens HMAC para relevo de turno
+
+**Motivación:** Si la red cae exactamente durante el relevo entre turnos, la nueva
+dotación no puede hacer check-in online y no tiene `u24_offline_session` previa en
+ese terminal (nunca se autenticaron online en ese dispositivo). Sin este mecanismo,
+el acceso degradado sería imposible para ellos.
+
+**Generación y envío proactivo:**
+
+```
+2 horas antes del fin del turno actual (cron o trigger de cuadrante):
+  Edge Function `precache_shift_tokens`:
+    1. Consulta la dotación asignada al turno siguiente para ese vehículo/terminal.
+    2. Para cada persona de la nueva dotación:
+       a. Genera payload idéntico al §25.2:
+          {
+            user_id:         ID_nombre,
+            role:            rol del turno siguiente,
+            claims_snapshot: { ...claims vigentes del usuario },
+            shift_start:     ISOString (inicio del turno SIGUIENTE),
+            expires_at:      shift_start + 36h,
+            device_id:       fingerprint del terminal destino,
+            password_hash:   bcrypt hash ya almacenado en servidor para ese usuario
+          }
+       b. Firma el payload con HMAC-SHA256:
+          — Clave del día siguiente si el turno cruza medianoche.
+          — Clave del día actual en caso contrario.
+    3. Envía los payloads firmados al terminal vía Supabase Realtime
+       canal: `terminal:{device_id}:precache`
+       evento: `shift_tokens_ready`
+       body: [{ user_id, signed_payload }]
+```
+
+**Recepción en el terminal (hooks.md §15 — `usePrecacheShiftTokens`):**
+
+```
+Canal Realtime `terminal:{device_id}:precache`:
+  Al recibir evento `shift_tokens_ready`:
+    Para cada elemento { user_id, signed_payload }:
+      localStorage.setItem(
+        `u24_offline_session_next:${user_id}`,
+        signed_payload
+      )
+  → El terminal puede autenticar a la nueva dotación en modo degradado
+    incluso antes de que su turno haya comenzado oficialmente.
+```
+
+**Activación del token precargado (modificación del paso 4 de §25.3):**
+
+```
+PASO 4 (ampliado):
+  Busca `u24_offline_session` en localStorage para user_id introducido.
+  Si no existe:
+    FALLBACK → busca `u24_offline_session_next:{user_id}`
+  Validación idéntica en ambos casos:
+    HMAC + expires_at + device_id + bcrypt.compare
+  Si válido con token precargado:
+    Banner: "⚠️ Modo sin conexión — Turno pendiente de inicio — Solo lectura"
+    (distingue visualmente de la sesión activa degradada)
+```
+
+**Limpieza del token precargado:**
+
+```
+Al completar check-in online con éxito:
+  → localStorage.removeItem(`u24_offline_session_next:{user_id}`)
+  → El precaché queda sustituido por el payload de turno activo (§25.2)
+```
+
+**Seguridad:**
+- El payload precargado ofrece exactamente las mismas garantías que el estándar:
+  HMAC firmado por servidor, `device_id` vinculado al terminal de destino,
+  bcrypt de coste 12 para la contraseña.
+- `shift_start` apunta al inicio del turno SIGUIENTE. Si existe ya una sesión activa
+  (`u24_offline_session`) para ese `user_id`, tiene prioridad absoluta; el precaché
+  solo se consulta en ausencia de sesión de turno activo.
+- El servidor no transmite contraseñas en claro en ningún momento. El `password_hash`
+  se recupera del almacén interno del servidor, no del cliente.
 
 ---
 
@@ -1426,21 +2128,36 @@ TERMINAL DE VEHÍCULO (hook useLocationListener — activo mientras el terminal
   ├─ Éxito → INSERT en tabla `gps_historial`:
   │     { id_vehiculo, lat, lon, accuracy, timestamp_gps, origen: 'ping' }
   │
-  └─ Fallo (timeout o permiso denegado) → no publica `pong_location`
-       (el coordinador activa el fallback — ver §29.3)
+  └─ Fallo (timeout, hardware no disponible, permiso denegado):
+       No publica `pong_location`.
+       En su lugar publica inmediatamente en el mismo canal:
+         evento:  `pong_error`
+         payload: { id_vehiculo, codigo: err.code, mensaje: err.message, timestamp: now() }
+       (err.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT)
+       El throttle NO se activa en caso de error — el siguiente ping puede intentarlo.
+       El coordinador cancela su timer de 5 s al recibir pong_error y activa
+       inmediatamente el fallback RPC — ver §29.3.
 
 ──────────────────────────────────────────
 
 COORDINADOR — recibe `pong_location`
   │
-  └─ Actualiza tarjeta del vehículo con lat/lon frescos (estado `success`)
+  └─ Cancela el timer de fallback y actualiza tarjeta del vehículo
+       con lat/lon frescos (estado `success`)
 ```
 
-### 29.3 Cadena de fallback (timeout)
+### 29.3 Cadena de fallback (pong_error o timeout)
 
-Si el coordinador no recibe `pong_location` en **5 segundos**:
+El fallback se activa por cualquiera de dos condiciones — la que ocurra primero:
 
-1. Aborta el listener del evento `pong_location`.
+* **`pong_error` recibido (inmediato):** el terminal publicó el error GPS antes de
+  que expire el timer. El coordinador cancela el timer y ejecuta el fallback sin esperar.
+* **Timer de 5 s agotado sin respuesta:** ni `pong_location` ni `pong_error` llegaron
+  (posible pérdida de conexión Realtime del terminal).
+
+En ambos casos el coordinador:
+
+1. Cancela el listener de `pong_location` y el timer de 5 s (si aún activo).
 2. Invoca la función RPC `get_ultima_ubicacion_vehiculo($id_vehiculo)`:
 
    ```sql
@@ -1512,7 +2229,48 @@ en tablets de gama media) tarda entre 2 y 8 segundos en obtener un fix preciso.
 Sin throttle, pings simultáneos de múltiples coordinadores despertarían el chip GPS
 en ráfaga, drenando batería e introduciendo latencia adicional en la respuesta.
 
-### 29.5 Consideraciones de seguridad y canal
+### 29.5 Descarte Geométrico por Delta Temporal
+
+**Problema:** el fallback devuelve la posición más reciente disponible sin importar su
+antigüedad. Si la coordenada proviene de un `cambio_operativo` (doc8_eventos) — que el
+pilot generó al entrar en `ruta` o `alerta` — y el vehículo lleva más de 10 minutos en
+movimiento sin telemetría, mostrar esa posición en el mapa genera sesgo de confirmación
+visual: el coordinador asume que el vehículo sigue en el último punto registrado cuando
+en realidad puede estar decenas de kilómetros lejos.
+
+**Regla de descarte:**
+
+```
+Después de recibir el resultado de get_ultima_ubicacion_vehiculo():
+
+  SI resultado.origen = 'cambio_operativo'
+  ∧  vehiculo.estadoOperativo ∈ { 'ruta', 'alerta' }
+  ∧  (NOW() - resultado.timestamp_gps) > 10 minutos:
+
+    → DESCARTAR las coordenadas del resultado
+    → NO renderizar chincheta en el mapa para este vehículo
+    → Estado del componente → 'posicion_desconocida'
+    → Mostrar texto: "Posición desconocida (Vehículo en movimiento sin telemetría reciente)"
+    → El botón "Solicitar Ubicación" sigue activo — el coordinador puede pedir
+      un ping explícito para obtener posición fresca
+
+  SI el resultado pasa cualquier otra combinación (telemetría reciente,
+  estado no-movimiento, antigüedad < 10 min, etc.):
+    → Comportamiento estándar de fallback (estado 'fallback',
+      coordenadas con opacity-60 y badge 'Ubicación offline')
+```
+
+**Justificación:** una posición de `cambio_operativo` es la localización donde el pilot
+pulsó el cambio de estado, no la posición actual. En `ruta` o `alerta` el vehículo puede
+estar circulando a 80 km/h. A los 10 minutos (≥13 km de desplazamiento potencial)
+esa coordenada ya no tiene valor de localización operativa y puede inducir decisiones
+incorrectas en el coordinador. El sistema es más seguro mostrando la incertidumbre
+explícitamente que ofreciendo falsa precisión.
+
+**Umbral de 10 minutos:** elegido como el ciclo de refresco operativo máximo asumible
+en una operación de emergencia activa. No es configurable en tiempo de ejecución.
+
+### 29.6 Consideraciones de seguridad y canal
 
 * El canal `vehiculo:${ID_vehiculo}` es privado. Las políticas RLS de Supabase
   Realtime validan que solo terminales con `checkin_on` en ese `ID_vehiculo` y
@@ -1525,6 +2283,9 @@ en ráfaga, drenando batería e introduciendo latencia adicional en la respuesta
 * La tabla `gps_historial` registra únicamente eventos de tipo `ping`
   (solicitudes explícitas). El historial pasivo de ruta (si se implementa en
   el futuro) usará `origen: 'track'` para distinguirlos.
+* El descarte geométrico (§29.5) opera exclusivamente en el cliente coordinador
+  sobre el resultado del fallback RPC — no modifica ni depura la tabla
+  `gps_historial` ni `doc8_eventos`.
 
 ---
 
@@ -1558,46 +2319,1249 @@ CASO RETENCIÓN (offline + pendientes):
      - Banner persistente: "Sincronizando datos... No cierre el navegador"
      - Contador visible: "N operaciones pendientes de envío"
 
-  2. MOTOR — JWT retenido en caché técnica:
-     - useAuthStore.jwtRetenido = true
-     - El JWT permanece en Zustand (NO destruido)
-     - useTerminalStore.estado = 'estado_0'  ← UI bloqueada
+  2. MOTOR — JWT congelado en store aislado:
+     - useBackgroundSyncStore.congelarJwt(jwt, ID_nombre)
+       ↳ JWT escrito en 'bgs_frozen_jwt' (localStorage aislado — NUNCA en la sesión de UI)
+       ↳ useAuthStore NO retiene el JWT: puede recibir un nuevo usuario libremente
+     - useTerminalStore.estado = 'estado_0'  ← UI bloqueada para el usuario que hizo checkout
      - El resto del flujo_checkout_automatico se ejecuta con normalidad
        (Doc-8 cerrado, estados del vehículo actualizados, etc.)
-     - EXCEPCIÓN: useAuthStore.clearJwt() NO se llama todavía
+     - EXCEPCIÓN: useAuthStore.clearJwt() NO se llama todavía para ese usuario
 
   3. SERVICE WORKER — vaciado de cola:
-     - Al recuperar conexión, el SW lee el JWT retenido desde useAuthStore
-     - Ejecuta procesarCola() con el JWT del usuario que hizo checkout
+     - Al recuperar conexión, el SW lee useBackgroundSyncStore.getFrozenJwt()
+       (acceso directo al store aislado — no pasa por la sesión de UI activa)
+     - Ejecuta procesarCola() con el JWT congelado del usuario que hizo checkout
      - Cada mutación procesada con HTTP 200 se elimina de IndexedDB
      - Si alguna falla → marcada como 'fallido'; el resto continúa
+     - **Mientras el SW trabaja, Usuario B puede operar con su propio JWT en estado_1
+       sin interferencia alguna — los stores son completamente independientes**
 
   4. DESTRUCCIÓN DIFERIDA del JWT:
      - Cuando pendingCount === 0 (cola vacía):
-       → useOfflineQueue llama a useAuthStore.clearJwtAfterSync()
-       → JWT eliminado de Zustand y de localStorage
-       → jwtRetenido = false
+       → useOfflineQueue.clearJwtAfterSync()
+         → useBackgroundSyncStore.liberarJwt()  ← elimina 'bgs_frozen_jwt' de localStorage
+         → useAuthStore.clearJwt()              ← destruye la sesión del usuario A si sigue en estado_0
        → Banner actualizado: "Sincronización completada"
      - Si hay mutaciones en estado 'fallido':
-       → El JWT sigue retenido
+       → El JWT sigue congelado en useBackgroundSyncStore
        → Banner: "N operaciones fallidas — requieren atención"
        → El supervisor / next pilot puede revisar y descartar manualmente
 ```
 
-### 30.4 Seguridad del JWT retenido
+### 30.4 Seguridad e aislamiento de sesión
 
-* El JWT retenido **no eleva los permisos** de nadie: la UI está en `estado_0`
-  (bloqueada), ningún componente puede operar ni renderizar módulos protegidos.
-* El JWT solo es accesible por el Service Worker para ejecutar las mutaciones
-  encoladas — operaciones que ya se habían iniciado y autorizado antes del checkout.
-* El JWT tiene su TTL natural (`shift_start + 36h`). Si expira antes de que se
-  complete la sincronización, las mutaciones fallarán con 401 y se marcarán como
+* El JWT congelado **no eleva los permisos** de nadie: la UI del usuario que hizo
+  checkout está en `estado_0` (bloqueada), ningún componente puede operar ni
+  renderizar módulos protegidos.
+* El JWT solo es accesible por el Service Worker via `useBackgroundSyncStore.getFrozenJwt()`.
+  No está expuesto a componentes UI ni al store de sesión activa.
+* **Aislamiento de hilos de sesión:** mientras el SW vacía la cola de Usuario A,
+  Usuario B puede iniciar sesión, recibir su propio JWT en `useAuthStore` y operar
+  con plena normalidad en `estado_1`. Los dos tokens coexisten en stores completamente
+  independientes — `useAuthStore` (sesión viva) y `useBackgroundSyncStore` (cola offline).
+* El JWT congelado tiene su TTL natural (`shift_start + 36h`). Si expira antes de que
+  se complete la sincronización, las mutaciones fallarán con 401 y se marcarán como
   `fallido` para revisión manual.
 
-### 30.5 Exposición en useOfflineQueue e useAuthStore
+### 30.5 Exposición en stores
 
 | Store | Campo / Método | Descripción |
 |---|---|---|
-| `useOfflineQueue` | `hasCriticalPending: boolean` | true si pendingCount > 0 y isOnline === false en el momento del checkout |
-| `useAuthStore` | `jwtRetenido: boolean` | true mientras el JWT está retenido post-checkout |
-| `useAuthStore` | `clearJwtAfterSync(): void` | Destruye el JWT y limpia el store; solo llamado por useOfflineQueue cuando pendingCount === 0 |
+| `useOfflineQueue` | `hasCriticalPending: boolean` | true si pendingCount > 0 y !isOnline en el momento del checkout |
+| `useBackgroundSyncStore` | `frozenJwt: string \| null` | JWT congelado del usuario que hizo checkout offline; solo accesible por SW |
+| `useBackgroundSyncStore` | `hasFrozenJwt: boolean` | true mientras hay JWT congelado pendiente de vaciado |
+| `useBackgroundSyncStore` | `congelarJwt(jwt, userId)` | Escrito exclusivamente por `useCheckin.checkout()` en CASO RETENCIÓN |
+| `useBackgroundSyncStore` | `liberarJwt()` | Llamado por `useOfflineQueue.clearJwtAfterSync()` al vaciar la cola |
+| `useOfflineQueue` | `clearJwtAfterSync(): void` | Orquesta: `liberarJwt()` + `useAuthStore.clearJwt()`. Solo cuando pendingCount === 0 |
+
+---
+
+## 31. Guardia de Integridad Geométrica — consistencia del odómetro
+
+### 31.1 Problema
+
+Si un pilot introduce un `km_inicio` inferior al `km_fin` registrado en el último
+Doc-8 cerrado de ese vehículo, el historial de kilometraje retrocede. Esto genera
+datos inconsistentes en consumos de combustible, mantenimientos preventivos y auditorías
+de flota. El error puede ocurrir por fatiga o por confundir el odómetro entre vehículos.
+
+### 31.2 Restricción
+
+La validación se aplica en dos niveles:
+
+**Nivel frontend (UX inmediata):**
+```
+Al solicitar km_inicio en el flujo de activación (hook useVehiculo.activar, paso 3):
+
+  RPC 'get_ultimo_km_fin_vehiculo'({ id_vehiculo })
+    → SELECT km_fin, timestamp_cierre, id_piloto
+        FROM doc8
+       WHERE id_vehiculo = $1
+         AND estado = 'Enviado_Cerrado'
+       ORDER BY timestamp_cierre DESC
+       LIMIT 1
+
+  Si km_inicio_propuesto < km_fin_ultimo:
+    ERROR bloqueante en UI:
+      "El kilómetro introducido ([km_inicio]) es inferior al registrado
+       al cierre del turno anterior ([km_fin_ultimo] el [fecha_cierre]).
+       Introduce un valor ≥ [km_fin_ultimo] para continuar."
+    → El campo km_inicio queda en foco con el valor previo como placeholder
+    → La activación NO puede continuar hasta corregir el valor
+```
+
+**Nivel base de datos (defensa en profundidad):**
+```sql
+-- CHECK CONSTRAINT en tabla doc8 (o trigger BEFORE INSERT)
+-- Se compara contra el km_fin del Doc-8 anterior del mismo vehículo.
+-- Si no existe Doc-8 anterior, la restricción no aplica.
+
+CREATE OR REPLACE FUNCTION validar_km_inicio_vehiculo()
+RETURNS TRIGGER AS $$
+DECLARE
+  km_fin_anterior INT;
+BEGIN
+  SELECT km_fin INTO km_fin_anterior
+    FROM doc8
+   WHERE id_vehiculo = NEW.id_vehiculo
+     AND estado = 'Enviado_Cerrado'
+   ORDER BY timestamp_cierre DESC
+   LIMIT 1;
+
+  IF km_fin_anterior IS NOT NULL AND NEW.km_inicio < km_fin_anterior THEN
+    RAISE EXCEPTION 'km_inicio (%) inferior al km_fin anterior (%) para vehículo %',
+      NEW.km_inicio, km_fin_anterior, NEW.id_vehiculo;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validar_km_inicio
+  BEFORE INSERT ON doc8
+  FOR EACH ROW EXECUTE FUNCTION validar_km_inicio_vehiculo();
+```
+
+### 31.3 Casos límite
+
+| Caso | Comportamiento |
+|---|---|
+| Primer Doc-8 del vehículo (sin historial) | Sin restricción — cualquier `km_inicio` válido |
+| Cambio de pilot con mismo `km_fin` | `km_inicio = km_fin` es válido (`>=`) |
+| Odómetro reseteado por taller (excepción operativa) | El supervisor debe introducir justificación en campo `notas_km` y el bloqueo puede ser levantado por `coordinación` o `gerencia` (fuera de scope de esta versión — se registra como excepción manual en Doc-8) |
+
+---
+
+## 32. Flujo de Autorización Excepcional — Desbloqueo de vehículo inoperativo
+
+### 32.1 Contexto
+
+Cuando `condicion_tecnica = 'inoperativo_critico'`, el flujo estándar de activación
+está bloqueado (ver `nucleo_operativa_rutinaria.md §flujo_activacion` y
+`hooks.md §3 useVehiculo.activar`). Este bloqueo es la regla; el desbloqueo
+excepcional es la excepción — requiere intervención explícita del centro de mando.
+
+### 32.2 Flujo completo
+
+```
+TERMINAL DE VEHÍCULO (pilot)
+
+  1. Intenta activar vehículo con condicion_tecnica = 'inoperativo_critico'
+  2. UI muestra bloqueo + botón "Solicitar Desbloqueo Excepcional"
+  3. Al pulsar el botón:
+       POST Edge Function 'solicitar_desbloqueo_excepcional':
+         { id_vehiculo, id_piloto_solicitante, motivo_urgencia: string, timestamp }
+       → INSERT en tabla solicitudes_desbloqueo:
+           { id_vehiculo, id_solicitante, estado: 'pendiente', timestamp_solicitud }
+       → Notificación push en canal global:alertas_criticas + bandeja_entrada_coordinacion
+  4. UI del terminal entra en espera activa:
+       Suscripción a canal vehiculo:{id_vehiculo} evento 'desbloqueo_concedido'
+       Banner: "Solicitud enviada — aguardando autorización de coordinación"
+
+──────────────────────────────────────────
+
+TERMINAL DE COORDINACIÓN (coordinador / gerencia)
+
+  5. Recibe notificación en bandeja_entrada_coordinacion:
+       Tipo: 'solicitud_desbloqueo_excepcional'
+       Contenido: "[ID_vehiculo] — Solicitud de activación de emergencia por [ID_piloto].
+                   Condición técnica: INOPERATIVO CRÍTICO."
+       Acciones disponibles en la notificación:
+         [ Autorizar ] [ Denegar ]
+
+  6a. Si AUTORIZAR:
+        POST Edge Function 'conceder_desbloqueo':
+          { id_vehiculo, id_coordinador_autorizante, timestamp_autorizacion }
+        → UPDATE solicitudes_desbloqueo SET estado = 'autorizado'
+        → UPDATE vehiculos SET override_critico = true,
+                               id_autorizante = id_coordinador,
+                               timestamp_autorizacion = now()
+        → Broadcast Realtime canal vehiculo:{id_vehiculo}:
+            evento: 'desbloqueo_concedido'
+            payload: { id_vehiculo, autorizante: ID_coordinador }
+        → Registro de auditoría: Doc-11 automático con responsabilidad del autorizante
+
+  6b. Si DENEGAR:
+        → UPDATE solicitudes_desbloqueo SET estado = 'denegado'
+        → Broadcast canal vehiculo:{id_vehiculo}:
+            evento: 'desbloqueo_denegado'
+        → Banner en terminal de vehículo: "Desbloqueo denegado por coordinación"
+
+──────────────────────────────────────────
+
+TERMINAL DE VEHÍCULO — al recibir 'desbloqueo_concedido'
+
+  7. vehiculoStore[id_vehiculo].overrideCritico = true
+  8. UI muestra advertencia: "⚠️ Activación bajo responsabilidad del centro de mando."
+  9. Pilot puede confirmar la activación (introduce km_inicio, asigna roles, etc.)
+ 10. Al confirmar la activación:
+       → override_critico = false  (consumido — válido para UNA sola activación)
+       → UPDATE vehiculos SET override_critico = false
+       → La siguiente activación requerirá nueva autorización
+```
+
+### 32.3 Tabla `solicitudes_desbloqueo`
+
+```sql
+solicitudes_desbloqueo:
+  id                    UUID          PK
+  id_vehiculo           TEXT          FK → vehiculos
+  id_solicitante        TEXT          FK → personas (pilot)
+  id_autorizante        TEXT NULL     FK → personas (coordinador)
+  motivo_urgencia       TEXT NULL
+  estado                TEXT          -- 'pendiente' | 'autorizado' | 'denegado'
+  timestamp_solicitud   TIMESTAMPTZ
+  timestamp_resolucion  TIMESTAMPTZ NULL
+```
+
+### 32.4 Campo `override_critico` en tabla `vehiculos`
+
+```sql
+ALTER TABLE vehiculos
+  ADD COLUMN override_critico        BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN id_autorizante_override TEXT NULL,        -- quien autorizó
+  ADD COLUMN timestamp_override      TIMESTAMPTZ NULL; -- cuándo se autorizó
+```
+
+El campo `override_critico` es siempre `FALSE` al arrancar, se pone `TRUE`
+por la Edge Function `conceder_desbloqueo`, y vuelve a `FALSE` inmediatamente
+cuando el pilot confirma la activación.
+
+### 32.5 Auditoría automática
+
+Al concederse el desbloqueo y ejecutarse la activación, se genera automáticamente
+un Doc-11 (Aviso urgente) con:
+* Tipo: `activacion_bajo_override`
+* `ID_vehiculo`, `ID_piloto_solicitante`, `ID_coordinador_autorizante`
+* `timestamp_solicitud`, `timestamp_autorizacion`, `timestamp_activacion`
+* Destino: `bandeja_entrada_coordinacion` + `bandeja_entrada_flota`
+
+---
+
+## 33. Operaciones Online-Only — restricción de origen
+
+Ciertas operaciones no pueden encolarse offline porque requieren un timestamp
+criptográfico del servidor para garantizar la integridad del inventario primario
+o la atomicidad de transacciones críticas.
+
+### 33.1 Listado de operaciones Online-Only
+
+| Operación | Documento | Motivo |
+|---|---|---|
+| Entrada de stock al almacén | Doc-9 | Genera inventario primario; un timestamp local falso podría crear stock fantasma al vaciar colas asíncronas en cascada |
+| Envío entre locations con guard atómico | Doc-10 | `stock_real >= p_cantidad` debe evaluarse sincronizadamente — ver §17.3 |
+| Confirmación de recepción (Doc-10) | Doc-10 | Cierra un movimiento bilateral — requiere estado consistente en ambas partes |
+| Resolución de descuadre | Doc-10 | Afecta al stock real y al historial de auditoría del inventario maestro |
+
+### 33.2 Comportamiento en frontend
+
+```
+Al intentar enviar una operación Online-Only mientras isOnline = false:
+  → throw Error('<tipo>_requiere_conexion')
+  → UI muestra modal: "Esta operación requiere conexión activa.
+                       Recupera la red e inténtalo de nuevo."
+  → El borrador permanece en IndexedDB (no se pierde)
+  → NO se encola en useOfflineQueue
+```
+
+### 33.3 Justificación técnica — Doc-9
+
+Si Doc-9 se encolara offline, el vaciado de cola podría insertar múltiples entradas
+de stock en un orden distinto al temporal real, o duplicar stock si el usuario
+repite la operación creyendo que no se procesó. El timestamp del servidor actúa como
+prueba de recepción irrefutable y permite detectar duplicados por idempotencia UUID.
+
+---
+
+## 34. Inyección Manual de JWT en terminal compartido
+
+### 34.1 Problema
+
+En un terminal compartido, varios `ID_nombre` pueden tener `checkin_on` simultáneamente.
+El cliente Supabase JS gestiona una única sesión de auth global: si Usuario A y Usuario B
+están ambos logueados, el cliente singleton siempre usa la sesión del último en autenticarse.
+Cualquier mutación ejecutada por Usuario A a través del cliente global quedaría firmada
+con el JWT de Usuario B — un fallo de identidad en el trail de auditoría y en las
+políticas RLS de escritura.
+
+### 34.2 Solución — mapa de tokens en `useAuthStore`
+
+`useAuthStore.jwtMap` contiene el token vigente de cada usuario con `checkin_on`.
+Toda operación mutable debe construir un cliente Supabase temporal con el JWT del
+ejecutor explícito en los headers. Ver `hooks.md §18` para la interfaz completa del
+store y el patrón de `crearClienteConJwt()`.
+
+### 34.3 Política de uso por tipo de operación
+
+| Tipo de operación | Cliente a usar | Motivo |
+|---|---|---|
+| SELECT (consultas de lectura) | Cliente global singleton | Sin implicaciones de escritura; RLS de lectura acepta la sesión del terminal |
+| INSERT / UPDATE / DELETE | `crearClienteConJwt(getJwtFor(ejecutorId))` | RLS de escritura evalúa `auth.uid()` del JWT — debe ser el del ejecutor real |
+| Realtime (suscripciones) | Cliente global singleton | Suscripciones son de solo lectura; no generan eventos de escritura |
+| Edge Functions | Header `Authorization: Bearer <jwt>` explícito en el `fetch` | Las EF no usan el cliente local; el header es el único mecanismo de auth |
+| Cola offline (`useOfflineQueue`) | JWT congelado en el payload de la mutación | Al encolar, se copia `getJwtFor(ejecutorId)` en el objeto `Mutation.jwt`; al drenar, se usa ese JWT congelado — nunca el jwt activo del terminal |
+
+### 34.4 Auditoría e imputación
+
+El `ejecutorId` y el JWT del ejecutor aseguran que:
+* La política RLS de INSERT/UPDATE evalúa el `auth.uid()` correcto.
+* Los campos automáticos `id_nombre_ejecutor` en las tablas se rellenan via `auth.jwt()`.
+* El log de auditoría imputa la acción al usuario real, no al propietario del terminal.
+
+### 34.5 Flujo offline — JWT congelado por mutación
+
+```
+Al encolar una mutación en useOfflineQueue:
+  payload.jwt = useAuthStore.getState().getJwtFor(ejecutorId)
+  // snapshot del token en el momento de la acción — inmutable desde ese punto
+
+Al drenar la cola (SW o reconexión):
+  jwt = mutation.payload.jwt
+  client = crearClienteConJwt(jwt)
+  // Se usa el JWT de quien ejecutó la acción, no el JWT del usuario activo ahora
+  // Si el JWT ha expirado (> shift_start + 36h): mutation → estado 'fallido'
+```
+
+---
+
+## 35. Escalado automático — Trigger Checklist360 → Doc-7
+
+### 35.1 Problema
+
+Cuando un TES o técnico de flota completa la revisión 360° de un vehículo y registra
+incidencias, esa información debe escalar automáticamente al módulo de flota sin
+requerir acción manual adicional del operario. De lo contrario, la incidencia queda
+registrada solo en el checklist y no llega a la bandeja de flota.
+
+### 35.2 Trigger
+
+```sql
+CREATE OR REPLACE FUNCTION trg_fn_checklist_a_doc7()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Solo actúa si el checklist se guarda con incidencias detectadas
+  IF NEW.estado = 'Completado_Con_Incidencias'
+     AND NEW.incidencias_detectadas IS NOT NULL
+     AND NEW.incidencias_detectadas != ''
+  THEN
+    INSERT INTO doc7 (
+      id,
+      id_vehiculo,
+      descripcion_averia,
+      gravedad,
+      origen,
+      estado_doc7,
+      checklist_id,
+      id_nombre_reportador,
+      timestamp_generacion
+    ) VALUES (
+      gen_random_uuid(),
+      NEW.id_vehiculo,
+      NEW.incidencias_detectadas,
+      'Leve',                            -- categoría por defecto; escalable a 'Moderada'
+                                         -- si el campo gravedad_estimada del checklist lo indica
+      'checklist360_automatico',
+      'Emitida_Pendiente',               -- entra directamente a la bandeja de flota sin revisión previa
+      NEW.id,
+      NEW.id_nombre,                     -- quien firmó el checklist
+      NOW()
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_checklist_genera_doc7
+  AFTER INSERT ON doc_checklist360
+  FOR EACH ROW EXECUTE FUNCTION trg_fn_checklist_a_doc7();
+```
+
+### 35.3 Comportamiento resultante
+
+| Evento | Consecuencia automática |
+|---|---|
+| Checklist guardado con estado `Completado` | Sin acción de flota |
+| Checklist guardado con estado `Completado_Con_Incidencias` | Doc-7 auto-generado con gravedad `Leve` → inyectado en `bandeja_entrada_flota` |
+| Doc-7 en bandeja de flota | Técnico de flota lo recibe, lo revisa y puede escalarlo a `inoperativo_critico` si lo considera necesario (flujo normal de Doc-7) |
+
+### 35.4 Trazabilidad
+
+El campo `checklist_id` en `doc7` enlaza el informe de avería con la revisión 360°
+que lo originó. Los técnicos de flota pueden consultar el checklist original desde
+el Doc-7 para contexto adicional sobre qué secciones del vehículo presentaron la
+incidencia.
+
+### 35.5 Campo `gravedad_estimada` en el checklist (opcional)
+
+Si el formulario `doc_checklist360` incluye un campo `gravedad_estimada`
+(`Leve` | `Moderada`), el trigger puede usarlo:
+
+```sql
+      'gravedad', COALESCE(NEW.gravedad_estimada, 'Leve'),
+```
+
+De lo contrario, el default `'Leve'` es siempre seguro — nunca fuerza un
+`inoperativo_critico` automático sin revisión humana de flota.
+
+---
+
+## 36. Bloqueo por Sincronía Diferida — Doc-8 en Borrador_En_Curso
+
+### 36.1 Problema
+
+Si un terminal ejecuta el checkout offline (con `jwtRetenido` o con Doc-8 aún
+en `Borrador_En_Curso` pendiente de sincronización), y un nuevo pilot intenta
+activar el mismo vehículo antes de que el Doc-8 anterior se haya enviado y cerrado
+en Supabase, se abrirían dos Doc-8 solapados para el mismo vehículo:
+el "fantasma" aún en tránsito y el nuevo. Esto corrompe el historial de turnos
+y puede generar conflictos de FK al cerrar ambos con el mismo `id_vehiculo`.
+
+### 36.2 Restricción en la función RPC de activación
+
+La función RPC encargada de activar el vehículo y abrir el Doc-8 debe someter
+la petición a una comprobación previa **antes** de ejecutar ningún INSERT:
+
+```sql
+CREATE OR REPLACE FUNCTION activar_vehiculo_y_abrir_doc8(
+  p_id_vehiculo TEXT,
+  p_km_inicio   INT,
+  p_pilot_id    TEXT
+)
+RETURNS VOID AS $$
+BEGIN
+  -- Guardia: Doc-8 anterior aún en Borrador_En_Curso para este vehículo
+  IF EXISTS (
+    SELECT 1 FROM doc8
+     WHERE id_vehiculo = p_id_vehiculo
+       AND estado = 'Borrador_En_Curso'
+  ) THEN
+    -- Devolver 409 Conflict via RAISE con código HTTP embebido en el mensaje
+    RAISE EXCEPTION 'doc8_anterior_en_curso'
+      USING HINT = '409',
+            DETAIL = 'La desactivación del turno anterior aún está sincronizándose.
+                      Espere unos instantes.';
+  END IF;
+
+  -- Si la guardia pasa, continúa con la activación normal
+  UPDATE vehiculos SET estado_operativo = 'en_espera' WHERE id = p_id_vehiculo;
+  INSERT INTO doc8 (id_vehiculo, km_inicio, pilot_id, estado, timestamp_apertura)
+    VALUES (p_id_vehiculo, p_km_inicio, p_pilot_id, 'Borrador_En_Curso', NOW());
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### 36.3 Manejo en el frontend (`useVehiculo.activar`)
+
+```
+Al ejecutar activar() — tras confirmar km_inicio (paso 3) y roles (paso 4):
+
+  LLAMAR RPC 'activar_vehiculo_y_abrir_doc8':
+    Si error.hint === '409':
+      → UI muestra modal de error bloqueante:
+        "La desactivación del turno anterior aún está sincronizándose.
+         Espere unos instantes e inténtelo de nuevo."
+      → No se ejecuta ningún UPDATE local en Zustand
+      → El modal se cierra; el usuario debe reintentar manualmente
+
+  Si éxito (HTTP 200):
+    → useVehiculoStore[id].estadoOperativo = 'en_espera'
+    → useVehiculoStore[id].km_inicio = kmInicio
+    → El Doc-8 ya fue abierto por la RPC en el servidor
+```
+
+### 36.4 Condición de resolución automática
+
+El bloqueo se levanta en cuanto el Service Worker envía el Doc-8 pendiente
+(vaciado de cola offline) y la RPC o trigger en Supabase actualiza su estado
+a `Enviado_Cerrado`. El nuevo pilot puede reintentar la activación inmediatamente
+después. No hay mecanismo de timeout manual — el sistema es auto-resolvente.
+
+---
+
+## 37. Inyección de Excepciones de Patrón — Doc-12 Aprobada
+
+### 37.1 Problema
+
+Los cuadrantes de personal se construyen aplicando patrones de asignación periódicos
+(A, B, C…) sobre rangos de fechas. Si RRHH aprueba una solicitud de vacaciones (Doc-12)
+después de que el patrón ya fue aplicado, los días de vacaciones aprobados entran en
+conflicto con los turnos de trabajo ya calculados. La solución no es recomputar el patrón
+(eso podría sobrescribir ajustes manuales realizados en otros días), sino inyectar una
+excepción de máxima prioridad que se superponga al patrón base para el rango exacto
+de días aprobados.
+
+### 37.2 Semántica de Excepción Absoluta
+
+Una entrada con `es_excepcion_absoluta = TRUE` en la tabla de cuadrantes:
+
+- **Tiene prioridad absoluta** sobre cualquier turno del mismo `(ID_nombre, fecha)`
+  generado por un patrón de asignación.
+- **No puede ser sobrescrita** por una reaplicación de patrón. El motor de aplicación
+  de patrones debe verificar, para cada día del rango, si existe una excepción absoluta
+  y saltarla incondicionalmente.
+- **Solo puede eliminarse** con acción explícita de `rrhh` o `gerencia`.
+- Si el Doc-12 es revertido a `Denegada` (acción manual de RRHH), las excepciones
+  absolutas inyectadas deben eliminarse (rollback manual o trigger AFTER UPDATE).
+
+### 37.3 Trigger de inyección
+
+```sql
+CREATE OR REPLACE FUNCTION trg_fn_doc12_aprobada_a_cuadrante()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_fecha  DATE;
+BEGIN
+  -- Solo actuar cuando la transición es hacia 'Aprobada'
+  IF NEW.estado = 'Aprobada' AND OLD.estado != 'Aprobada' THEN
+
+    -- Iterar sobre cada día del rango de vacaciones aprobado
+    v_fecha := NEW.fecha_inicio;
+    WHILE v_fecha <= NEW.fecha_fin LOOP
+
+      -- Upsert: si ya existe una entrada para ese (ID_nombre, fecha), sobreescribir
+      -- si y solo si NO es ya una excepción absoluta de otro tipo (por ejemplo, Baja).
+      -- Si es excepción absoluta de otro tipo, NO sobrescribir.
+      INSERT INTO cuadrante_turnos (
+        id_nombre,
+        fecha,
+        tipo_turno,           -- 'V' = Vacaciones
+        es_excepcion_absoluta,
+        doc12_id,             -- FK al Doc-12 que originó la excepción
+        timestamp_inyeccion
+      )
+      VALUES (
+        NEW.id_nombre,
+        v_fecha,
+        'V',
+        TRUE,
+        NEW.id,
+        NOW()
+      )
+      ON CONFLICT (id_nombre, fecha)
+        DO UPDATE
+          SET tipo_turno           = 'V',
+              es_excepcion_absoluta = TRUE,
+              doc12_id             = NEW.id,
+              timestamp_inyeccion  = NOW()
+          -- Condición: solo sobreescribir si la entrada existente NO es
+          -- excepción absoluta de tipo distinto (p.ej. Baja médica)
+          WHERE cuadrante_turnos.es_excepcion_absoluta = FALSE
+             OR cuadrante_turnos.tipo_turno = 'V';
+
+      v_fecha := v_fecha + INTERVAL '1 day';
+    END LOOP;
+
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_doc12_aprobada_a_cuadrante
+  AFTER UPDATE ON doc_solicitudes_vacaciones
+  FOR EACH ROW
+  EXECUTE FUNCTION trg_fn_doc12_aprobada_a_cuadrante();
+```
+
+### 37.4 Protección del motor de patrones
+
+El motor que aplica patrones de asignación debe incluir la siguiente guarda antes
+de insertar cada día:
+
+```
+PARA cada (ID_nombre, fecha) en el rango a aplicar:
+  SI EXISTS cuadrante_turnos WHERE id_nombre = X AND fecha = Y
+             AND es_excepcion_absoluta = TRUE
+    → SKIP este día — no sobrescribir
+  SINO
+    → INSERT / UPDATE normalmente
+```
+
+Esta guarda garantiza que reaplicar un patrón (por ejemplo, al extender el contrato)
+nunca elimine los días de vacaciones ya aprobados.
+
+### 37.5 Rollback al denegar
+
+Si RRHH revierte una aprobación (Doc-12 pasa de `Aprobada` a `Denegada`), el trigger
+homólogo elimina las excepciones absolutas inyectadas por ese `doc12_id`:
+
+```sql
+-- En el mismo trigger, rama ELSIF:
+ELSIF NEW.estado = 'Denegada' AND OLD.estado = 'Aprobada' THEN
+  DELETE FROM cuadrante_turnos
+   WHERE doc12_id = NEW.id
+     AND es_excepcion_absoluta = TRUE
+     AND tipo_turno = 'V';
+```
+
+**Nota:** la denegación posterior a la aprobación es una acción excepcional que
+requiere intervención manual de RRHH; el sistema no previene la denegación tardía,
+pero revierte los datos automáticamente.
+
+---
+
+## 38. Vía de Aborto Contable — Doc-9 Rechazado_Devuelto
+
+### 38.1 Caso de uso
+
+Logística recibe un albarán físico que no puede registrarse tal como está:
+material dañado en el transporte, proveedor erróneo, discrepancia irreconciliable
+entre albarán y orden de compra, o partida de material no autorizada.
+En lugar de dejar el Doc-9 abierto indefinidamente en `Pendiente_Recepcion`,
+el operario ejecuta la **vía de aborto contable**: cierra el documento logísticamente
+sin alterar el `stock_real`.
+
+### 38.2 Semántica del estado `Rechazado_Devuelto`
+
+- **Terminal e irreversible**: no existe transición de salida desde `Rechazado_Devuelto`.
+- **NO-OP contable**: ninguna fila de `inventario_items` se toca. El `stock_real`
+  del almacén de destino permanece inalterado.
+- **Cierre logístico**: el Doc-9 desaparece de la bandeja activa y queda archivado.
+  Consulta disponible en el historial de documentos del `inventory_location` de destino.
+- **Trazabilidad completa**: el documento registra `motivo_rechazo`, `ID_nombre_rechazador`
+  y `timestamp_rechazo`. Permanece accesible para auditoría.
+
+### 38.3 Flujo UI
+
+```
+Logística abre Doc-9 en Pendiente_Recepcion
+  → Botón "Rechazar y Devolver" (acción destructiva — color rojo)
+  → Modal de confirmación:
+      Campo: motivo_rechazo (texto libre, obligatorio — mínimo 10 caracteres)
+      [ Confirmar rechazo ] [ Cancelar ]
+  → Si confirma:
+      UPDATE doc9
+         SET estado              = 'Rechazado_Devuelto',
+             motivo_rechazo      = p_motivo,
+             id_nombre_rechazador = p_id_nombre,
+             timestamp_rechazo   = NOW()
+       WHERE id = p_doc9_id
+         AND estado = 'Pendiente_Recepcion';   -- guarda OCC: ya fue procesado si 0 filas
+      -- NO se toca inventario_items ni stock_real
+      → El Doc-9 desaparece de la bandeja activa
+      → Toast: "Documento rechazado y archivado. Stock no modificado."
+```
+
+### 38.4 RBAC
+
+`logística`, `coordinación`, `gerencia`. No disponible para `tes`, `due`, `médico`.
+
+### 38.5 Relación con descuadres
+
+`Rechazado_Devuelto` no genera entrada en `descuadres_inventario`. No hay deuda
+de stock que reconciliar — el material nunca entró contablemente al sistema.
+Si el proveedor reenvía el material correcto, se crea un nuevo Doc-9 desde cero.
+
+---
+
+## 39. Asignación Atómica de Subinventario en Creación de DRP
+
+### 39.1 Problema de condición de carrera
+
+Cuando dos coordinadores crean un DRP casi simultáneamente y ambos seleccionan el
+mismo subinventario (backpack), el subinventario podría quedar asignado a dos DRPs
+si la asignación no es atómica. El segundo coordinator no vería el conflicto porque
+el combobox de subinventarios se cargó antes de que el primero confirmara.
+
+### 39.2 Guarda atómica en la RPC de creación
+
+La función `crear_drp_atomico` incluye una guarda OCC sobre el estado del subinventario.
+El UPDATE condicional `WHERE estado = 'Operativo'` actúa como candado optimista:
+solo el primer hilo en ejecutar el UPDATE mueve la fila. El segundo encuentra
+`ROW_COUNT = 0` y la transacción entera hace `ROLLBACK`.
+
+```sql
+-- Fragmento de la función crear_drp_atomico
+-- (solo la parte de asignación de subinventario)
+
+IF p_backpack_id IS NOT NULL THEN
+  UPDATE subinventarios
+     SET estado = 'Asignado',
+         drp_id = v_drp_id    -- ID del DRP recién creado dentro de la misma TX
+   WHERE id     = p_backpack_id
+     AND estado = 'Operativo';  -- ← GUARDA ATÓMICA (OCC implícito)
+
+  GET DIAGNOSTICS v_filas = ROW_COUNT;
+
+  IF v_filas = 0 THEN
+    -- El subinventario fue asignado por otro proceso entre la carga del combobox
+    -- y la confirmación del usuario. Abortar la creación completa del DRP.
+    RAISE EXCEPTION 'subinventario_ya_asignado'
+      USING HINT = '409', DETAIL = p_backpack_id::TEXT;
+  END IF;
+END IF;
+```
+
+### 39.3 Comportamiento frontend
+
+Ver `hooks.md §4 useDRP.crearDRP` para el manejo completo del error `409`.
+
+**Resultado del conflicto:**
+- El DRP no se crea (rollback total).
+- El formulario permanece abierto con los datos del coordinador.
+- Solo el campo `backpack_id` se limpia para nueva selección.
+- El selector `selector_vehiculo_drp` y las dotaciones se conservan.
+
+### 39.4 Estados válidos para asignación
+
+Solo subinventarios con `estado = 'Operativo'` pueden asignarse a un DRP.
+Un subinventario en `En_Transito`, `Asignado` u otro estado no puede usarse.
+El combobox de selección de subinventario (en `crear_drp`) debe filtrar
+previamente por `estado = 'Operativo'` para minimizar conflictos, aunque
+la guarda en DB sigue siendo necesaria como defensa definitiva.
+
+---
+
+## 40. Trigger de Evaluación Máxima — Cierre de Doc-7
+
+### 40.1 Problema
+
+Cuando un técnico de flota marca un Doc-7 como `Reparada_Operativa`, el sistema no
+puede restablecer `condicion_tecnica = 'operativo'` incondicionalmente. Si el vehículo
+tiene otros Doc-7 activos (ej. una incidencia leve reportada horas antes del fallo grave
+que acaba de repararse), restablecer `operativo` enmascaría los fallos secundarios,
+haciéndolos invisibles para los coordinadores y para el pilot.
+
+### 40.2 Función de evaluación MAX
+
+```sql
+CREATE OR REPLACE FUNCTION evaluar_condicion_tecnica_vehiculo(p_vehiculo_id TEXT)
+RETURNS TEXT AS $$
+DECLARE
+  v_max_gravedad TEXT;
+BEGIN
+  -- Selecciona la gravedad máxima entre todos los Doc-7 NO cerrados del vehículo
+  SELECT gravedad INTO v_max_gravedad
+    FROM doc7
+   WHERE id_vehiculo = p_vehiculo_id
+     AND estado NOT IN ('Reparada_Operativa', 'Archivado')
+   ORDER BY
+     CASE gravedad
+       WHEN 'Grave'    THEN 1
+       WHEN 'Moderado' THEN 2
+       WHEN 'Leve'     THEN 3
+       ELSE                 4
+     END
+   LIMIT 1;
+
+  -- Mapeo de gravedad a condicion_tecnica
+  RETURN CASE v_max_gravedad
+    WHEN 'Grave'    THEN 'inoperativo_critico'
+    WHEN 'Moderado' THEN 'averiado_leve'
+    WHEN 'Leve'     THEN 'averiado_leve'
+    ELSE                 'operativo'   -- NULL → no quedan Doc-7 activos
+  END;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### 40.3 Trigger de disparo
+
+```sql
+CREATE OR REPLACE FUNCTION trg_fn_doc7_cierre_evaluar_condicion()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_nueva_condicion TEXT;
+BEGIN
+  -- Solo actuar cuando el Doc-7 pasa a Reparada_Operativa
+  IF NEW.estado = 'Reparada_Operativa' AND OLD.estado != 'Reparada_Operativa' THEN
+
+    v_nueva_condicion := evaluar_condicion_tecnica_vehiculo(NEW.id_vehiculo);
+
+    UPDATE vehiculos
+       SET condicion_tecnica = v_nueva_condicion
+     WHERE id = NEW.id_vehiculo;
+
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_doc7_cierre_evaluar_condicion
+  AFTER UPDATE ON doc7
+  FOR EACH ROW
+  EXECUTE FUNCTION trg_fn_doc7_cierre_evaluar_condicion();
+```
+
+### 40.4 Tabla de resultados
+
+| Doc-7 activos tras el cierre | `condicion_tecnica` resultante |
+|---|---|
+| Ninguno | `operativo` |
+| Solo con gravedad `Leve` | `averiado_leve` |
+| Solo con gravedad `Moderado` | `averiado_leve` |
+| Mezcla `Leve` + `Moderado` | `averiado_leve` |
+| Al menos uno con gravedad `Grave` | `inoperativo_critico` |
+
+### 40.5 Propagación a terminales
+
+El UPDATE en `vehiculos.condicion_tecnica` se propaga automáticamente vía
+Supabase Realtime a todos los terminales que muestran ese vehículo.
+El badge de `condicion_tecnica` se actualiza en tiempo real sin requerir acción del coordinador.
+
+---
+
+## 41. Cerrojo Atómico de Conducción — Promoción de Carry a Pilot
+
+### 41.1 Problema de concurrencia
+
+Cuando un vehículo está en `en_espera` con múltiples carries, dos terminales distintos
+podrían intentar simultáneamente promover a sus respectivos carries como pilot del mismo
+vehículo. Sin un guard atómico, ambas escrituras tendrían éxito y el vehículo quedaría
+con dos pilots activos — estado incoherente y con consecuencias críticas para el Doc-8.
+
+### 41.2 RPC atómica
+
+```sql
+CREATE OR REPLACE FUNCTION promover_carry_a_pilot_atomico(
+  p_vehiculo_id  TEXT,
+  p_id_nombre    TEXT,
+  p_km_inicio    INT
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_rows_affected INT;
+BEGIN
+  UPDATE vehiculos
+     SET pilot_id = p_id_nombre
+   WHERE id         = p_vehiculo_id
+     AND pilot_id IS NULL;    -- guard de concurrencia: solo procede si no hay pilot activo
+
+  GET DIAGNOSTICS v_rows_affected = ROW_COUNT;
+
+  IF v_rows_affected = 0 THEN
+    RAISE EXCEPTION 'vehiculo_ya_tiene_pilot'
+      USING HINT = '409',
+            DETAIL = 'El vehículo ya tiene un pilot asignado — otro terminal fue más rápido.';
+  END IF;
+
+  -- Abrir Doc-8 solo si el UPDATE tuvo éxito
+  INSERT INTO doc8 (id_vehiculo, pilot_id, km_inicio, estado, timestamp_inicio)
+  VALUES (p_vehiculo_id, p_id_nombre, p_km_inicio, 'Activo', NOW());
+
+  RETURN jsonb_build_object('status', 'ok', 'pilot_id', p_id_nombre);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### 41.3 Comportamiento del cliente ante el error 409
+
+```
+Si RPC lanza 'vehiculo_ya_tiene_pilot':
+  → throw Error('vehiculo_ya_tiene_pilot')
+  → Toast (no bloqueante): "Este vehículo ya tiene un pilot asignado.
+                            Recarga y comprueba el estado."
+  → El store local NO se actualiza — se preserva el estado real del servidor.
+  → TanStack Query invalida `vehiculos/${vehiculoId}` para forzar re-fetch.
+```
+
+Ver `hooks.md §2 promoverCarryAPilot` para el flujo completo en cliente.
+
+---
+
+## 42. Fuerza Bruta Administrativa — Checkout Forzado por Coordinador
+
+### 42.1 Propósito
+
+Permite a un coordinador o gerente retirar de forma autoritativa a un pilot fantasma
+(con `pilot_id` activo en base de datos pero terminal inaccesible o sin respuesta) sin
+necesidad de que ese pilot ejecute el flujo de checkout estándar desde su dispositivo.
+
+### 42.2 RPC `forzar_checkout_administrativo`
+
+```sql
+CREATE OR REPLACE FUNCTION forzar_checkout_administrativo(
+  p_vehiculo_id      TEXT,
+  p_pilot_id         TEXT,
+  p_km_fin           INT,
+  p_coordinador_id   TEXT
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_doc8_id UUID;
+BEGIN
+  -- 1. Verificar que el pilot sigue activo en ese vehículo (guard de concurrencia)
+  IF NOT EXISTS (
+    SELECT 1 FROM vehiculos
+     WHERE id = p_vehiculo_id AND pilot_id = p_pilot_id
+  ) THEN
+    RAISE EXCEPTION 'pilot_no_activo_en_vehiculo'
+      USING HINT = '409',
+            DETAIL = 'El pilot ya no está asignado a este vehículo.';
+  END IF;
+
+  -- 2. Localizar el Doc-8 abierto
+  SELECT id INTO v_doc8_id
+    FROM doc8
+   WHERE id_vehiculo = p_vehiculo_id
+     AND pilot_id    = p_pilot_id
+     AND estado      = 'Activo'
+   LIMIT 1;
+
+  -- 3. Cerrar el Doc-8 administrativamente
+  IF v_doc8_id IS NOT NULL THEN
+    UPDATE doc8
+       SET km_fin                    = p_km_fin,
+           estado                    = 'Enviado_Cerrado_Administrativo',
+           timestamp_fin             = NOW(),
+           cerrado_por_coordinador_id = p_coordinador_id
+     WHERE id = v_doc8_id;
+  END IF;
+
+  -- 4. Retirar el pilot del vehículo
+  UPDATE vehiculos
+     SET pilot_id        = NULL,
+         estado_operativo = 'en_espera'
+   WHERE id = p_vehiculo_id;
+
+  -- 5. Auditoría
+  INSERT INTO auditoria_acciones_admin
+    (accion, id_vehiculo, id_pilot_afectado, km_fin, id_coordinador, timestamp)
+  VALUES
+    ('forzar_checkout_admin', p_vehiculo_id, p_pilot_id, p_km_fin, p_coordinador_id, NOW());
+
+  -- 6. Notificación a bandeja_entrada_coordinacion via trigger/Edge Function
+  PERFORM pg_notify(
+    'checkout_administrativo',
+    json_build_object(
+      'vehiculo_id',    p_vehiculo_id,
+      'pilot_id',       p_pilot_id,
+      'km_fin',         p_km_fin,
+      'coordinador_id', p_coordinador_id
+    )::text
+  );
+
+  RETURN jsonb_build_object('status', 'ok', 'doc8_cerrado', v_doc8_id IS NOT NULL);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### 42.3 Estado de Doc-8 resultante
+
+`Enviado_Cerrado_Administrativo` — distinguible del cierre estándar (`Enviado_Cerrado`)
+para auditoría forense. El campo `cerrado_por_coordinador_id` registra el ID del
+coordinador que autorizó el cierre forzado.
+
+### 42.4 RBAC
+
+La función lleva `SECURITY DEFINER`. La RLS de llamada debe verificar que el
+`auth.uid()` del invocador pertenece a un rol `coordinación` o `gerencia` antes
+de permitir la ejecución. Cualquier otro rol recibe `permission_denied`.
+
+Ver `hooks.md §3 forzarCheckoutAdministrativo` para el flujo completo en cliente.
+Ver `nucleo_coordinacion_y_seguridad.md` para el acceso desde panel de coordinación.
+
+---
+
+## 43. Mecanismo de Enmienda Anidada — Corrección de Registros Clínicos
+
+### 43.1 Problema
+
+Los registros clínicos (Doc-2, Doc-3, Doc-4, Doc-5, asistencias Doc-1) son inmutables
+por diseño (trazabilidad médico-legal). No se puede hacer UPDATE sobre el contenido ni
+DELETE sobre registros ya enviados. Sin embargo, los errores de registro son inevitables
+en condiciones de emergencia — el sistema necesita un mecanismo de corrección que
+preserve el audit trail sin violar la inmutabilidad.
+
+### 43.2 Columna `ID_reemplazado_por`
+
+Se añade a todas las tablas de registros clínicos:
+
+```sql
+-- Aplicar a: doc1_asistencias, doc2, doc3, doc4, doc5
+ALTER TABLE doc1_asistencias
+  ADD COLUMN id_reemplazado_por UUID NULL
+    REFERENCES doc1_asistencias(id) ON DELETE SET NULL;
+
+-- Mismo patrón para doc2, doc3, doc4, doc5
+ALTER TABLE doc2 ADD COLUMN id_reemplazado_por UUID NULL REFERENCES doc2(id) ON DELETE SET NULL;
+ALTER TABLE doc3 ADD COLUMN id_reemplazado_por UUID NULL REFERENCES doc3(id) ON DELETE SET NULL;
+ALTER TABLE doc4 ADD COLUMN id_reemplazado_por UUID NULL REFERENCES doc4(id) ON DELETE SET NULL;
+ALTER TABLE doc5 ADD COLUMN id_reemplazado_por UUID NULL REFERENCES doc5(id) ON DELETE SET NULL;
+```
+
+Semántica: `id_reemplazado_por IS NOT NULL` indica que este registro ha sido sustituido
+por el que referencia. El registro original **permanece en la BBDD** — nunca se elimina.
+
+### 43.3 Flujo de corrección
+
+```
+Para corregir un registro clínico (ej. doc2 con id = 'abc'):
+
+1. El usuario selecciona "Enmendar" sobre el registro erróneo.
+2. El formulario se abre prepopulado con los datos del original.
+3. El usuario corrige los campos y guarda.
+4. El sistema ejecuta DOS operaciones atómicas:
+
+   a. INSERT del nuevo registro correcto:
+      { ...datos_corregidos, timestamp_registro: NOW(), ID_nombre_registrador: usuarioActivo }
+      → Genera nuevo UUID = 'def'
+
+   b. UPDATE del registro original (SOLO el campo `id_reemplazado_por`):
+      UPDATE doc2
+         SET id_reemplazado_por = 'def'
+       WHERE id = 'abc'
+```
+
+### 43.4 RLS — restricción de UPDATE al único campo permitido
+
+```sql
+-- Política RLS para UPDATE en registros clínicos (solo permite actualizar id_reemplazado_por)
+CREATE POLICY "doc2_update_solo_reemplazado_por" ON doc2
+  FOR UPDATE
+  USING (
+    auth.uid() = id_nombre_registrador   -- solo el autor original puede enmendar su propio registro
+    OR current_setting('request.jwt.claims', true)::jsonb->>'rol' IN ('coordinación', 'gerencia')
+  )
+  WITH CHECK (
+    -- Solo el campo id_reemplazado_por puede cambiar; todo lo demás debe ser idéntico
+    -- La comprobación real la hace la Edge Function / RPC — esta política es la última línea de defensa
+    id_reemplazado_por IS NOT NULL   -- el UPDATE solo es válido si rellena este campo
+  );
+```
+
+La validación de que el UPDATE realmente solo toca `id_reemplazado_por` (y no el contenido
+clínico) se implementa en la RPC `enmendar_registro_clinico`, que reconstruye la fila
+comparando OLD y NEW antes del UPDATE.
+
+### 43.5 Comportamiento de la UI
+
+```
+En la vista de registros del documento (Doc-1, Doc-2, etc.):
+  - Registros con id_reemplazado_por IS NOT NULL:
+    → Se filtran del listado activo (ocultos por defecto)
+    → Accesibles mediante toggle "Mostrar historial de enmiendas" (solo lectura)
+    → Badge visual: "🔄 ENMENDADO — ver versión actual"
+  - Registros con id_reemplazado_por IS NULL:
+    → Se muestran con normalidad (son los vigentes)
+```
+
+**Trazabilidad forense:** ambos registros (original y corrección) están en BBDD.
+El original muestra quién lo creó, cuándo, y qué UUID lo reemplaza. La corrección
+muestra quién la realizó, cuándo, y los datos correctos. Cualquier auditoría médica
+puede reconstruir el historial completo.
+
+---
+
+## 44. Restricción de Exclusividad Geográfica — Vehículo en DRP único
+
+### 44.1 Problema
+
+Sin una restricción a nivel de motor, dos coordinadores podrían añadir
+simultáneamente el mismo vehículo a dos DRPs distintos. El guard optimista
+del frontend no es suficiente ante condiciones de carrera en red.
+
+### 44.2 Índice único parcial
+
+```sql
+-- Un vehículo solo puede estar desplegado (timestamp_salida_drp IS NULL)
+-- en una única entrada de drp_dotaciones al mismo tiempo.
+CREATE UNIQUE INDEX uq_vehiculo_drp_activo
+  ON drp_dotaciones (id_vehiculo)
+  WHERE timestamp_salida_drp IS NULL;
+```
+
+El índice es **parcial**: solo cubre las filas activas (`timestamp_salida_drp IS NULL`).
+Las filas con `timestamp_salida_drp` ya relleno (vehículo que salió del DRP)
+no participan en la restricción — un vehículo que salió de un DRP puede entrar a otro.
+
+### 44.3 Manejo del error en cliente
+
+Cuando el INSERT en `drp_dotaciones` viola el índice, Supabase devuelve
+`PostgresError code = '23505'` (unique_violation).
+
+```typescript
+// En useDRP.entrarConVehiculo:
+try {
+  await supabase.from('drp_dotaciones').insert(...)
+} catch (err) {
+  if (err.code === '23505') {
+    throw new Error('vehiculo_ya_desplegado_en_drp')
+    // UI: "El vehículo ya se encuentra desplegado en otro dispositivo activo."
+    //     Toast no bloqueante — el formulario permanece abierto.
+  }
+  throw err  // otros errores: propagar
+}
+```
+
+**Mensaje de usuario exacto:** *"El vehículo ya se encuentra desplegado en otro
+dispositivo activo."*
+
+### 44.4 Pre-check optimista en UI (§11.2 modificado)
+
+Antes de enviar el INSERT, el selector `selector_vehiculo_drp` ya filtra vehículos
+con `drp_activo = true` mediante la RPC `get_vehiculos_disponibles_para_drp()`.
+El índice actúa como **última línea de defensa** ante condiciones de carrera
+que el pre-check no puede evitar (dos sesiones simultáneas pasando el filtro
+al mismo tiempo).
+
+---
+
+## 45. Dispositivos Validados — Revocación y Traspaso de Hardware
+
+### 45.1 Modelo de datos ampliado — tabla `galletas_terminales`
+
+Para dar soporte al panel de dispositivos validados, la información de las galletas
+permanentes (`token_especial`) se mantiene en una tabla dedicada que extiende
+`sesiones_emergencia` con metadatos del terminal físico:
+
+```sql
+galletas_terminales:
+  id              UUID          PK  DEFAULT gen_random_uuid()
+  pin_hash        TEXT          NOT NULL   -- bcrypt del PIN consumido (no el PIN en claro)
+  id_terminal     TEXT          NOT NULL   -- fingerprint del terminal donde fue consumida
+  matricula       TEXT          NULL       -- matrícula del vehículo asociado (opcional, editable)
+  descripcion     TEXT          NULL       -- ej. "Tablet Ambulancia 7 — Matrícula 1234-ABC"
+  created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+  creada_por      TEXT          NOT NULL   -- ID del coordinador/gerente que la generó
+  revocada_at     TIMESTAMPTZ   NULL       -- relleno al revocar
+  revocada_por    TEXT          NULL
+  activa          BOOLEAN       NOT NULL DEFAULT TRUE
+```
+
+### 45.2 RPC `revocar_y_reemitir_galleta`
+
+```sql
+CREATE OR REPLACE FUNCTION revocar_y_reemitir_galleta(
+  p_galleta_id    UUID,    -- ID de la galleta a revocar
+  p_coordinador_id TEXT,   -- quien ejecuta la acción
+  p_descripcion   TEXT     -- descripción para la nueva galleta (tablet de sustitución)
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_nuevo_pin  TEXT;
+  v_nuevo_id   UUID;
+BEGIN
+  -- 1. Marcar la galleta existente como revocada
+  UPDATE galletas_terminales
+     SET activa       = FALSE,
+         revocada_at  = NOW(),
+         revocada_por = p_coordinador_id
+   WHERE id     = p_galleta_id
+     AND activa = TRUE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'galleta_no_encontrada_o_ya_revocada' USING HINT = '404';
+  END IF;
+
+  -- 2. Generar nuevo PIN de 6 dígitos aleatorios
+  v_nuevo_pin := lpad(floor(random() * 1000000)::TEXT, 6, '0');
+
+  -- 3. INSERT en sesiones_emergencia (TTL de 10 min — idéntico al flujo estándar)
+  INSERT INTO sesiones_emergencia (tipo, pin, created_at, expires_at, creada_por)
+  VALUES ('galleta', v_nuevo_pin, NOW(), NOW() + INTERVAL '10 minutes', p_coordinador_id)
+  RETURNING id INTO v_nuevo_id;
+
+  -- 4. Pre-crear registro en galletas_terminales (se actualizará cuando se consuma el PIN)
+  INSERT INTO galletas_terminales (id, pin_hash, id_terminal, descripcion, created_at, creada_por, activa)
+  VALUES (
+    gen_random_uuid(),
+    crypt(v_nuevo_pin, gen_salt('bf', 10)),  -- hash bcrypt del PIN para auditoría
+    '',           -- id_terminal se rellena al consumir el PIN
+    p_descripcion,
+    NOW(),
+    p_coordinador_id,
+    FALSE         -- inactiva hasta que el nuevo terminal consuma el PIN
+  );
+
+  -- 5. Auditoría
+  INSERT INTO auditoria_acciones_admin (accion, detalles, id_coordinador, timestamp)
+  VALUES ('revocar_galleta', json_build_object('galleta_revocada', p_galleta_id)::text,
+          p_coordinador_id, NOW());
+
+  RETURN jsonb_build_object(
+    'status',      'ok',
+    'nuevo_pin',   v_nuevo_pin,   -- devuelto solo al coordinador en pantalla — no persistido en claro
+    'expires_at',  (NOW() + INTERVAL '10 minutes')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+**Seguridad:** el PIN nuevo se genera y devuelve en claro **una única vez** en la
+respuesta del RPC. El coordinador lo communica por canal externo (radio, teléfono)
+al operador de la nueva tablet. No se almacena en claro en ninguna tabla.
+
+Ver `nucleo_coordinacion_y_seguridad.md → dispositivos_validados` para el panel UI.
+
+---
+
+## 46. Enrutamiento de Deserción — Desemparejamiento de Carry en DRP Activo
+
+### 46.1 Problema
+
+Cuando un carry desea desemparejarse de un vehículo desplegado en un DRP, hay dos
+intenciones operativas radicalmente distintas que el sistema no puede inferir sin
+preguntar al usuario:
+
+1. **Abandono del DRP** — el carry termina su turno o se retira del dispositivo.
+2. **Permanencia intra-DRP** — el carry seguirá operativo dentro del mismo DRP,
+   pero ligado a otro vehículo o a pie. Su cómputo de horas en el DRP no debe
+   interrumpirse.
+
+### 46.2 Transferencia atómica `drp_dotaciones → drp_personal_a_pie`
+
+Para la Opción B (permanencia intra-DRP), el carry se mueve de la dotación
+vehicular a la tabla de personal a pie preservando su `timestamp_entrada_drp` original.
+
+```sql
+CREATE OR REPLACE FUNCTION transferir_carry_a_personal_a_pie(
+  p_drp_id      UUID,
+  p_id_nombre   TEXT,
+  p_vehiculo_id TEXT
+)
+RETURNS VOID AS $$
+DECLARE
+  v_ts_entrada TIMESTAMPTZ;
+BEGIN
+  -- 1. Capturar timestamp_entrada_drp original (no se puede perder)
+  SELECT timestamp_entrada_drp INTO v_ts_entrada
+    FROM drp_dotaciones
+   WHERE drp_id      = p_drp_id
+     AND id_nombre   = p_id_nombre
+     AND id_vehiculo = p_vehiculo_id
+     AND timestamp_salida_drp IS NULL;
+
+  IF v_ts_entrada IS NULL THEN
+    RAISE EXCEPTION 'dotacion_no_encontrada'
+      USING HINT = '404',
+            DETAIL = 'No existe dotación activa para ese carry en ese vehículo/DRP.';
+  END IF;
+
+  -- 2. Eliminar de drp_dotaciones (sale de la dotación vehicular)
+  DELETE FROM drp_dotaciones
+   WHERE drp_id      = p_drp_id
+     AND id_nombre   = p_id_nombre
+     AND id_vehiculo = p_vehiculo_id
+     AND timestamp_salida_drp IS NULL;
+
+  -- 3. Insertar en drp_personal_a_pie conservando timestamp_entrada_drp original
+  INSERT INTO drp_personal_a_pie (drp_id, id_nombre, timestamp_entrada_drp)
+  VALUES (p_drp_id, p_id_nombre, v_ts_entrada)
+  ON CONFLICT (drp_id, id_nombre) DO NOTHING;
+  -- ON CONFLICT: si ya existe una fila a pie activa (caso raro), no duplicar.
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### 46.3 Flujo completo — ver `hooks.md §3 useVehiculo.quitarPersona`

@@ -61,16 +61,53 @@
     3. Asignar estado `en_espera`. Registra `timestamp_admision`
        e `ID_nombre_admisionista`.
     4. Asignar `orden` de atención.
+       El reordenamiento manual de la cola (arrastrar pacientes) no genera
+       UPDATEs directos: se delega a la RPC `reordenar_pacientes_espera`
+       que valida atómicamente que todos los pacientes afectados siguen en
+       `en_espera` antes de aplicar el cambio. Si alguno ya pasó a
+       `en_consulta`, la transacción hace ROLLBACK y la UI refresca la
+       cola completa. Ver `logic.md §20.1`.
+    5. **Acción de rescate — LIBERAR BOX:**
+       Visible en la sección "Pacientes en Box" dentro del módulo filiación.
+       Muestra el listado de todos los pacientes actualmente en estado
+       `en_consulta`, con su `ID_nombre_box` y `timestamp_inicio_consulta`.
+       Botón destructivo: `LIBERAR BOX` (color rojo, requiere confirmación).
+       * Confirmación modal: "¿Devolver [Nombre] a la lista de espera?
+         Esto desvinculará al paciente del box [N]."
+       * Si confirma → RPC `liberar_paciente_de_box` (UPDATE + auditoría).
+       * El paciente reaparece en la lista de espera de TODOS los boxes
+         via Realtime.
+       * Ver `logic.md §20.2` para el flujo y SQL completo.
+       RBAC: `perfil_admision` del módulo activo, `coordinación`, `gerencia`.
 
   * **perfil_boxes** — seleccionar número de box (1–10):
     1. Monitor de pacientes en espera ordenados por `orden`.
+       Los pacientes con `revaluacion = true` se muestran con
+       colorimetría diferenciada (ver `componentes.md → tarjeta_paciente_filiacion`).
     2. Acción UPDATE — registro existente.
     3. Al abrir un paciente → asignar estado `en_consulta`.
        Registra `timestamp_inicio_consulta` e `ID_nombre_box`.
        * Acceso a Doc-2 y Doc-3 desde el box.
+       * Si `revaluacion = true`: el Doc-3 se abre en su hilo existente,
+         no se crea un nuevo documento. El box ve el historial completo.
     4. Al cerrar la atención → asignar estado `archivado`.
        Registra `timestamp_fin_consulta`.
-    5. Todas las asistencias quedan registradas en el
+    5. **Revaluar paciente** (acción desde box activo):
+       * Disponible únicamente si el paciente está en `en_consulta`
+         en el box propio (no puede revaluar pacientes de otros boxes).
+       * Modal de confirmación: "¿Devolver [Nombre] a la lista de espera
+         para revaluación? El hilo de Doc-3 se conservará."
+       * Si confirma:
+         - `estado → en_espera`
+         - `revaluacion = true` (inmutable)
+         - `id_nombre_box = NULL`
+         - `timestamp_inicio_consulta = NULL`
+         - `timestamp_admision` preservado
+       * El paciente reaparece en la lista de espera de todos los boxes
+         vía Realtime con badge visual diferenciado.
+       * Ver `logic.md §20.3` para el flujo y SQL completo.
+       RBAC: cualquier perfil con acceso al box activo, `coordinación`, `gerencia`.
+    6. Todas las asistencias quedan registradas en el
        Doc-1 del DRP vinculado.
 
   * Añadir filiación a DRP | Cancelar.

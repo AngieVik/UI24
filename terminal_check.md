@@ -5,7 +5,60 @@
   * **estado_1 (black_column → Check-in):** modal superpuesto sobre
     el home_area. La cookie ya está validada, no se reverifica.
 
-* **Regla estricta:** siempre requiere conexión a internet activa.
+* **Regla estricta:** siempre requiere conexión a internet activa para el flujo online.
+
+* **Acceso offline (modo degradado):**
+  * Disponible cuando el terminal detecta timeout de red (> 5s).
+  * Se muestra la opción: "Sin conexión — Acceso de consulta".
+  * Campos requeridos: `ID_nombre` + `Contraseña` (ambos obligatorios).
+    No existe bypass de contraseña en modo offline.
+  * Verificación local contra `password_hash` almacenado en `u24_offline_session`
+    (bcrypt.compare — hash calculado en servidor durante el check-in online previo).
+  * Si la verificación es válida → `estado_1` en modo DEGRADADO (solo lectura).
+    Banner visible: "⚠️ Modo sin conexión — Solo lectura".
+  * Si cualquier validación falla → mensaje genérico "Credenciales incorrectas
+    o sesión no disponible." Sin especificar la causa exacta.
+  * Si no existe `u24_offline_session` para ese `ID_nombre` en el terminal
+    (nunca hizo check-in online en este dispositivo) → el sistema comprueba si
+    existe un token precargado `u24_offline_session_next:{ID_nombre}` (generado
+    por el servidor 2 h antes del relevo — ver `logic.md §25.6`). Si existe y
+    es válido → acceso degradado con banner "Turno pendiente de inicio".
+    Si tampoco existe → acceso denegado.
+  * Ver `logic.md §25.2–25.3` para el payload completo y el flujo de validación.
+  * Ver `logic.md §25.6` para el mecanismo de pre-caché de turno siguiente.
+
+* **Botón condicional — "Acceder como Invitado Operativo":**
+
+  Visible **únicamente** cuando el terminal está en `estado_0`
+  Y `useAuthStore` detecta la persistencia de una `galleta` válida
+  (tipo `'galleta'` — cookie permanente, no la `galleta_pequeña` temporal).
+
+  ```
+  Condición de renderizado:
+    useTerminalStore.estado === 'estado_0'
+    ∧ useAuthStore.tipoSesion === 'galleta'   ← cookie permanente detectada en localStorage
+    ∧ galleta.expires_at === null             ← las galletas permanentes no expiran por TTL
+  ```
+
+  **Comportamiento al pulsar:**
+  1. No solicita credenciales.
+  2. El terminal transiciona directamente a `estado_1` con rol `invitado`.
+  3. `useAuthStore.rol = 'invitado'` — sin ID_nombre en `checkin_on`.
+  4. El personal puede entonces usar Check-in (icono black_column) para
+     autenticarse con sus credenciales propias y elevar permisos al rol real.
+
+  **Justificación:**
+  La `galleta` permanente certifica que ese terminal fue registrado previamente
+  como oficial. Si el terminal cayó a `estado_0` por timeout de sesión, pérdida
+  de conexión o cierre del último usuario, la galleta garantiza que el hardware
+  es de confianza. El botón evita que el personal tenga que esperar al coordinador
+  para obtener un PIN de emergencia en situaciones de urgencia operativa.
+
+  **Seguridad:**
+  * Solo restaura el estado `invitado` — no otorga permisos operativos directamente.
+  * El rol `invitado` no tiene acceso a ningún núcleo más allá del formulario de check-in.
+  * Para operar, siempre se requiere el check-in con credenciales reales.
+  * Si la galleta ha sido eliminada manualmente en Supabase, el botón no aparece.
 
 * **check_in**
   * Campos: `ID_nombre` (usuario) + `password`.

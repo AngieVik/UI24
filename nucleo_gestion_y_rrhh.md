@@ -107,3 +107,14 @@
     dirigidos a RRHH.
   * Flujo de estados y acciones: ver `componentes.md → flujos_transicion`
     (variante `bandeja_entrada_rrhh`).
+  * **Comportamiento al aprobar Doc-12 (`Aprobada`):**
+    * El sistema inyecta automáticamente una **Excepción Absoluta (Vacaciones)**
+      en la tabla `cuadrante_turnos` para cada día del rango aprobado
+      (`fecha_inicio` → `fecha_fin`).
+    * Las excepciones absolutas tienen prioridad máxima sobre cualquier patrón
+      de asignación y no pueden ser sobrescritas por reaplicaciones de patrón.
+    * Si el mismo rango ya contenía días con excepción absoluta de tipo distinto
+      (ej. Baja médica `'B'`), esos días no se sobrescriben.
+    * Si RRHH revierte la aprobación a `Denegada`, las excepciones inyectadas
+      por ese Doc-12 se eliminan automáticamente del cuadrante.
+    * Ver `logic.md §37` para el trigger SQL completo y la semántica de prioridad.

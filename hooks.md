@@ -58,10 +58,12 @@ interface UseTerminalAuth {
 2. Si error → throw Error('credenciales_incorrectas')
    (mensaje genérico — no revelar qué campo falló)
 3. Si OK:
-   - JWT guardado en sessionStorage
    - Cookie HTTPOnly establecida (tipoSesion = 'estandar')
    - useTerminalStore.estado → 'estado_1'
-   - useAuthStore.{ ID_nombre, rol, JWT } cargado
+   - useAuthStore.addJwt(ID_nombre, jwt)   ← JWT añadido al mapa de sesiones
+   - useAuthStore.rolActivo = rol          ← rol activo de UI actualizado
+   - JWT NO se guarda en sessionStorage como string plano;
+     el mapa en Zustand (con persist en sessionStorage) es la única fuente de verdad
 ```
 
 **`loginConPin`**
@@ -88,9 +90,29 @@ interface UseTerminalAuth {
    - 'estandar' → Supabase Auth signOut()
    - 'galleta_pequeña' → destruida automáticamente al llegar aquí
    - 'galleta' → NO se destruye (requiere acción manual en Supabase)
-3. Limpia sessionStorage
+3. useAuthStore.removeJwt(ID_nombre)   ← elimina el JWT de ese usuario del mapa
 4. useTerminalStore.estado → 'estado_0'
-5. Limpia useAuthStore
+5. Si jwtMap queda vacío: useAuthStore.clearJwt() — limpia el store completo
+```
+
+**Detección de galleta en `estado_0` (renderizado condicional):**
+
+```
+Al montar useTerminalAuth (y al arrancar la PWA):
+  Si useTerminalStore.estado === 'estado_0':
+    Comprobar localStorage por cookie tipo 'galleta' (permanente):
+      const galleta = localStorage.getItem('sb_galleta_permanente')
+      Si galleta != null AND JSON.parse(galleta).valid === true:
+        → useAuthStore.galletaPersistente = true
+        → El componente terminal_check renderiza el botón
+          "Acceder como Invitado Operativo"
+
+accederComoInvitado():
+  1. Validar que galletaPersistente === true (guard)
+  2. useAuthStore.rolActivo = 'invitado'
+  3. useTerminalStore.tipoSesion = 'galleta'
+  4. useTerminalStore.estado → 'estado_1'
+  (sin ID_nombre en checkin_on — idéntico a sesión por PIN de emergencia)
 ```
 
 ### Stores: `useTerminalStore`, `useAuthStore`
@@ -144,6 +166,12 @@ CASO A — ID_nombre tiene estado 'pilot':
   → Delega a flujo_checkout_automatico() (ver §2.1)
 
 CASO B — ID_nombre tiene estado 'carry':
+  0. LIQUIDACIÓN DRP POR FIN DE TURNO:
+     Si useVehiculoStore[vehiculoId].drpId !== null (vehículo en DRP activo):
+       → RPC registrar_salida_drp_individual(drpId, ID_nombre)
+         (liquida en drp_dotaciones Y drp_personal_a_pie — ver logic.md §11.5)
+       → timestamp_salida_drp registrado automáticamente
+       → No se muestra modal de decisión: el checkout es intención inequívoca de abandono
   1. Desempareja del vehículo
   2. Si vehículo queda sin pilot → vehiculo.estadoOperativo = 'en_espera'
   3. UPDATE checkin: timestamp_checkout = NOW()
@@ -163,12 +191,13 @@ Antes de ejecutar flujo_checkout_automatico:
 
   if (!useOfflineQueue.isOnline && useOfflineQueue.pendingCount > 0):
     → useTerminalStore.estado = 'estado_0'   ← UI bloqueada visualmente
-    → useAuthStore.jwtRetenido = true        ← JWT NO destruido todavía
+    → useBackgroundSyncStore.congelarJwt(jwt, ID_nombre)  ← JWT aislado en store independiente
     → UI muestra banner: "Sincronizando datos... No cierre el navegador"
     → flujo_checkout_automatico ejecuta todos sus pasos normales
-      EXCEPTO useAuthStore.clearJwt() (omitido)
-    → El Service Worker vaciará la cola con el JWT retenido
-    → Al completar: useOfflineQueue.clearJwtAfterSync() destruye el JWT
+      EXCEPTO useAuthStore.clearJwt() (omitido hasta que la cola se vacíe)
+    → El Service Worker lee useBackgroundSyncStore.getFrozenJwt() para autenticarse
+    → Al completar: useOfflineQueue.clearJwtAfterSync()
+        → useBackgroundSyncStore.liberarJwt() + useAuthStore.clearJwt()
 
   if (isOnline || pendingCount === 0):
     → flujo normal → useAuthStore.clearJwt() incluido
@@ -183,14 +212,83 @@ Precondición: ID_nombre tiene estado 'pilot'
    - No se puede continuar sin introducir km_fin
    - Actualiza useVehiculoStore[vehiculoId].km_fin
 
+1.5 ABORTO DE BORRADORES INCOMPLETOS (ejecutar ANTES de cerrar estados)
+
+   Documentos afectados: Doc-Checklist360, Doc-2, Doc-3, Doc-4, Doc-5.
+   Son "documentos legales" cuya integridad como inspección / informe firmado
+   es requisito. Un borrador no firmado no tiene validez jurídica ni operativa
+   y no debe permanecer en la base de datos como si fuera una revisión iniciada.
+
+   PASO A — Documentos en base de datos (estado 'Borrador_En_Curso'):
+     Consulta: SELECT id, tipo FROM documentos_borradores
+                WHERE id_vehiculo = vehiculoId
+                  AND id_nombre_creador = pilotId
+                  AND estado = 'Borrador_En_Curso'
+                  AND tipo IN ('doc_checklist360', 'doc2', 'doc3', 'doc4', 'doc5')
+
+     Para cada resultado:
+       → Intento de Hard Delete: DELETE FROM [tabla_tipo] WHERE id = doc.id
+       → Si la FK constraint impide el DELETE (el registro ya tiene hijos):
+           UPDATE [tabla_tipo] SET estado = 'Anulado_Por_Error_Auto',
+                                   timestamp_anulacion_auto = NOW()
+            WHERE id = doc.id
+       → Nunca se intenta guardar ni firmar el borrador
+
+   PASO B — Mutaciones en cola IndexedDB (documentos no enviados aún):
+     Para cada mutación en IndexedDB con:
+       tipo IN ('checklist360_create', 'doc2_create', 'doc3_create',
+                'doc4_create', 'doc5_create')
+       AND payload.id_vehiculo = vehiculoId
+       AND payload.id_nombre_registrador = pilotId
+       AND mutacion.estado = 'pendiente'   ← no enviada todavía
+
+       → DELETE de IndexedDB (la mutación nunca llega al servidor)
+       → Si la mutación tenía hijos (parentMutationId): propagar cancelación
+         en cascada (mismo mecanismo que GUARDIA DE DEPENDENCIA en procesarCola)
+
+   PASO C — IndexedDB local sin UUID de DB (borradores puros en memoria):
+     useDocumentosStore limpia cualquier borrador activo de los tipos afectados
+     que no tenga ID de base de datos asignado todavía.
+
+   Resultado: al llegar al paso 2, NO existe ningún Doc-Checklist360, Doc-2,
+   Doc-3, Doc-4 ni Doc-5 en estado borrador asociado a este turno/vehículo/pilot.
+
 2. Cierre de estados del vehículo
    - useVehiculo.cerrarEstadosActivos(vehiculoId, timestamp_checkout)
    - Doc-8: cierra todos los bloques de estado_operativo y tipo_servicio abiertos con timestamp_fin
 
 3. Salida de DRP (si aplica)
    - Si useVehiculoStore[vehiculoId].drpId !== null:
-     - useDRP.exitarDRP(vehiculoId, 'con_vehiculo')
-     - Registra timestamp_salida_drp para ID_vehiculo y todos los ID_nombre emparejados
+
+     DESACOPLE DE RETIRADA — decisión binaria obligatoria:
+     Modal bloqueante antes de ejecutar ninguna acción de salida:
+
+       "La unidad [ID_vehiculo] está desplegada en el DRP [nombre_drp].
+        ¿Qué ocurre con el vehículo al finalizar este turno?"
+
+       [ A: Finaliza su despliegue en el DRP ]
+       [ B: Permanece operativa para el turno de relevo ]
+
+       No se puede omitir ni cancelar — el checkout del pilot requiere
+       una decisión explícita sobre el vehículo cuando hay DRP activo.
+
+     OPCIÓN A — "Finaliza su despliegue":
+       - useDRP.exitarDRP(vehiculoId, 'con_vehiculo')
+       - Registra timestamp_salida_drp para ID_vehiculo y todos los
+         ID_nombre emparejados en ese momento
+       - El vehículo sale del DRP — puede ser desactivado o reasignado
+
+     OPCIÓN B — "Permanece operativa para el turno de relevo":
+       - Solo los ID_nombre emparejados salen del DRP individualmente:
+           Para cada ID_nombre emparejado al vehículo:
+             useDRP.salirIndividual(drpId, ID_nombre)
+             Registra timestamp_salida_drp exclusivamente para el ID_nombre
+       - El ID_vehiculo permanece dentro del DRP sin modificación:
+           drpId no se limpia en useVehiculoStore[vehiculoId]
+           El vehículo sigue apareciendo en la dotación del DRP como
+           unidad vehicular sin personal asignado (dotación vacante)
+       - Lógica de carries (ver paso 5): si queda algún carry,
+         se le ofrece también la opción de salir o permanecer en el DRP
 
 4. Cierre de Doc-8
    - useDoc8.cerrar(vehiculoId, km_fin, timestamp_checkout)
@@ -215,12 +313,29 @@ Precondición: ID_nombre tiene estado 'pilot'
 ```
 1. Requiere: vehiculo en 'en_espera', ID_nombre con 'carry' en ese vehiculo
 2. Modal solicita km_inicio (si el vehículo no tiene km_inicio activo)
-3. useVehiculoStore[vehiculoId]:
+
+3. CERROJO ATÓMICO (OCC):
+   RPC `promover_carry_a_pilot_atomico(p_vehiculo_id, p_id_nombre, p_km_inicio)`:
+     UPDATE vehiculos
+        SET pilot_id = p_id_nombre
+      WHERE id = p_vehiculo_id
+        AND pilot_id IS NULL    ← guard de concurrencia
+   → Si 0 rows affected → throw Error('vehiculo_ya_tiene_pilot')
+     Toast: "Este vehículo ya tiene un pilot asignado. Recarga y comprueba el estado."
+   → Si 1 row affected → continuar
+
+4. useVehiculoStore[vehiculoId]:
    - pilot = ID_nombre
    - estadoOperativo = 'en_espera'
-4. usePersonaStore[ID_nombre].esPilot = true, esCarry = false
-5. useDoc8.abrir(vehiculoId, ID_nombre, km_inicio)
+5. usePersonaStore[ID_nombre].esPilot = true, esCarry = false
+6. useDoc8.abrir(vehiculoId, ID_nombre, km_inicio)
 ```
+
+**Justificación del cerrojo:**
+Dos terminales pueden intentar simultáneamente promover carries distintos sobre el mismo
+vehículo en `en_espera`. Sin el guard `AND pilot_id IS NULL`, ambos UPDATEs tienen éxito
+y el vehículo queda con dos pilots activos. El primer UPDATE que llegue al servidor gana;
+el segundo recibe 0 rows afectados y falla limpiamente sin corromper el estado.
 
 ### Stores: `usePersonaStore`, `useAuthStore`, `useTerminalStore`
 
@@ -284,6 +399,14 @@ interface UseVehiculo {
     personaA:   ID_nombre,
     personaB:   ID_nombre
   ): Promise<void>
+
+  // Acción administrativa (RBAC: coordinación, gerencia)
+  forzarCheckoutAdministrativo(
+    vehiculoId:    ID_vehiculo,
+    pilotId:       ID_nombre,
+    kmFin:         number,
+    coordinadorId: ID_nombre   // ID del coordinador que autoriza la acción
+  ): Promise<void>
 }
 
 // Dimensión 1: estado físico/operativo del vehículo
@@ -313,16 +436,57 @@ type TipoServicio =
 
 ```
 1. Modal: "¿Activar ID_vehiculo?" — Sí | No
+
 2. Si condicion_tecnica = 'inoperativo_critico':
-   - Advertencia bloqueante adicional
-   - Requiere confirmación de gerencia o coordinación (RBAC)
+   FLUJO DE DESBLOQUEO EXCEPCIONAL (ver logic.md §32):
+
+   A. Si vehiculoStore[id].overrideCritico = false (estado por defecto):
+      - Bloqueo visible: "Vehículo INOPERATIVO CRÍTICO. Activación bloqueada."
+      - Botón habilitado: "Solicitar Desbloqueo Excepcional"
+        → POST Edge Function 'solicitar_desbloqueo_excepcional'
+          { id_vehiculo, pilotId, timestamp }
+        → Notificación push en bandeja_entrada_coordinacion (ver logic.md §32)
+        → UI muestra: "Solicitud enviada — aguardando autorización de coordinación"
+        → El terminal queda en espera de evento Realtime 'desbloqueo_concedido'
+          en canal vehiculo:{id}
+      - Cuando llega 'desbloqueo_concedido':
+        → vehiculoStore[id].overrideCritico = true
+        → Continúa con el paso 3 (km_inicio)
+
+   B. Si vehiculoStore[id].overrideCritico = true (ya autorizado por coordinación):
+      - Advertencia visible pero no bloqueante:
+        "⚠️ Activación bajo responsabilidad del centro de mando."
+      - Continúa con el paso 3 (km_inicio)
+      - overrideCritico se consume: = false inmediatamente al confirmar activación
+        (válido para una única activación — ver logic.md §32)
+
 3. Solicita km_inicio (obligatorio)
+
+   GUARDIA DE INTEGRIDAD GEOMÉTRICA (ejecutar antes de confirmar):
+   - RPC 'get_ultimo_km_fin_vehiculo'({ id_vehiculo: id })
+     → SELECT km_fin FROM doc8 WHERE id_vehiculo = id
+               ORDER BY timestamp_cierre DESC LIMIT 1
+   - Si resultado != null Y km_inicio < km_fin_anterior:
+       ERROR bloqueante: "Km introducido ([km_inicio]) inferior al
+       km de cierre del turno anterior ([km_fin_anterior]).
+       Introduce un valor mayor o igual para continuar."
+       → No avanza hasta que el usuario corrija km_inicio
+   - Si km_inicio >= km_fin_anterior (o no existe Doc-8 previo):
+       Validación superada → continúa
+
 4. Muestra ID_nombre con checkin_on en terminal → asignar Pilot y Carry
 5. Si confirmado:
-   - useVehiculoStore[id].estadoOperativo = 'en_espera'
-   - useVehiculoStore[id].km_inicio = kmInicio
-   - useDoc8.abrir(id, pilotId, kmInicio)
-   - INSERT en vehiculo_sesiones con timestamp_activacion
+   BLOQUEO POR SINCRONÍA DIFERIDA (ver logic.md §36):
+   - Llamar RPC 'activar_vehiculo_y_abrir_doc8'({ id, kmInicio, pilotId })
+   - Si RPC devuelve error con hint '409' (Doc-8 anterior en Borrador_En_Curso):
+       → Modal bloqueante: "La desactivación del turno anterior aún está
+          sincronizándose. Espere unos instantes e inténtelo de nuevo."
+       → NO actualizar Zustand — la activación no procede
+   - Si RPC éxito:
+       → useVehiculoStore[id].estadoOperativo = 'en_espera'
+       → useVehiculoStore[id].km_inicio = kmInicio
+       → El Doc-8 fue abierto por la RPC — no llamar useDoc8.abrir() por separado
+       → INSERT en vehiculo_sesiones con timestamp_activacion
 ```
 
 **`desactivar`** (`en_espera → desactivado`) — **acción manual explícita. NUNCA es consecuencia del checkout del pilot.**
@@ -369,6 +533,56 @@ FLUJO PRINCIPAL:
 Ver logic.md §28 para la justificación y los casos límite del interceptor.
 ```
 
+**`intercambiarRoles`**
+
+```
+Objetivo: intercambiar los roles de personaA (pilot) y personaB (carry)
+dentro del mismo vehículo, o promover un carry a pilot.
+
+INTERCEPTOR DE DESERCIÓN (ejecutar ANTES del intercambio):
+
+  pilotActual = useVehiculoStore[vehiculoId].pilot
+  carryActual = useVehiculoStore[vehiculoId].carry  // puede ser null
+
+  Resultado proyectado del intercambio:
+    nuevoPilot = personaB
+    nuevoCarry = personaA
+
+  Condición de deserción:
+    (nuevoPilot === null || nuevoPilot === undefined)
+    ← personaB no existe en el vehículo como carry actual, de modo que
+      personaA (único pilot) pasaría a carry sin nadie que asuma el rol
+      de pilot. El vehículo quedaría sin pilot.
+
+  SI condición de deserción es verdadera:
+    → NO ejecutar el intercambio
+    → Redirigir a flujo_checkout_automatico(personaA, vehiculoId):
+        1. Modal: "No hay nadie que asuma el rol de pilot.
+                   Para continuar, [personaA] debe hacer checkout del vehículo.
+                   Introduce el km actual para cerrar el turno."
+        2. Campo km_fin (obligatorio)
+        3. Al confirmar:
+             → useVehiculo.cerrarEstadosActivos(vehiculoId, NOW())
+             → useDoc8.cerrar(vehiculoId, kmFin, NOW())
+             → personaA desemparejado del vehículo (pilot = null)
+             → Si personaB existe como carry:
+                 → carry permanece emparejado al vehículo
+                 → vehiculo.estadoOperativo = 'en_espera'
+                   (vehículo listo para nuevo pilot — ver logic.md §15.3)
+             → Si no hay carry: vehiculo sigue en en_espera sin personal
+        4. El checkout de personaA ejecuta todo el flujo estándar del
+           CASO A de useCheckin.checkout (incluyendo km_fin, Doc-8, etc.)
+
+  SI condición de deserción es falsa (intercambio normal):
+    → Ejecutar el intercambio atómico:
+        1. UPDATE vehiculos: pilot = personaB, carry = personaA
+        2. UPDATE personas: personaA.rol = 'carry', personaB.rol = 'pilot'
+        3. useVehiculoStore[vehiculoId].pilot = personaB
+        4. useVehiculoStore[vehiculoId].carry = personaA
+        5. Registrar evento en Doc-8: { tipo: 'intercambio_roles',
+             pilot_anterior: personaA, pilot_nuevo: personaB, timestamp: NOW() }
+```
+
 **`setCondicionTecnica`**
 
 ```
@@ -377,6 +591,38 @@ Llamado exclusivamente por el flujo de Doc-7 (averías).
 PASO 1 — INMEDIATO (optimismo local, con o sin red):
   - useVehiculoStore[id].condicionTecnica = condicion
   - Badge de condicion_tecnica actualizado en la UI de este terminal
+
+PASO 1.5 — TRANSICIÓN FORZADA (solo si condicion = 'inoperativo_critico'):
+
+  Evaluar: estadoActual = useVehiculoStore[id].estadoOperativo
+  Si estadoActual ∈ { 'ruta', 'alerta' }:
+
+    a) Captura GPS inmediata (fallback chain — ver logic.md §5):
+         coords = await useGPS.capturar(id)
+         (coords puede ser null si no hay señal; se registra igualmente)
+
+    b) En Doc-8: cierra el bloque activo con timestamp_fin = NOW()
+                 abre nuevo bloque: { estado: 'estacionado', timestamp_inicio: NOW(), coords? }
+
+    c) useVehiculoStore[id].estadoOperativo = 'estacionado'
+
+    d) Broadcast de alta criticidad (independiente del estado de red del terminal):
+         canal:   'global:alertas_criticas'
+         payload: {
+           tipo:              'vehiculo_forzado_estacionado',
+           id_vehiculo:       id,
+           estado_anterior:   estadoActual,   // 'ruta' | 'alerta'
+           condicion_tecnica: 'inoperativo_critico',
+           timestamp:         NOW(),
+           coords:            coords | null
+         }
+       → Recibido por todos los terminales con rol coordinación/gerencia
+         (ver logic.md §18 — fila «inoperativo_critico con estado activo»)
+
+  Si estadoActual ∉ { 'ruta', 'alerta' }:
+    No se aplica transición forzada. El badge de condicion_tecnica
+    se actualiza igualmente (PASO 1). La activación posterior del
+    vehículo requerirá confirmación explícita (ver nucleo_operativa_rutinaria.md §flujo_activacion).
 
 PASO 2 — SEGÚN ESTADO DE RED:
 
@@ -390,8 +636,40 @@ PASO 2 — SEGÚN ESTADO DE RED:
   CASO B — Offline:
     - useOfflineQueue.enqueue('doc7_create', { vehiculoId: id, condicion, ...formData })
     - El cambio de condicion_tecnica en Zustand ya es visible localmente (PASO 1)
+    - La transición forzada de PASO 1.5 (si aplicó) también queda en Zustand localmente
+      y se encolará como 'vehiculo_estado_update' con { estado: 'estacionado', motivo: 'inoperativo_critico' }
+
+    DIRECTIVA DE BALIZAMIENTO FÍSICO (ejecutar INMEDIATAMENTE tras encolar):
+      Si formData.gravedad === 'Grave':
+        → Modal rojo a pantalla completa, bloqueante — no puede cerrarse ni ignorarse:
+
+          ┌─────────────────────────────────────────────────────────────┐
+          │  ⛔ BLOQUEO NO PROPAGADO AL SERVIDOR                        │
+          │                                                             │
+          │  El vehículo consta como OPERATIVO para el resto de la red. │
+          │  El sistema no pudo notificar el fallo crítico porque el    │
+          │  terminal no tiene conexión.                                │
+          │                                                             │
+          │  Es OBLIGATORIO:                                            │
+          │  1. Colocar un cartel físico o baliza en el volante.        │
+          │  2. Recuperar la conexión inmediatamente.                   │
+          │     El bloqueo global se propagará al reconectar.           │
+          │                                                             │
+          │  [ He colocado la baliza — Entendido ]                      │
+          └─────────────────────────────────────────────────────────────┘
+
+        El modal solo se cierra al pulsar "He colocado la baliza — Entendido".
+        Una vez cerrado, el terminal queda en modo de operación degradada normal.
+        Al recuperar conexión, el Service Worker replaya el Doc-7 y el bloqueo
+        global se propaga automáticamente vía Realtime.
+
+      Si formData.gravedad !== 'Grave' (Leve / Moderado):
+        No se muestra el modal de balizamiento.
+        El comportamiento offline es idéntico al flujo normal encolado.
+
     - Al reconectar:
         → useOfflineQueue replaya el Doc-7 → INSERT en Supabase
+        → Replaya el cambio de estado_operativo → UPDATE en Supabase
         → Si condicion = 'inoperativo_critico':
             Realtime propaga el bloqueo global a todos los terminales
         → Auditoría del acceso offline registrada (ver logic.md §25)
@@ -404,6 +682,106 @@ PASO 2 — SEGÚN ESTADO DE RED:
 2. Abre nuevo bloque: { tipo_servicio, timestamp_inicio }
 3. useVehiculoStore[id].tipoServicio = tipo
 Nota: visible solo mientras estadoOperativo ≠ 'desactivado'
+```
+
+**`forzarCheckoutAdministrativo`** *(RBAC: coordinación, gerencia — solo desde panel de coordinación/flota)*
+
+```
+PRECONDICIONES:
+  - El llamador tiene JWT con rol 'coordinación' o 'gerencia'
+  - pilotId tiene estado 'pilot' activo sobre vehiculoId
+  - kmFin > km_inicio del Doc-8 activo (validación en servidor)
+
+FLUJO:
+1. Modal de confirmación con reautenticación:
+   "Vas a forzar el checkout de [pilotId] en [vehiculoId].
+    Introduce tu contraseña de coordinador para confirmar."
+   Campo: password (coordinadorId)
+   [ Confirmar ] [ Cancelar ]
+
+2. RPC `forzar_checkout_administrativo(p_vehiculo_id, p_pilot_id, p_km_fin,
+                                        p_coordinador_id)`:
+   a. Valida JWT del coordinador (RBAC guard en servidor)
+   b. UPDATE vehiculos:
+        pilot_id = NULL,
+        estado_operativo = 'en_espera'
+   c. UPDATE doc8:
+        km_fin = p_km_fin,
+        estado = 'Enviado_Cerrado_Administrativo',
+        timestamp_fin = NOW(),
+        cerrado_por_coordinador_id = p_coordinador_id
+   d. INSERT en auditoría:
+        { accion: 'forzar_checkout_admin', vehiculo_id, pilot_id: p_pilot_id,
+          km_fin: p_km_fin, coordinador_id: p_coordinador_id, timestamp: NOW() }
+   e. Notificación a bandeja_entrada_coordinacion:
+        "Checkout administrativo aplicado: [pilotId] retirado de [vehiculoId]
+         por [coordinadorId]. km_fin registrado: [kmFin]."
+
+3. useVehiculoStore[vehiculoId]:
+   - pilot = null
+   - estadoOperativo = 'en_espera'
+4. Toast al coordinador: "Checkout administrativo completado."
+
+NOTA: Este flujo no ejecuta flujo_checkout_automatico — es una escritura directa
+de servidor que elude los controles del terminal del pilot. No se purgan borradores
+locales en el terminal fantasma (esos se resuelven al reconectar).
+Ver logic.md §42 para la especificación SQL completa.
+```
+
+**`quitarPersona`** — Enrutamiento de Deserción y Transición Intra-DRP
+
+```
+El comportamiento varía según si el vehículo está o no en un DRP activo,
+y según el origen de la acción (checkout vs desemparejamiento manual).
+
+CASO SIMPLE — vehículo sin DRP activo:
+  → Desempareja normal: useVehiculoStore[vehiculoId].carry = null
+  → Si vehículo queda sin pilot: estadoOperativo = 'en_espera'
+
+CASO COMPLEJO — vehículo en DRP activo (drpId != null):
+
+  La acción proviene del CHECKOUT (checkout):
+    → Flujo gestionado por useCheckin.checkout CASO B paso 0
+    → auto-inyecta timestamp_salida_drp antes de desemparejar
+    → quitarPersona se llama después sin bifurcación adicional
+
+  La acción proviene de DESEMPAREJAMIENTO MANUAL (icono − en UI):
+    → BLOQUEO INMEDIATO: no ejecutar la acción todavía
+    → Modal imperativo (no cancelable sin elegir opción):
+
+      ┌─────────────────────────────────────────────────────────┐
+      │  ¿Qué ocurre con [ID_nombre] en el DRP [nombre_drp]?   │
+      │                                                         │
+      │  [ A: Abandonar el dispositivo ]                        │
+      │    Sale del DRP. Su participación queda registrada      │
+      │    hasta este momento.                                   │
+      │                                                         │
+      │  [ B: Permanecer como personal a pie ]                  │
+      │    Sigue operativo en el DRP sin vehículo asignado.     │
+      │    Su cómputo de horas no se interrumpe.                │
+      └─────────────────────────────────────────────────────────┘
+
+    OPCIÓN A — Abandonar DRP:
+      1. RPC registrar_salida_drp_individual(drpId, ID_nombre)
+         (liquida en AMBAS tablas — ver logic.md §11.5)
+      2. Desempareja del vehículo (normal)
+      3. usePersonaStore[ID_nombre].esCarry = false
+
+    OPCIÓN B — Permanencia Intra-DRP (Transferencia Relacional Atómica):
+      1. RPC transferir_carry_a_personal_a_pie(drpId, ID_nombre, vehiculoId):
+           a. SELECT timestamp_entrada_drp original desde drp_dotaciones
+           b. DELETE de drp_dotaciones (sale de la dotación vehicular)
+           c. INSERT en drp_personal_a_pie con timestamp_entrada_drp HEREDADO
+              (el cómputo de horas no se interrumpe — conserva su entrada original)
+         → Ver logic.md §46 para el SQL completo
+      2. Desempareja del vehículo (el ID_nombre ya no está ligado al vehículo)
+      3. usePersonaStore[ID_nombre].esCarry = false
+         (queda disponible para emparejarse a otro vehículo del DRP si lo desea)
+      4. El ID_nombre sigue visible en `visor_drp → Personal a pie`
+         con su timestamp_entrada_drp original preservado
+
+NOTA DE PROPAGACIÓN: ambas opciones emiten Realtime al canal drp:{drpId}
+para que todos los terminales del DRP actualicen la vista de dotaciones.
 ```
 
 **Propagación via Supabase Realtime:**
@@ -478,14 +856,87 @@ interface CrearDRPInput {
 3. Si confirmado:
    - INSERT en drp_dotaciones por cada elemento
    - timestamp_entrada_drp individual por elemento
+
+   RESTRICCIÓN DE EXCLUSIVIDAD GEOGRÁFICA (nivel motor):
+     El índice parcial `uq_vehiculo_drp_activo` (ver logic.md §44) garantiza
+     que un vehículo solo puede tener una fila activa (timestamp_salida_drp IS NULL)
+     en drp_dotaciones. Si el INSERT viola el índice (code '23505'):
+       → throw Error('vehiculo_ya_desplegado_en_drp')
+       → Toast: "El vehículo ya se encuentra desplegado en otro dispositivo activo."
+       → El formulario de selección de dotación permanece abierto
+       → Solo el vehículo en conflicto se elimina de la selección;
+         los ID_nombre emparejados no quedan afectados
+
 4. Si DRP estaba 'En_espera' y es la primera dotación:
    - DRP → 'En_preparacion' (trigger automático en BBDD o RPC)
    - timestamp_inicio_preparacion = NOW()
 ```
 
+**`salirIndividual`** y **`exitarDRP`** — Liquidación Universal de Salida
+
+```
+LIQUIDACIÓN UNIVERSAL: la RPC de salida aplica `timestamp_salida_drp = NOW()`
+a AMBAS tablas para el `ID_nombre` que sale, independientemente de cómo entró al DRP.
+
+RPC `registrar_salida_drp_individual(p_drp_id, p_id_nombre)`:
+  -- Tabla 1: drp_dotaciones (entró con vehículo o como acompañante)
+  UPDATE drp_dotaciones
+     SET timestamp_salida_drp = NOW()
+   WHERE drp_id    = p_drp_id
+     AND id_nombre = p_id_nombre
+     AND timestamp_salida_drp IS NULL;   -- idempotente
+
+  -- Tabla 2: drp_personal_a_pie (entró a pie, puede coexistir con dotación vehicular
+  --          si la persona participó en ambas modalidades en distintos momentos)
+  UPDATE drp_personal_a_pie
+     SET timestamp_salida_drp = NOW()
+   WHERE drp_id    = p_drp_id
+     AND id_nombre = p_id_nombre
+     AND timestamp_salida_drp IS NULL;   -- idempotente
+
+Nota: ambos UPDATEs se ejecutan SIEMPRE — si el ID_nombre no tiene fila en una de
+las tablas, el UPDATE afecta 0 rows y no lanza error. Esto garantiza que un ID_nombre
+que participa en ambas modalidades (poco frecuente, pero posible en DRPs largos con
+rotación de roles) quede completamente liquidado en una sola llamada.
+
+`salirConVehiculo(drpId, vehiculoId)`:
+  → Llama registrar_salida_drp_individual para CADA ID_nombre emparejado al vehículo
+  → Además: timestamp_salida_drp para el ID_vehiculo en drp_dotaciones
+
+`exitarDRP(vehiculoId, 'con_vehiculo')`:
+  → Llama salirConVehiculo
+
+`exitarDRP(vehiculoId, 'individual')`:
+  → Llama salirIndividual solo para el ID_nombre del pilot (sin el vehículo)
+```
+
 **`finalizarDRP`**
 
 ```
+GUARD 0 — Pacientes clínicos activos (ejecutar PRIMERO, ver logic.md §12):
+  SELECT count(*) FROM filiacion_pacientes
+   WHERE filiacion_id IN (
+     SELECT id FROM modulo_filiacion WHERE drp_id = drpId
+   )
+     AND estado IN ('en_espera', 'en_consulta')
+  Si count > 0:
+    throw Error('drp_con_pacientes_activos')
+    → UI: "No es posible finalizar el DRP. Existen [N] paciente(s) activos
+           (en espera o en consulta) sin dar de alta. Completa la atención
+           o libera los boxes antes de cerrar el dispositivo."
+    → No hay bypass para este error — requiere alta clínica real.
+
+GUARD 1 — Doc-10 en tránsito hacia este DRP (ejecutar primero, ver logic.md §12):
+  Si EXISTS (SELECT 1 FROM doc10 WHERE drp_destino_id = drpId AND estado = 'Pendiente_Validacion'):
+    throw Error('drp_con_transferencias_pendientes')
+    → UI: "Imposible finalizar el dispositivo. Existen transferencias de material
+           en tránsito sin recepcionar."
+
+GUARD 2 — sync_pending en subinventarios:
+  Si algún subinventario del DRP tiene sync_pending = true:
+    throw Error('drp_con_sync_pendiente')
+
+FLUJO PRINCIPAL:
 1. Para dotaciones que siguen dentro:
    - timestamp_salida_drp = timestamp_finalizacion (para cada una)
 2. Cierra módulos activos (PSA, filiación):
@@ -502,7 +953,51 @@ interface CrearDRPInput {
 ```
 Precondición: Doc-1 sin asistencias
   → Si Doc-1 tiene asistencias → throw Error('drp_con_asistencias_no_cancelable')
-  → Si OK → DELETE DRP y recursos asociados
+
+  → Si OK:
+    La cancelación ejecuta un borrado en cascada estricto en este orden:
+
+    1. PURGA DE PACIENTES EN ESPERA (módulos filiación adheridos al DRP):
+       Para cada módulo_filiacion con drp_id = drpId:
+         DELETE FROM filiacion_pacientes
+          WHERE filiacion_id = moduloFiliacionId
+            AND estado = 'en_espera'
+         (pacientes admitidos pero no atendidos — eliminados incondicionalmente)
+         Nota: pacientes en estado 'en_consulta' o 'archivado' habrían generado
+         asistencias en Doc-1, lo que habría bloqueado la cancelación en la precondición.
+         Por tanto, al llegar aquí solo pueden existir pacientes en 'en_espera'.
+
+    2. CIERRE Y BORRADO EN CASCADA DE MÓDULOS SECUNDARIOS:
+       Para cada módulo_filiacion con drp_id = drpId:
+         DELETE módulo_filiacion (cascade al registro del módulo)
+       Para cada módulo_psa con drp_id = drpId:
+         DELETE módulo_psa (cascade a sus registros de dotación terrestre)
+       Nota: al no haberse producido actividad, no se generan timestamps de cierre —
+       el borrado es destructivo, no un cierre controlado.
+
+    3. PURGA DE SUBINVENTARIOS (RETROCESO DE SNAPSHOT):
+       Para cada subinventario con drp_id = drpId:
+
+       CASO A — estado = 'Asignado' (nunca salió de base):
+         a. UPDATE subinventarios SET estado = 'Operativo', drp_id = NULL
+            (reversión directa — sin pasar por En_Transito, ver logic.md §12.1)
+         b. DELETE FROM snapshots_reconciliacion
+            WHERE subinventario_id = $1 AND estado = 'pendiente'
+
+       CASO B — estado = 'Operativo_Condicionado' (llegó vía transferencia):
+         a. UPDATE subinventarios SET estado = 'En_Transito', drp_id = NULL
+            (NO se puede ir a Operativo — este material tiene cadena de transferencia activa)
+         b. UPDATE snapshots_reconciliacion
+               SET estado = 'pendiente'
+             WHERE subinventario_id = $1
+               AND estado = 'resuelto_por_transferencia'
+            (reactiva el snapshot que fue "resuelto" cuando el material llegó a este DRP —
+             la transferencia queda de nuevo pendiente de reconciliación logística)
+
+    4. DELETE DRP, dotaciones asociadas y Doc-1 sin asistencias.
+
+    Ver logic.md §12.1 para la tabla comparativa Cancelar vs Finalizar y la
+    justificación de la reversión directa a Operativo.
 ```
 
 **`activarDRP`** — si hora actual < hora programada:
@@ -511,6 +1006,64 @@ Precondición: Doc-1 sin asistencias
 Modal: "¿Cuenta atrás o Marcar hora actual?"
   'cuenta_atras' → DRP pasa a 'En_curso', UI muestra countdown
   'ahora'        → timestamp_inicio_curso = NOW()
+```
+
+**`crearDRP`**
+
+```
+Ejecuta la creación completa del DRP en una única transacción de base de datos.
+
+FLUJO:
+1. Validaciones locales (frontend):
+   - nombre_drp, fecha, hora, ubicacion: campos obligatorios
+   - Los ID_vehiculo seleccionados son del tipo Combobox filtrado
+     (selector_vehiculo_drp) — el filtrado ya excluyó los inoperativos/en_curso
+
+2. Llamada RPC 'crear_drp_atomico(input)' — transacción atómica:
+
+   a. INSERT DRP principal:
+        { nombre_drp, fecha, hora, ubicacion, estado: 'En_espera', timestamp_creacion: NOW() }
+
+   b. Para cada dotacion_vehiculo:
+        INSERT en drp_dotaciones ({ drp_id, id_vehiculo, id_nombre, ubicacion })
+
+   c. Para cada dotacion_terrestre:
+        INSERT en drp_dotaciones ({ drp_id, id_nombre, ubicacion })
+
+   d. ASIGNACIÓN ATÓMICA DE SUBINVENTARIO (si backpack_id presente):
+        UPDATE subinventarios
+           SET estado = 'Asignado',
+               drp_id = drp_id_generado
+         WHERE id     = backpack_id
+           AND estado = 'Operativo';   -- ← GUARDA ATÓMICA
+
+        GET DIAGNOSTICS v_filas = ROW_COUNT;
+
+        IF v_filas = 0 THEN
+          ROLLBACK;   -- el subinventario ya fue asignado por otro proceso
+          RAISE EXCEPTION 'subinventario_ya_asignado'
+            USING HINT = '409';
+        END IF;
+
+        -- Si v_filas = 1 → continuar normalmente
+
+   e. RETURN drp_id del DRP recién creado
+
+3. Manejo de errores en frontend:
+
+   Si RPC devuelve error con mensaje = 'subinventario_ya_asignado' (hint '409'):
+     throw Error('subinventario_ya_asignado')
+     → Modal/toast de error:
+       "El subinventario seleccionado acaba de ser asignado a otro DRP.
+        Selecciona otro subinventario e inténtalo de nuevo."
+     → El formulario de crear_drp permanece abierto con los datos introducidos.
+       Solo el campo backpack_id se limpia para que el usuario seleccione uno nuevo.
+     → NO se crea ningún registro (la transacción fue revertida por la RPC).
+
+4. Si RPC éxito:
+   → usedrpStore.drpActivos = [...drpActivos, nuevoDRP]
+   → Toast: "DRP [nombre] creado correctamente."
+   → Cierra el formulario crear_drp
 ```
 
 ### Stores: `useDRPStore`
@@ -632,6 +1185,12 @@ interface UseInventario {
   enTransito:       ItemTransito[]
   subinventariosEstado: Map<string, 'Operativo' | 'Operativo_Condicionado' | 'Asignado' | 'En_Transito'>
 
+  // Guard: detecta gastos pendientes de sincronización en un subinventario
+  tieneSyncPendiente(subinventarioId: string): boolean
+    // Evalúa si algún StockItem del subinventario tiene sync_pending = true.
+    // Llamado por useDRP antes de finalizar el DRP y antes de ceder un subinventario.
+    // Ver logic.md §9.1 y §12 para el flujo completo del guard.
+
   // Mutaciones via RPC (siempre requieren conexión)
   registrarGasto(data: Doc6Input): Promise<void>
   enviarMaterial(data: Doc10Input): Promise<Doc10Id>
@@ -666,13 +1225,39 @@ interface ItemRecibido {
 
 ```
 PASO 1 — INMEDIATO (local, sin red):
-  - Precheck: stock_real_local >= cantidad (validación visual)
-  - Si falla precheck → throw Error('stock_insuficiente_local') sin llamar RPC
-  - Si OK:
-    · stock_real_local -= cantidad
-    · sync_pending = true
-    · pending_delta = cantidad
-    · UI muestra badge 'sincronizando...' en el item
+
+  CASO A — item_id EXISTE en la caché del store local (flujo estándar):
+    - Precheck: stock_real_local >= cantidad (validación visual)
+    - Si falla precheck → throw Error('stock_insuficiente_local') sin llamar RPC
+    - Si OK:
+      · stock_real_local -= cantidad
+      · sync_pending = true
+      · pending_delta = cantidad
+      · UI muestra badge '⏳ sincronizando' en el item
+
+  CASO B — item_id NO tiene entrada en la caché local (proxy negativo):
+    El item puede existir en el servidor pero no haber sido cargado en el store
+    (terminal recién activado, caché vaciada, item nuevo no visto aún).
+    El sistema NO debe bloquear la operatividad del clínico.
+
+    → Crear objeto proxy temporal en el store:
+        {
+          itemId:           item_id,
+          stock_real:       0,         // valor desconocido — placeholder
+          stock_real_local: 0 - cantidad,   // proxy negativo: 0 - N = -N
+          stock_objetivo:   0,
+          sync_pending:     true,
+          pending_delta:    cantidad,
+          es_proxy:         true        // flag interno — nunca mostrado al usuario
+        }
+    → UI muestra el item con:
+        · Cantidad descontada local: -N (valor puede ser negativo)
+        · Badge "⏳ sincronizando" (mismo que CASO A)
+        · NO se muestra alerta de stock negativo — el valor negativo es conocido
+          como artefacto del proxy y se corregirá en PASO 3
+    → Nota clínica: el operador puede seguir registrando el gasto. La validación
+      real de suficiencia de stock la ejecuta el servidor en PASO 2.
+    → NO se realiza precheck de suficiencia en CASO B (no hay dato local fiable)
 
 PASO 2 — PARALELO (llamada RPC en background):
   - Llama RPC 'registrar_gasto_material' con los datos
@@ -685,21 +1270,31 @@ PASO 2 — PARALELO (llamada RPC en background):
 PASO 3 — RECONCILIACIÓN:
   A. RPC éxito:
      · stock_real = valor devuelto por RPC
-     · stock_real_local = stock_real (sincronizado)
+       (el servidor devuelve el stock_real DESPUÉS del descuento)
+     · stock_real_local = stock_real  (sincronizado — corrige proxy negativo si aplica)
+     · es_proxy = false (si era proxy, se elimina el flag)
      · sync_pending = false, pending_delta = 0
-     · Badge 'sincronizando' desaparece
+     · Badge '⏳ sincronizando' desaparece
      · Invalida TanStack Query cache para locationId
+     · Nota proxy: si stock_real_local era negativo (-N), se reemplaza
+       directamente con el valor correcto del servidor. No hay animación
+       de "corrección" — el cambio es silencioso y transparente.
 
   B. RPC error 'stock_insuficiente' (race condition con otro terminal):
-     · REVERTIR: stock_real_local += pending_delta
+     · Si CASO A (stock conocido): REVERTIR stock_real_local += pending_delta
+     · Si CASO B (proxy): ELIMINAR el objeto proxy del store
+         (el gasto no pudo ejecutarse — no hay estado local que revertir)
      · sync_pending = false, pending_delta = 0
      · throw Error('stock_insuficiente') → UI muestra aviso
 
   C. RPC error de red (timeout / offline):
      · stock_real_local permanece decrementado (badge persiste)
+       (si era proxy, el valor negativo persiste hasta reconectar)
      · sync_pending = true
      · Encola reintento via useOfflineQueue ('doc6_metadata')
      · Al reconectar: useOfflineQueue replaya → PASO 2 y 3
+       El servidor ejecuta el descuento sobre el valor real, devuelve
+       el nuevo stock_real, y PASO 3-A corrige el proxy automáticamente.
 
 NOTA: El flujo optimista aplica exclusivamente a Doc-6 (gasto asistencial).
       Doc-10 (envío entre locations) no usa optimismo — requiere confirmación
@@ -726,18 +1321,27 @@ PRECONDICIÓN: isOnline === true
 **`confirmarRecepcion`**
 
 ```
-Para cada item:
-  A. cantidad_recibida === cantidad_enviada:
-     → RPC suma al location destino
-  B. cantidad_recibida !== cantidad_enviada:
-     → RPC suma la cantidad_recibida al destino
-     → RPC genera descuadre: {
-         diferencia = enviada - recibida,
-         estado: 'Pendiente_Revision'
-       }
-     → Doc-10 → 'Descuadre_Pendiente_Revision'
-     → Notificación automática a bandeja_entrada_logistica
-     
+GUARDA PREVIA — estado del subinventario de destino (ver logic.md §7.1.2):
+  La RPC verifica el estado del subinventario de destino ANTES de sumar stock.
+  Si estado ∈ { 'En_Transito', 'Operativo_Condicionado' }:
+    → RPC lanza error 422 'destino_no_apto_para_recepcion'
+    → Frontend muestra modal de Redirección Forzosa — no cancelable:
+        [ Redirigir al almacén central ] — suma al almacén base + Doc-10 → 'Redirigido_Por_Cierre_Destino'
+        [ Mantener en tránsito ] — Doc-10 permanece en 'Pendiente_Validacion'
+
+Si destino es apto (estado = 'Asignado'):
+  Para cada item:
+    A. cantidad_recibida === cantidad_enviada:
+       → RPC suma al location destino
+    B. cantidad_recibida !== cantidad_enviada:
+       → RPC suma la cantidad_recibida al destino
+       → RPC genera descuadre: {
+           diferencia = enviada - recibida,
+           estado: 'Pendiente_Revision'
+         }
+       → Doc-10 → 'Descuadre_Pendiente_Revision'
+       → Notificación automática a bandeja_entrada_logistica
+
 Si todo coincidió → Doc-10 → 'Completado'
 Registra timestamp_confirmacion e ID_nombre_receptor_confirmador
 ```
@@ -747,6 +1351,57 @@ Registra timestamp_confirmacion e ID_nombre_receptor_confirmador
 - `enviarMaterial` (Doc-10): **sin soporte offline** — requiere conexión sincrónica para ejecutar el guard atómico `stock_real >= p_cantidad`. Ver justificación en `logic.md §17.3`.
 - `confirmarRecepcion`: sin soporte offline — la reconciliación de stock en destino es atómica.
 - `resolverDescuadre`: sin soporte offline — la RPC de clasificación contable (`merma` / `recuperacion_descuadre`) requiere transacción atómica en Supabase.
+
+### Reconciliación Bidireccional de Store — handler Realtime
+
+El canal Realtime para `inventario:{locationId}` puede entregar actualizaciones de
+`stock_real` desde el servidor en cualquier momento (otro terminal registró un gasto,
+o llegó una transferencia). El handler **no puede sobrescribir ciegamente** el campo
+`stock_real_local` con el valor del servidor — eso borraría cualquier delta optimista
+pendiente de sincronización local.
+
+**Regla de reconciliación:**
+
+```typescript
+// Handler Realtime en useInventarioStore
+supabase.channel(`inventario:${locationId}`)
+  .on('postgres_changes', { event: 'UPDATE', table: 'stock_items' }, (payload) => {
+    const { item_id, stock_real: server_value } = payload.new
+
+    set((state) => {
+      const item = state.items[locationId]?.[item_id]
+      if (!item) return {}  // item no cargado en store — ignorar
+
+      const pending = item.sync_pending ? item.pending_delta : 0
+
+      return {
+        items: {
+          ...state.items,
+          [locationId]: {
+            ...state.items[locationId],
+            [item_id]: {
+              ...item,
+              stock_real:       server_value,
+              // Recalcula el valor local preservando el delta pendiente:
+              stock_real_local: server_value - pending,
+              // sync_pending y pending_delta no se tocan — se resuelven en PASO 3
+            },
+          },
+        },
+      }
+    })
+  })
+  .subscribe()
+```
+
+**Invariante:** `stock_real_local = stock_real - pending_delta` mientras `sync_pending = true`.
+Cuando el RPC propio confirma (PASO 3-A), `stock_real` se actualiza con el valor del servidor
+y `pending_delta` se pone a `0` — la invariante se satisface trivialmente.
+
+**Justificación:** sin esta reconciliación, una actualización Realtime de otro terminal
+durante un ciclo offline-local sobreescribiría el descuento optimista del usuario activo,
+haciendo que la UI mostrara un stock incorrecto hasta que el propio RPC confirme.
+Ver `logic.md §24.5` para el modelo formal.
 
 ### Stores: `useInventarioStore`
 
@@ -842,6 +1497,42 @@ Recibe también: Doc-6 en tiempo real (solo lectura) y alertas de stock.
 
 ### Stores: `useBandejasStore`
 
+```typescript
+// Acciones relevantes del store (Zustand)
+interface BandejasStoreActions {
+  upsertMensaje(instancia: BandejaInstancia, mensaje: Mensaje): void
+  // Mutación optimista síncrona para modo isReadOnly auto-dismiss:
+  purgeMensaje(mensajeId: string): void
+  // Efecto: elimina el mensaje del array Y decrementa unreadCount en el mismo tick
+}
+```
+
+**Comportamiento de `purgeMensaje`:**
+
+```typescript
+purgeMensaje: (mensajeId) =>
+  set((state) => {
+    const mensaje = state.mensajes.find(m => m.id === mensajeId)
+    const eraNoLeido = mensaje && mensaje.estado === 'Emitida_Pendiente'
+    return {
+      mensajes:    state.mensajes.filter(m => m.id !== mensajeId),
+      unreadCount: eraNoLeido ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+    }
+  })
+```
+
+**Llamada en el cierre del modal `isReadOnly`:**
+
+```typescript
+// En flujos_transicion, handler onClose del modal:
+const handleCloseReadOnly = () => {
+  useBandejasStore.getState().purgeMensaje(mensaje.id)
+  // La persistencia en DB se lanza en fire-and-forget:
+  marcarLeida(mensaje.id).catch(() => {/* fallo silencioso — purga ya aplicada */})
+  closeModal()
+}
+```
+
 ### Dependencias: `useRealtime`, `useInventario` (para DRP)
 
 ---
@@ -924,13 +1615,18 @@ Se propaga a `useGlobalStore.isOnline` para mostrar indicadores en UI.
 
 ```typescript
 interface Mutation {
-  id:          UUID                   // crypto.randomUUID()
-  tipo:        string                 // 'doc2_create' | 'doc1_asistencia' | etc.
-  payload:     unknown
-  timestamp:   ISOString
-  intentos:    number
-  estado:      'pendiente' | 'enviando' | 'fallido'
-  errorMsg?:   string
+  id:                UUID                   // crypto.randomUUID()
+  tipo:              string                 // 'doc2_create' | 'doc1_asistencia' | etc.
+  payload:           unknown
+  timestamp:         ISOString
+  intentos:          number
+  estado:            'pendiente' | 'enviando' | 'fallido'
+  errorMsg?:         string
+  parentMutationId?: UUID
+  // Si está definido: esta mutación depende de que la mutación padre se haya
+  // procesado con éxito. Si el padre falla, esta mutación se marca como 'fallido'
+  // automáticamente sin intentar el envío.
+  // Ejemplo: una mutación 'doc6_metadata' que referencia el UUID de un 'doc6_create'.
 }
 
 interface UseOfflineQueue {
@@ -942,11 +1638,18 @@ interface UseOfflineQueue {
   hasCriticalPending:  boolean   // true si pendingCount > 0 y !isOnline en el momento del checkout
 
   // Acciones
-  enqueue(tipo: string, payload: unknown): UUID
+  enqueue(tipo: string, payload: unknown, parentMutationId?: UUID): UUID
+  // Si parentMutationId está definido, esta mutación no se enviará si el padre falla.
   procesarCola(): Promise<void>        // llamado automáticamente al reconectar
   reintentarFallidos(): Promise<void>
   descartarFallido(mutationId: UUID): void
-  clearJwtAfterSync(): void            // llamado internamente cuando pendingCount llega a 0 post-retención
+  asumirAutoriaYReenviar(mutationId: UUID, nuevoAutor: ID_nombre): Promise<void>
+  // Sobrescribe payload.ID_nombre_registrador con nuevoAutor y reencola la mutación.
+  // Solo disponible en mutaciones fallidas con payload que contenga ID_nombre_registrador.
+  clearJwtAfterSync(): void
+  // Llamado internamente cuando pendingCount === 0 tras retención post-checkout.
+  // Ejecuta: useBackgroundSyncStore.liberarJwt() + useAuthStore.clearJwt()
+  // Nunca afecta la sesión activa de otro usuario.
 }
 ```
 
@@ -957,24 +1660,92 @@ interface UseOfflineQueue {
 ```
 1. Genera id = crypto.randomUUID()
 2. INSERT en IndexedDB ('mutation_queue' store):
-   { id, tipo, payload, timestamp: NOW(), intentos: 0, estado: 'pendiente' }
+   { id, tipo, payload, parentMutationId?, timestamp: NOW(), intentos: 0, estado: 'pendiente' }
 3. Si isOnline → dispara procesarCola() inmediatamente
-4. Retorna id para tracking
+4. Retorna id para tracking (el llamador puede usarlo como parentMutationId de mutaciones hijas)
 ```
 
-**`procesarCola`** (FIFO)
+**`procesarCola`** (FIFO, estrictamente secuencial y dependiente)
 
 ```
 1. Lee mutaciones en orden timestamp ASC de IndexedDB
 2. Para cada mutación en estado 'pendiente':
-   a. Marca como 'enviando'
-   b. Ejecuta la mutación contra Supabase
-   c. Si éxito → DELETE de IndexedDB
-   d. Si fallo:
+
+   a. GUARDIA DE DEPENDENCIA (ejecutar antes de procesar):
+      Si mutacion.parentMutationId != null:
+        padre = IndexedDB.get(parentMutationId)
+        Si padre.estado = 'fallido':
+          → mutacion.estado = 'fallido'
+          → mutacion.errorMsg = 'padre_fallido: ' + parentMutationId
+          → SKIP — no intentar el envío
+          → Propagar en cascada: buscar todas las mutaciones en la cola
+            donde parentMutationId = mutacion.id → marcarlas como 'fallido' también
+          → Continuar con la siguiente mutación de la cola
+        Si padre.estado = 'pendiente' o 'enviando':
+          → DETENER el procesamiento de la cola aquí
+            (el padre aún no ha sido procesado — esperar a la siguiente iteración)
+
+   b. Marca como 'enviando'
+   c. Ejecuta la mutación contra Supabase con el JWT del ejecutor
+      (crearClienteConJwt(mutacion.payload.jwt) — ver logic.md §34.5)
+   d. Si éxito (HTTP 2xx) → DELETE de IndexedDB
+   e. Si fallo HTTP 4xx/5xx:
       - intentos++
       - Si intentos < 3 → estado = 'pendiente' (reintento posterior)
       - Si intentos >= 3 → estado = 'fallido'
+      - PROPAGACIÓN DE FALLO EN CASCADA:
+          Buscar en IndexedDB todas las mutaciones donde parentMutationId = mutacion.id
+          → Para cada una: estado = 'fallido', errorMsg = 'padre_fallido: ' + mutacion.id
+          → Recursivo: propagar a los hijos de los hijos (árbol de dependencias completo)
+      - DETENER el procesamiento de la cola para evitar colisiones relacionales
+        (las mutaciones posteriores que no son hijos continúan en la siguiente llamada)
+
 3. Actualiza pendingCount y failedCount en store
+```
+
+**`asumirAutoriaYReenviar`**
+
+```
+Propósito: en terminales compartidos, una mutación puede quedar fallida con el
+ID_nombre_registrador del usuario original (que ya hizo checkout). Usuario B
+(actual operador) puede asumir la autoría del documento y reenviarlo bajo su
+propia identidad, utilizando su propio JWT.
+
+PRECONDICIONES (verificar antes de ejecutar):
+  1. mutacion.estado = 'fallido'
+  2. mutacion.payload.ID_nombre_registrador !== undefined
+     (solo documentos autoriales — no cambios de estado ni eventos de sistema)
+  3. nuevoAutor ∈ useAuthStore.jwtMap  (el asumidor tiene sesión activa en el terminal)
+
+FLUJO:
+  1. Lee la mutación de IndexedDB por mutationId
+  2. Valida las precondiciones (lanza error si no se cumplen)
+  3. Sobrescribe en IndexedDB:
+       mutacion.payload.ID_nombre_registrador = nuevoAutor
+       mutacion.payload.jwt = useAuthStore.getJwtFor(nuevoAutor)
+         (el JWT del nuevo autor se inyecta para que procesarCola use sus credenciales)
+       mutacion.estado = 'pendiente'
+       mutacion.intentos = 0
+       mutacion.errorMsg = undefined
+  4. Si isOnline → dispara procesarCola() inmediatamente
+
+SEGURIDAD:
+  - El JWT del autor original (que pudo haber sido el JWT congelado) no se reutiliza.
+  - nuevoAutor debe tener sesión activa (jwtMap) — no puede ser un ID_nombre arbitrario.
+  - La asunción queda auditable: el documento en Supabase llevará el ID_nombre_registrador
+    del nuevo autor y el timestamp real de inserción (no el timestamp offline original).
+    El timestamp_original_offline se conserva como campo secundario si el payload lo incluye.
+
+UI (vista de mutaciones fallidas en la cola):
+  Por cada mutación fallida:
+    [ Reintentar ] [ Descartar ]
+    Si payload.ID_nombre_registrador existe:
+      [ Asumir Autoría y Reenviar ]   ← botón adicional (color ámbar)
+  Al pulsar "Asumir Autoría y Reenviar":
+    Modal: "Vas a reasumir este documento como [nuevoAutor].
+            El registro quedará firmado con tu identidad.
+            ¿Confirmar?"
+    [ Confirmar ] [ Cancelar ]
 ```
 
 **Detección de estado de red:**
@@ -1003,7 +1774,7 @@ useEffect(() => {
 | `doc5_create` | Descargo de responsabilidad |
 | `doc11_create` | Aviso urgente |
 | `doc6_metadata` | Metadata del gasto (stock descontado localmente por optimismo; RPC reconcilia al reconectar) |
-| `doc7_create` | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `inoperativo_critico`. |
+| `doc7_create` | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `inoperativo_critico`. **Si `gravedad = 'Grave'` y se encola offline: modal rojo de balizamiento físico obligatorio antes de continuar (ver §3 setCondicionTecnica CASO B — Directiva de Balizamiento Físico).** |
 
 **Operaciones NO aptas para cola:**
 
@@ -1241,6 +2012,10 @@ function useDocumento<T>(tipo: TipoDocumento, id?: UUID): UseDocumento<T>
    - Resto de docs aptos: useOfflineQueue.enqueue(tipo, data)
    - Borrador permanece en IndexedDB hasta confirmación del RPC
 4. Si offline (doc NO apto para cola):
+   - **Doc-9 (Entrada almacén)**: throw Error('doc9_requiere_conexion') —
+     operación Online-Only. La inyección de nuevo stock primario al sistema
+     requiere timestamp criptográfico del servidor para garantizar la
+     integridad del inventario. Ver logic.md §33.
    - **Doc-10**: throw Error('doc10_requiere_conexion') — el guard atómico
      stock_real >= p_cantidad requiere conexión sincrónica. Ver logic.md §17.3.
    - confirmarRecepcion y resolverDescuadre: throw Error('requiere_conexion')
@@ -1405,31 +2180,214 @@ onPingLocation(payload):
         origen: 'ping'
       })
     },
-    (_err) => { /* timeout o permiso denegado — no publicar pong */ },
+    (err) => {
+      // Error del hardware GPS o permiso denegado.
+      // En lugar de silenciar el error, publicar pong_error para que el coordinador
+      // cancele inmediatamente su timer de 5 s y ejecute el fallback RPC sin esperar.
+      supabase.channel(`vehiculo:${ID_vehiculo}`)
+        .send({
+          type:    'broadcast',
+          event:   'pong_error',
+          payload: {
+            id_vehiculo: ID_vehiculo,
+            codigo:      err.code,        // 1 PERMISSION_DENIED | 2 POSITION_UNAVAILABLE | 3 TIMEOUT
+            mensaje:     err.message,
+            timestamp:   new Date().toISOString()
+          }
+        })
+      // No se incrementa ultimoPingAt: el throttle NO se activa en caso de error,
+      // de modo que el siguiente ping de cualquier coordinador puede intentar de nuevo.
+    },
     { timeout: 5000, maximumAge: 0, enableHighAccuracy: true }
   )
 ```
 
 ### Fallback en coordinación (lado coordinador — no en el terminal de vehículo)
 
-El timeout de 5 segundos y la consulta de fallback se gestionan en el componente
-`VisorSeguimientoOperativo` (lado coordinador), no en este hook. Cuando el coordinador
-no recibe `pong_location` tras 5 s, llama a la RPC de Supabase en lugar de un SELECT
-directo sobre `gps_historial`:
+El fallback se activa por dos caminos alternativos — el que ocurra primero:
 
+**Camino A — `pong_error` recibido (inmediato):**
 ```typescript
-// Fallback del coordinador al agotar el timeout de pong
-const { data } = await supabase.rpc('get_ultima_ubicacion_vehiculo', {
-  p_id_vehiculo: vehiculoId
-})
-// La RPC hace UNION ALL gps_historial + doc8_eventos ordenado por timestamp DESC LIMIT 1
-// Garantiza la posición más reciente independientemente de su fuente
-// Ver logic.md §29.3 para el SQL completo
+// El coordinador recibe pong_error antes de que expire el timer
+onPongError(payload):
+  clearTimeout(fallbackTimer)          // cancela el timer de 5 s
+  ejecutarFallbackRPC(payload.id_vehiculo)
+```
+
+**Camino B — timeout de 5 s agotado sin `pong_location` ni `pong_error`:**
+```typescript
+// El coordinador no ha recibido respuesta alguna en 5 s
+fallbackTimer = setTimeout(() => ejecutarFallbackRPC(vehiculoId), 5000)
+```
+
+**`ejecutarFallbackRPC`** (compartida por ambos caminos):
+```typescript
+async function ejecutarFallbackRPC(vehiculoId: string) {
+  const { data } = await supabase.rpc('get_ultima_ubicacion_vehiculo', {
+    p_id_vehiculo: vehiculoId
+  })
+  // La RPC hace UNION ALL gps_historial + doc8_eventos ordenado por timestamp DESC LIMIT 1
+  // Garantiza la posición más reciente independientemente de su fuente
+  // Ver logic.md §29.3 para el SQL completo
+  mostrarUbicacionOffline(data)   // muestra badge "Ubicación offline" en el visor
+}
 ```
 
 ### Stores: `useVehiculoStore` (lee `ID_vehiculo`, `estadoOperativo`; escribe `ultimoPingAt`)
 
 ### Dependencias: `useRealtime` (gestiona el canal `vehiculo:${ID_vehiculo}`)
+
+---
+
+## 17. useBackgroundSyncStore
+
+> Store Zustand **estrictamente aislado de la sesión activa de UI**. Su único propósito
+> es conservar el JWT del usuario que ejecutó un checkout offline hasta que el
+> Service Worker haya vaciado completamente la cola de mutaciones pendientes.
+>
+> **Regla de aislamiento:** este store nunca se inicializa, se lee ni se limpia desde
+> lógica de UI de sesión activa. Solo `useCheckin.checkout()` escribe en él;
+> solo el Service Worker lo lee; solo `useOfflineQueue.clearJwtAfterSync()` lo vacía.
+>
+> Esto permite que Usuario B inicie sesión y opere con su propio JWT en `estado_1`
+> mientras el SW utiliza el token congelado de Usuario A para vaciar su cola de forma
+> completamente transparente.
+
+```typescript
+interface UseBackgroundSyncStore {
+  // Estado (solo accesible por SW — nunca expuesto a componentes UI)
+  frozenJwt:      string | null     // JWT congelado del usuario que hizo checkout offline
+  frozenUserId:   ID_nombre | null  // ID_nombre del propietario del JWT congelado
+  hasFrozenJwt:   boolean           // true si hay JWT congelado pendiente de vaciado
+
+  // Escritura — llamado exclusivamente por useCheckin.checkout() en CASO RETENCIÓN
+  congelarJwt(jwt: string, userId: ID_nombre): void
+
+  // Lectura — consumida exclusivamente por el Service Worker
+  getFrozenJwt(): string | null
+
+  // Limpieza — llamada exclusivamente por useOfflineQueue.clearJwtAfterSync()
+  liberarJwt(): void
+}
+```
+
+### Comportamiento
+
+```
+congelarJwt(jwt, userId):
+  1. frozenJwt   = jwt
+  2. frozenUserId = userId
+  3. hasFrozenJwt = true
+  4. Persiste en localStorage con clave aislada 'bgs_frozen_jwt'
+     (clave distinta de la sesión estándar — nunca mezclada con el store de auth)
+
+liberarJwt():
+  1. frozenJwt   = null
+  2. frozenUserId = null
+  3. hasFrozenJwt = false
+  4. Elimina 'bgs_frozen_jwt' de localStorage
+  5. No afecta en ningún caso al JWT de sesión activa de cualquier otro usuario
+```
+
+### Garantías de aislamiento
+
+| Propiedad | Garantía |
+|---|---|
+| Inicio de sesión de Usuario B | No modifica ni lee `frozenJwt` — opera con su propia sesión en `useAuthStore` |
+| Logout de Usuario B | No elimina `frozenJwt` — el SW puede seguir vaciando la cola de Usuario A |
+| Expiración de sesión de Usuario B | No afecta al `frozenJwt` retenido |
+| TTL del JWT congelado | TTL natural del token (`shift_start + 36h`). Si expira antes de que se vacíe la cola, las mutaciones fallan con 401 y se marcan `fallido` |
+
+### Stores: `useBackgroundSyncStore` (Zustand + persist en localStorage, clave aislada)
+
+### Dependencias: ninguna (store primitivo, sin dependencias de otros hooks)
+
+---
+
+## 18. useAuthStore — Mapa de JWT por sesión de usuario
+
+> En terminales compartidos, múltiples `ID_nombre` pueden estar con `checkin_on`
+> simultáneamente. **No es posible usar el cliente Supabase por defecto** para
+> mutaciones, ya que gestiona una única sesión activa y asigna las operaciones
+> al último usuario autenticado.
+>
+> `useAuthStore` mantiene un mapa `{ [ID_nombre]: JWT_string }` con el token
+> de cada usuario activo. Toda mutación debe inyectar explícitamente el JWT
+> del ejecutor en los `Headers` de la petición, puenteando el control automático
+> de sesión de la librería Supabase JS.
+
+```typescript
+interface UseAuthStore {
+  // Mapa de sesiones activas: { ID_nombre → JWT }
+  jwtMap:   Record<ID_nombre, string>
+
+  // Rol activo del usuario "principal" de la sesión actual del terminal
+  // (usado solo para navegación y permisos de UI — no para mutaciones)
+  rolActivo: string | null
+
+  // Escritura del mapa (llamado en login/checkin de cada ID_nombre)
+  addJwt(id: ID_nombre, jwt: string): void
+
+  // Lectura del JWT de un usuario concreto (llamado por cada mutación)
+  getJwtFor(id: ID_nombre): string | null
+
+  // Eliminación del JWT de un usuario (llamado en checkout)
+  removeJwt(id: ID_nombre): void
+
+  // Limpieza completa del store (llamado al salir el último ID_nombre
+  // o por useBackgroundSyncStore.liberarJwt() tras sync offline)
+  clearJwt(): void
+}
+```
+
+### Patrón de inyección en mutaciones (TanStack Query)
+
+Toda mutación que escribe datos en Supabase debe construir un cliente temporal
+con el JWT del usuario ejecutor. **Nunca** usar el cliente singleton global para
+operaciones mutables en terminales compartidos.
+
+```typescript
+// Utilidad compartida — crear cliente Supabase con JWT explícito
+function crearClienteConJwt(jwt: string) {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${jwt}`
+      }
+    },
+    auth: {
+      autoRefreshToken: false,   // el token es gestionado por useAuthStore
+      persistSession:  false     // no sobreescribir la sesión global del terminal
+    }
+  })
+}
+
+// Ejemplo de mutación en TanStack Query:
+const { mutate } = useMutation({
+  mutationFn: async ({ ejecutorId, data }: { ejecutorId: ID_nombre, data: unknown }) => {
+    const jwt = useAuthStore.getState().getJwtFor(ejecutorId)
+    if (!jwt) throw new Error('jwt_no_disponible_para_ejecutor')
+
+    const client = crearClienteConJwt(jwt)
+    const { error } = await client.from('tabla').insert(data)
+    if (error) throw error
+  }
+})
+```
+
+### Reglas de uso
+
+| Regla | Descripción |
+|---|---|
+| Lectura de datos (SELECT) | Puede usar el cliente global (lectura sin RLS de escritura) |
+| Escritura de datos (INSERT / UPDATE / DELETE) | **Obligatorio** `crearClienteConJwt(jwt)` con el JWT del ejecutor |
+| `ejecutorId` en mutaciones | El `ID_nombre` del usuario que inicia la acción — no el "usuario activo de la UI" |
+| Mutaciones offline (encoladas en useOfflineQueue) | El `ejecutorId` y su JWT se congelan en el payload de la mutación en el momento del encolado |
+| Expiración del JWT en el mapa | Si `getJwtFor()` devuelve `null` (token expirado), abortar la mutación con `throw Error('sesion_expirada')` y forzar re-login del ejecutor |
+
+### Stores: `useAuthStore` (Zustand + persist en sessionStorage)
+
+### Dependencias: ninguna (store primitivo)
 
 ---
 
@@ -1440,11 +2398,12 @@ useTerminalAuth
   └── (base para todos)
 
 useCheckin
-  ├── useTerminalAuth  (lee estado terminal)
-  ├── useVehiculo      (desacopla carry al checkout)
-  ├── useDRP           (sale del DRP en checkout pilot)
-  ├── useDoc8          (cierra Doc-8 en checkout pilot)
-  └── useOfflineQueue  (detecta pendingCount > 0 en checkout offline para retención de JWT)
+  ├── useTerminalAuth         (lee estado terminal)
+  ├── useVehiculo             (desacopla carry al checkout)
+  ├── useDRP                  (sale del DRP en checkout pilot)
+  ├── useDoc8                 (cierra Doc-8 en checkout pilot)
+  ├── useOfflineQueue         (detecta pendingCount > 0 en checkout offline)
+  └── useBackgroundSyncStore  (congela JWT en checkout offline con pendientes)
 
 useVehiculo
   ├── useDoc8         (abre/cierra Doc-8, registra eventos)
@@ -1467,7 +2426,12 @@ useBandeja(instancia)
   └── useInventario   (solo bandeja_logistica_drp para confirmar Doc-10)
 
 useOfflineQueue
-  └── IndexedDB       (persistencia)
+  ├── IndexedDB                (persistencia de mutaciones)
+  └── useBackgroundSyncStore   (liberarJwt() al vaciar cola post-retención)
+
+useBackgroundSyncStore
+  └── (sin dependencias — store primitivo; solo escrito por useCheckin,
+       leído por SW, vaciado por useOfflineQueue)
 
 useGPS
   └── useVehiculoStore (cache coords)
@@ -1544,3 +2508,181 @@ global:marquesina             → texto del ticker
 global:tablon                 → anuncios del tablón
 global:vacaciones             → estado periodo vacaciones
 ```
+
+### Sincronización Híbrida de Foco — bandejas
+
+Las bandejas de entrada usan una arquitectura **dual**: Supabase Realtime para entrega
+en tiempo real durante la sesión activa, y TanStack Query con re-fetch por eventos del
+SO/red para reconciliar mensajes perdidos durante periodos de letargo de la tablet o
+caídas de la conexión WebSocket.
+
+**Configuración global del QueryClient:**
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,    // se dispara al recuperar el foco de la ventana
+                                     // (incluye wake-up de tablet por SO)
+      refetchOnReconnect:   true,    // se dispara al recuperar conexión de red
+                                     // (el SW notifica al cliente cuando vuelve online)
+      staleTime: 30_000,             // datos considerados frescos durante 30 s
+                                     // evita re-fetches redundantes si Realtime ya actualizó
+    },
+  },
+})
+```
+
+**Alcance del re-fetch:**
+
+| Query | `refetchOnWindowFocus` | `refetchOnReconnect` | Justificación |
+|---|---|---|---|
+| `bandejas/*` (todas las instancias activas) | ✅ | ✅ | Las tablets en montaje se apagan/despiertan frecuentemente; los WebSockets no persisten durante el letargo del SO |
+| `inventario/*` (stock) | ✅ | ✅ | Un turno de reposición puede haberse ejecutado mientras el terminal estaba dormido |
+| `drp/*` | ✅ | ✅ | Cambios de estado DRP durante desconexión |
+| `vehiculos/*` | ❌ | ✅ | Realtime es suficiente en activo; solo reconciliar en reconexión |
+| Datos de turno activo (`checkin`, `doc8`) | ❌ | ❌ | Gestionados por Zustand + localStorage — el GET HTTP no es la fuente de verdad |
+
+**Mecanismo de reconciliación al despertar:**
+
+```
+tablet despierta (visibilitychange: hidden → visible)
+  │
+  ├─ React Query: window.focus event detectado
+  │    → queries con refetchOnWindowFocus=true se marcan stale
+  │    → GET asíncrono a /api/bandejas?instancia=X&desde=last_fetched_at
+  │         (parámetro de cursor — solo descarga mensajes no vistos)
+  │    → cache actualizado → UI reconciliada sin interacción del usuario
+  │
+  ├─ Supabase Realtime: intenta reconexión WebSocket automáticamente
+  │    → si la conexión WS se perdió durante el letargo:
+  │         suscripción re-establecida transparentemente
+  │
+  └─ useOfflineQueue: detecta isOnline = true → procesarCola()
+       → replica mutaciones acumuladas durante el letargo
+```
+
+**Nota de prioridad:** si Realtime ya entregó un mensaje durante la sesión activa,
+el `staleTime` de 30 s previene un GET redundante inmediato. El re-fetch solo
+materializa diferencias — mensajes que llegaron mientras el WebSocket estaba
+desconectado o la tablet dormía.
+
+### Pre-caché de tokens de turno siguiente — `usePrecacheShiftTokens`
+
+Hook montado en el layout raíz del terminal. Suscribe al canal Realtime
+`terminal:{device_id}:precache` y persiste los tokens del turno siguiente
+en localStorage para habilitar el acceso degradado durante relevos sin red.
+
+```typescript
+// Montado una sola vez en el layout raíz (useEffect onMount)
+function usePrecacheShiftTokens(deviceId: string): void {
+  useEffect(() => {
+    const channel = supabase
+      .channel(`terminal:${deviceId}:precache`)
+      .on('broadcast', { event: 'shift_tokens_ready' }, ({ payload }) => {
+        // payload: Array<{ user_id: string, signed_payload: string }>
+        for (const { user_id, signed_payload } of payload) {
+          localStorage.setItem(
+            `u24_offline_session_next:${user_id}`,
+            signed_payload
+          )
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [deviceId])
+}
+```
+
+**Limpieza al check-in online exitoso** (en `useTerminalAuth.login`):
+
+```typescript
+// Tras confirmar sesión online con éxito:
+localStorage.removeItem(`u24_offline_session_next:${ID_nombre}`)
+```
+
+Ver `logic.md §25.6` para la especificación completa del payload y el flujo de
+generación en el servidor.
+
+### Offloading de pdfMake a Web Worker
+
+**Restricción arquitectónica:** pdfMake **no puede ejecutarse en el Main Thread**.
+La generación de PDFs (Doc-8 cierre, partes de asistencia, informes DRP) es
+computacionalmente costosa y congela la UI en dispositivos de flota de gama baja.
+
+**Arquitectura:**
+
+```typescript
+// pdf.worker.ts — Web Worker dedicado
+import pdfMake from 'pdfmake/build/pdfmake'
+import pdfFonts from 'pdfmake/build/vfs_fonts'
+pdfMake.vfs = pdfFonts.pdfMake.vfs
+
+self.onmessage = async (event: MessageEvent<{ docDefinition: object; filename: string }>) => {
+  const { docDefinition } = event.data
+  pdfMake.createPdf(docDefinition).getBlob((blob) => {
+    self.postMessage({ blob, filename: event.data.filename }, [blob])
+  })
+}
+```
+
+```typescript
+// usePdfGenerator — hook de llamada al worker
+function usePdfGenerator() {
+  const workerRef = useRef<Worker | null>(null)
+
+  useEffect(() => {
+    workerRef.current = new Worker(
+      new URL('./workers/pdf.worker.ts', import.meta.url),
+      { type: 'module' }
+    )
+    return () => workerRef.current?.terminate()
+  }, [])
+
+  const generarPdf = useCallback(
+    (docDefinition: object, filename: string): Promise<Blob> =>
+      new Promise((resolve, reject) => {
+        if (!workerRef.current) { reject(new Error('pdf_worker_no_disponible')); return }
+        workerRef.current.onmessage = (e) => resolve(e.data.blob)
+        workerRef.current.onerror   = (e) => reject(e)
+        workerRef.current.postMessage({ docDefinition, filename })
+      }),
+    []
+  )
+
+  return { generarPdf }
+}
+```
+
+**Reglas:**
+- Prohibido llamar a `pdfMake.createPdf()` directamente desde cualquier componente o hook del Main Thread.
+- El worker recibe el árbol de datos JSON del documento (`docDefinition`) y devuelve un `Blob`.
+- El componente receptor del `Blob` puede abrirlo con `URL.createObjectURL` o descargarlo directamente.
+- Si el worker no está disponible (error de inicialización), mostrar toast de error y permitir reintento.
+
+### Bloqueo de Persistencia de Almacenamiento — `navigator.storage.persist()`
+
+Llamado en el `useEffect` de montaje del layout raíz, una sola vez, para solicitar
+al navegador que designe el origen como persistente y no lo expulse automáticamente
+de la caché LRU de IndexedDB/localStorage bajo presión de almacenamiento del SO.
+
+```typescript
+useEffect(() => {
+  if (navigator.storage?.persist) {
+    navigator.storage.persist().then((granted) => {
+      if (!granted) {
+        console.warn('[U24] storage.persist() denegado — almacenamiento offline vulnerable a evicción')
+      }
+    })
+  }
+}, [])
+```
+
+**Notas:**
+- En Chromium/Android la solicitud se concede automáticamente si el sitio está
+  instalado como PWA o si el usuario ha interactuado suficientemente con él.
+- Si se deniega, el sistema sigue funcionando; el riesgo es que el SO expulse
+  IndexedDB bajo presión extrema de memoria, perdiendo la cola de mutaciones offline.
+- El resultado (`granted`) se expone como `useTerminalStore.storagePersisted`
+  para que el coordinador pueda ver el estado en `ajustes_terminal`.

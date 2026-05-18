@@ -61,14 +61,51 @@ Prop booleana `isReadOnly` inyectable por instancia o por tipo de mensaje.
 * El acuse de recibo (`timestamp_lectura`, `ID_nombre_lector`) **sí se registra** al abrir.
 * Al cerrar el modal, el mensaje **desaparece automáticamente** de la bandeja sin necesidad
   de acción manual — no transiciona a `Solucionada_Archivada` (estado contaminante innecesario).
-* Mecanismo de purga: el mensaje se marca como `leido_auto_dismiss` en DB. Un trigger o
-  cron job lo elimina de la vista activa inmediatamente al detectar el cierre del modal
-  (o tras un TTL configurable, ej. 30 minutos, para bandejas sin confirmación de cierre).
+* Mecanismo de purga **doble**:
+  1. **Mutación optimista síncrona** (inmediata): `useBandejasStore.purgeMensaje(mensajeId)`
+     elimina el objeto del array de mensajes en el store y decrementa `unreadCount` en el
+     mismo tick de React — la bandeja se actualiza visualmente sin esperar ninguna respuesta
+     de red.
+  2. **Persistencia en DB** (en segundo plano): el mensaje se marca como `leido_auto_dismiss`
+     en Supabase. Un trigger o cron job lo elimina de la vista activa
+     (o tras TTL configurable, ej. 30 minutos).
+  Si la persistencia en DB falla, la purga optimista permanece — el mensaje no se reinserta
+  en el store. El coordinador puede forzar una recarga si detecta inconsistencia.
 * El contador `unreadCount` del icono `ti-mail` se decrementa igual que en modo normal.
 
 **Justificación:** las alertas puramente informativas (ej. stock mínimo durante un DRP)
 no deben requerir gestión manual de archivado. Forzar al personal asistencial a archivar
 notificaciones informativas durante una emergencia aumenta la carga cognitiva sin aportar valor.
+
+**Excepción de tipo de payload — Doc-11 (Aviso urgente):**
+
+`isReadOnly` es una directiva de bandeja, no una directiva de documento. Si el ítem
+renderizado dentro de un contexto `isReadOnly={true}` es un Doc-11, el componente
+**fuerza el desbloqueo del botón `Marcar_Solucionada`** ignorando el valor de la prop.
+
+```tsx
+// Lógica de desbloqueo condicional dentro del componente flujos_transicion:
+const esMarcableSolucionada =
+  !isReadOnly                               // caso normal: no isReadOnly
+  || mensaje.tipo === 'doc11'               // excepción: Doc-11 siempre marcable
+  || mensaje.tipo === 'aviso_urgente'       // alias del tipo en algunos contextos
+
+// Los demás botones (Marcar_En_Proceso, Archivar) siguen respetando isReadOnly
+const esMutacionGeneral = !isReadOnly
+```
+
+Consecuencias:
+* El botón `Marcar_Solucionada` aparece **habilitado** para Doc-11 en cualquier bandeja.
+* Los botones `Marcar_En_Proceso` y `Archivar` permanecen **deshabilitados** si `isReadOnly={true}`.
+* El acuse de recibo (`timestamp_lectura`) se registra igualmente, como en cualquier isReadOnly.
+* La transición de estado al pulsar `Marcar_Solucionada` registra `ID_nombre_resolutor`
+  y `timestamp_resolucion` — sí requiere el JWT del usuario activo con permisos.
+
+**Justificación:** los avisos urgentes (Doc-11) requieren confirmación explícita de
+resolución por el receptor. Un muro `isReadOnly` que impide marcar un aviso como solucionado
+genera avisos perpetuamente "pendientes" sin reflejo real en el estado operativo.
+El Doc-11 es el único tipo de payload con esta excepción porque es el único cuya
+semántica es bidireccional: no solo informa, sino que requiere acuse de actuación.
 
 ### Instancias y variantes
 
@@ -228,4 +265,119 @@ Sólo tres iconos en este componente:
 | `idle` | Muestra últimas coordenadas conocidas (lat, lon) + timestamp en `text-xs font-light`. Botones activos. |
 | `fetching` | Icono `ti-loader` animando. Botón "Solicitar Ubicación" deshabilitado. Coordenadas previas visibles en opacidad reducida (`opacity-50`). |
 | `success` | Coordenadas actualizadas en verde (`text-green-600`) durante 2 s, luego vuelven al color neutro. Timestamp actualizado. |
-| `fallback` | Coordenadas del historial con opacidad reducida (`opacity-60`) + badge `Ubicación offline` en gris. Indica que el vehículo no respondió al ping y se muestra la última posición conocida desde `gps_historial`. |
+| `fallback` | Coordenadas del historial con opacidad reducida (`opacity-60`) + badge `Ubicación offline` en gris. Indica que el vehículo no respondió al ping y se muestra la última posición conocida desde `gps_historial`. Se alcanza por timeout (5 s) o por recepción de `pong_error` (inmediato). |
+| `posicion_desconocida` | **Sin coordenadas ni chincheta en mapa.** Texto visible: `"Posición desconocida (Vehículo en movimiento sin telemetría reciente)"` en `text-amber-600 font-medium`. Botón "Solicitar Ubicación" activo. Se alcanza cuando el fallback devuelve una coordenada de `origen = 'cambio_operativo'` con antigüedad > 10 min Y el vehículo está en `estado_operativo ∈ {ruta, alerta}`. Ver lógica en `logic.md §29.5`. |
+
+### Gestión de `pong_error`
+
+Cuando el terminal de vehículo no puede obtener la posición GPS (hardware no disponible,
+permiso denegado, timeout del chip), publica un evento `pong_error` en el canal
+`vehiculo:${ID_vehiculo}`. El componente maneja este evento de la siguiente forma:
+
+```
+onPongError(payload):
+  1. clearTimeout(fallbackTimer)          // cancela el timer de 5 s si sigue activo
+  2. estado → 'fallback'                  // transición inmediata — sin esperar timeout
+  3. ejecutarFallbackRPC(payload.id_vehiculo)
+       // RPC get_ultima_ubicacion_vehiculo — UNION ALL gps_historial + doc8_eventos
+  4. Muestra badge "Ubicación offline" en gris + coordenadas históricas con opacity-60
+```
+
+**Nota UX:** el badge `Ubicación offline` se muestra igual tanto si el fallback fue por
+`pong_error` como por timeout. No se expone el código de error técnico al coordinador.
+El botón "Solicitar Ubicación" vuelve a estar habilitado tras el fallback, permitiendo
+un nuevo intento manual.
+
+**Nota de throttle:** el terminal NO activa el throttle de 15 s cuando falla el GPS
+(ver `hooks.md §16`). El coordinador puede reintentar inmediatamente si lo considera
+necesario.
+
+---
+
+## selector_vehiculo_drp
+
+> Combobox filtrado reutilizable para seleccionar un `ID_vehiculo` en el contexto
+> de creación de DRP (`crear_drp → agregar_dotacion_vehiculo`).
+> Reemplaza al campo de texto libre anterior — presenta solo vehículos seleccionables
+> con alertas contextuales para los casos de advertencia.
+
+### Comportamiento
+
+* Carga la lista de vehículos ejecutando la RPC `get_vehiculos_disponibles_para_drp()`:
+  ```sql
+  -- Excluye inoperativo_critico
+  -- Excluye vehículos ya en DRP En_curso
+  -- Incluye con badge "Ya en DRP" si están en DRP En_preparacion
+  SELECT id_vehiculo, matricula, estado_operativo, condicion_tecnica,
+         drp_activo_nombre, drp_activo_estado
+    FROM vehiculos
+   WHERE condicion_tecnica != 'inoperativo_critico'
+     AND (
+       drp_activo_id IS NULL
+       OR drp_activo_estado != 'En_curso'
+     )
+   ORDER BY estado_operativo, id_vehiculo;
+  ```
+
+* **Categorías de presentación:**
+
+| Vehículo | Visualización | Seleccionable |
+|---|---|---|
+| `condicion_tecnica = inoperativo_critico` | No aparece en la lista | ✗ |
+| En DRP `En_curso` | No aparece en la lista | ✗ |
+| En DRP `En_preparacion` | Badge naranja "Ya en DRP [nombre]" | ✓ con confirmación |
+| Disponible (`operativo` o `averiado_leve`) | Normal | ✓ directo |
+
+* **Confirmación adicional para vehículos "Ya en DRP":**
+  Modal: "Este vehículo ya está asignado al DRP [nombre_drp] en preparación.
+  ¿Confirmar asignación a este nuevo DRP también?"
+  [ Confirmar ] [ Cancelar ]
+
+* Búsqueda: texto predictivo por `id_vehiculo` o `matricula`.
+* Si no hay vehículos disponibles → mensaje: "No hay vehículos disponibles
+  (todos están en DRP en curso o inoperativos)."
+
+### Instancias
+
+| Módulo | Contexto |
+|---|---|
+| `crear_drp` | `agregar_dotacion_vehiculo` → campo `ID_vehiculo` |
+| `resumen_drp → Editar recursos` | Campo de vehículo al añadir dotaciones |
+
+---
+
+## tarjeta_paciente_filiacion
+
+> Tarjeta reutilizable que representa un paciente dentro del módulo filiación.
+> Se usa tanto en `perfil_admision` (lista de espera) como en `perfil_boxes`
+> (monitor de pacientes en espera del box).
+
+### Colorimetría por estado
+
+| Estado del paciente | Estilo base | Variante `revaluacion = true` |
+|---|---|---|
+| `en_espera` (primera vez) | Fondo blanco / borde neutro | — |
+| `en_espera` + `revaluacion = true` | Fondo `amber-50` / borde `amber-400` | Badge `Revaluación` en `amber-600 font-semibold` |
+| `en_consulta` | Fondo `blue-50` / borde `blue-400` | Si llegó de revaluación: badge `Revaluación` en `amber-600` sobre fondo `blue-50` |
+| `archivado` | Fondo gris / opacidad reducida | — |
+
+### Badge `Revaluación`
+
+* Texto: `"Revaluación"` en `text-xs font-semibold text-amber-600`.
+* Posición: esquina superior derecha de la tarjeta, junto al badge de orden.
+* Visible en todos los contextos donde `revaluacion = true`:
+  * Lista de espera (`perfil_admision` y `perfil_boxes`).
+  * Vista de paciente abierto en box (`en_consulta` si proviene de revaluación).
+* **Propósito:** el profesional que atiende al paciente sabe de inmediato que
+  hay un Doc-3 con contexto clínico previo y que el `timestamp_admision` es anterior
+  al turno actual. Evita tratar al paciente como una primera atención nueva.
+
+### Tooltip al pasar el cursor sobre el badge
+
+`"Paciente en revaluación — timestamp de admisión original preservado"`
+
+### Orden en la lista de espera
+
+Los pacientes con `revaluacion = true` no reciben prioridad automática por el flag;
+mantienen su `orden` numérico. El perfil_admision puede ajustar el orden manualmente
+si la urgencia clínica lo requiere.
