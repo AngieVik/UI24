@@ -2161,6 +2161,10 @@ TERMINAL DE VEHÍCULO (hook useLocationListener — activo mientras el terminal
   ├─ Recibe evento `ping_location` en canal `coordinacion:flota`
   ├─ Filtra: si payload.id_vehiculo ≠ este terminal → ignorar silenciosamente
   │
+  ├─ THROTTLE — SIEMPRE incondicional (ver §29.4):
+  │     Actualizar lastPingProcessed = ahora() ANTES de intentar el hardware GPS.
+  │     Esto fuerza el enfriamiento de 15 s incluso si la lectura falla.
+  │
   ├─ Llama navigator.geolocation.getCurrentPosition({ timeout: 5000 })
   │   (una sola petición — sin watchPosition)
   │
@@ -2177,7 +2181,8 @@ TERMINAL DE VEHÍCULO (hook useLocationListener — activo mientras el terminal
          evento:  `pong_error`
          payload: { id_vehiculo, codigo: err.code, mensaje: err.message, timestamp: now() }
        (err.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT)
-       El throttle NO se activa en caso de error — el siguiente ping puede intentarlo.
+       lastPingProcessed YA fue actualizado antes de la llamada GPS — el throttle
+       de 15 s está activo independientemente del resultado.
        El coordinador cancela su timer de 5 s al recibir pong_error y activa
        inmediatamente el fallback RPC — ver §29.3.
 
@@ -2290,10 +2295,14 @@ useLocationListener — pseudocódigo de throttle:
   on('ping_location') en canal 'coordinacion:flota':
     if payload.id_vehiculo ≠ miVehiculoId:
       return  // no es para este terminal — ignorar
+
     now = Date.now()
     if lastPingProcessed && (now - lastPingProcessed) < 15_000:
       return  // throttle activo — ignorar este ping
-    lastPingProcessed = now
+
+    lastPingProcessed = now  // ← SIEMPRE actualizar ANTES de llamar al hardware GPS
+    // Esto garantiza que el enfriamiento aplica incluso si getCurrentPosition falla.
+    // Un pong_error no "regala" un segundo ping inmediato al coordinador.
     // → continuar con getCurrentPosition (ver §29.2)
 ```
 
@@ -3584,16 +3593,43 @@ permanentes (`token_especial`) se mantiene en una tabla dedicada que extiende
 ```sql
 galletas_terminales:
   id              UUID          PK  DEFAULT gen_random_uuid()
-  pin_hash        TEXT          NOT NULL   -- bcrypt del PIN consumido (no el PIN en claro)
-  id_terminal     TEXT          NOT NULL   -- fingerprint del terminal donde fue consumida
+  pin_hash        TEXT          NOT NULL   -- hash del PIN (para auditoría — no el PIN en claro)
+  id_terminal     TEXT          NOT NULL DEFAULT ''
+                                           -- fingerprint del terminal; vacío hasta consumo del PIN
   matricula       TEXT          NULL       -- matrícula del vehículo asociado (opcional, editable)
-  descripcion     TEXT          NULL       -- ej. "Tablet Ambulancia 7 — Matrícula 1234-ABC"
+  descripcion     TEXT          NOT NULL   -- OBLIGATORIO: ej. "Tablet Ambulancia 7 — 1234-ABC"
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
   creada_por      TEXT          NOT NULL   -- ID del coordinador/gerente que la generó
   revocada_at     TIMESTAMPTZ   NULL       -- relleno al revocar
   revocada_por    TEXT          NULL
-  activa          BOOLEAN       NOT NULL DEFAULT TRUE
+  activa          BOOLEAN       NOT NULL DEFAULT FALSE
+                                           -- false hasta que el PIN sea consumido por un terminal
 ```
+
+**Flujo de pre-registro (generación del `token_especial`):**
+1. El coordinador rellena el campo `descripcion` (obligatorio — validado en UI y servidor).
+2. El servidor genera el PIN, hace hash, e inserta en `galletas_terminales` con
+   `id_terminal = ''` y `activa = false` — la fila existe pero el terminal aún no está vinculado.
+3. El PIN se muestra una vez en pantalla al coordinador.
+
+**Flujo de binding (consumo del PIN en el terminal):**
+1. El terminal genera su `id_terminal` (fingerprint — ver `terminal_check.md`).
+2. Envía el PIN + `id_terminal` a la Edge Function `consumir_pin`.
+3. La Edge Function evalúa el tipo de PIN:
+   - **Permanente (`token_especial`):**
+     ```sql
+     UPDATE galletas_terminales
+        SET id_terminal  = p_id_terminal,
+            activa       = TRUE,
+            consumido_at = NOW()
+      WHERE pin_hash = hash(p_pin)
+        AND activa   = FALSE
+        AND id_terminal = '';   -- solo fila pre-registrada sin terminal
+     ```
+     Inyecta cookie segura permanente. La fila en `galletas_terminales` queda activa.
+   - **Temporal (`token_de_seguridad`):**
+     No toca `galletas_terminales`. Registra `id_terminal` y `consumido_at` en
+     `sesiones_emergencia` únicamente (trazabilidad de auditoría).
 
 ### 45.2 RPC `revocar_y_reemitir_galleta`
 

@@ -5,10 +5,14 @@
   * **estado_1 (black_column → Check-in):** modal superpuesto sobre
     el home_area. La cookie ya está validada, no se reverifica.
 
-* **Regla estricta:** siempre requiere conexión a internet activa para el flujo online.
+* **Regla estricta de estado_0:** el login desde `estado_0` (pantalla completa)
+  **requiere siempre conexión activa**. Las credenciales se validan directamente
+  contra Supabase en tiempo real. No existe validación offline desde `estado_0`.
+  Si no hay red, `estado_0` permanece bloqueado sin opción de acceso degradado.
 
-* **Acceso offline (modo degradado):**
-  * Disponible cuando el terminal detecta timeout de red (> 5s).
+* **Acceso offline (modo degradado) — exclusivo de `estado_1`:**
+  * Disponible únicamente cuando el terminal **ya está en `estado_1`** y detecta
+    timeout de red (> 5 s) mientras intenta añadir un nuevo `checkin_on`.
   * Se muestra la opción: "Sin conexión — Acceso de consulta".
   * Campos requeridos: `ID_nombre` + `Contraseña` (ambos obligatorios).
     No existe bypass de contraseña en modo offline.
@@ -80,10 +84,45 @@
     * El sistema detecta el patrón y enruta a `autenticacion_pin_especial`
       en lugar del flujo estándar.
 
+  * **Generación de fingerprint de dispositivo:**
+    Al detectar el patrón de inicio de sesión por PIN, el cliente genera
+    silenciosamente un fingerprint único del dispositivo antes de enviar el PIN
+    al servidor:
+
+    ```typescript
+    // Fingerprint compuesto de señales de hardware disponibles en el navegador
+    async function generarFingerprint(): Promise<string> {
+      const canvas   = document.createElement('canvas')
+      const ctx      = canvas.getContext('2d')!
+      ctx.fillText('U24fp', 0, 10)                    // renderizado tipográfico único por GPU
+      const canvasHash = canvas.toDataURL()
+
+      const raw = [
+        navigator.userAgent,
+        navigator.language,
+        screen.width + 'x' + screen.height,
+        screen.colorDepth,
+        new Intl.DateTimeFormat().resolvedOptions().timeZone,
+        canvasHash,
+      ].join('|')
+
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
+    }
+    ```
+
+    El fingerprint se genera una única vez y se almacena en `useTerminalStore.id_terminal`
+    (persiste en IndexedDB). En reinicios del terminal se reutiliza el valor almacenado.
+
   * **autenticacion_pin_especial — Estados:**
-    * `MATCH`: el PIN existe y `NOW() < expires_at`. Retorna UUID,
-      inyecta cookie segura en el terminal y marca el PIN como consumido
-      (`UPDATE`). Terminal pasa a estado_1 con rol `invitado`.
+    * `MATCH` (PIN permanente): el PIN existe, `NOW() < expires_at` y el tipo es
+      `token_especial`. El servidor inyecta el `id_terminal` en `galletas_terminales`,
+      marca `consumido_at = NOW()`, inyecta cookie segura permanente. Terminal pasa a
+      `estado_1` con rol `invitado`.
+    * `MATCH` (PIN temporal): el PIN existe, `NOW() < expires_at` y el tipo es
+      `token_de_seguridad`. El servidor registra `id_terminal` y `consumido_at`
+      en `sesiones_emergencia`. NO toca `galletas_terminales`. Terminal pasa a
+      `estado_1` con rol `invitado`.
     * `NOT_FOUND`: el PIN no existe. Error "Credenciales incorrectas".
       *(Posible fuerza bruta o error tipográfico — auditable.)*
     * `EXPIRED`: el PIN existe pero `NOW() > expires_at`.

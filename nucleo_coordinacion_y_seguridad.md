@@ -19,14 +19,33 @@
   * `token_especial` — galleta (permanente)
     1. Requiere reautenticación con credenciales propias
        en modal superpuesto antes de generarlo.
-    2. Crea un PIN de 6 dígitos con validez de 10 minutos.
-    3. La BBDD reconoce el PIN y al introducirse en cualquier
+    2. **Campo obligatorio `descripcion`:** antes de confirmar la generación,
+       el coordinador debe rellenar un campo de texto descriptivo
+       (ej. `"Tablet Ambulancia 7 — Matrícula 1234-ABC"`).
+       El modal no permite continuar si `descripcion` está vacío.
+    3. Crea un PIN de 6 dígitos con validez de 10 minutos.
+    4. **Pre-registro en `galletas_terminales`:** el servidor guarda el hash del PIN
+       y la `descripcion` en la tabla `galletas_terminales`, inicializando el campo
+       `id_terminal` como string vacío `''` (pendiente de vinculación hardware).
+    5. La BBDD reconoce el PIN y al introducirse en cualquier
        terminal inyecta una cookie segura permanente
        (hasta eliminación manual en Supabase).
-    4. El terminal accede a `estado_1` con rol `invitado`.
-    5. El checkout no destruye la cookie — el terminal
+    6. El terminal accede a `estado_1` con rol `invitado`.
+    7. El checkout no destruye la cookie — el terminal
        queda registrado como oficial de forma indefinida.
     * UI: botón redondo con texto `Pedir una galleta`.
+
+  * **Lógica de consumo de PIN — comportamiento diferenciado:**
+    * **PIN permanente (`token_especial`):**
+      Al introducir el PIN en `terminal_check`, el cliente genera silenciosamente
+      un `id_terminal` (fingerprint del dispositivo) y lo adjunta al envío.
+      El servidor: valida el PIN, inyecta el `id_terminal` en el registro de
+      `galletas_terminales`, y registra `consumido_at = NOW()`.
+      La fila `galletas_terminales` pasa de `id_terminal = ''` a tener el fingerprint real.
+    * **PIN temporal (`token_de_seguridad` / `galleta_pequeña`):**
+      El servidor NO toca `galletas_terminales`. Únicamente registra el
+      `id_terminal` y `consumido_at = NOW()` en la tabla `sesiones_emergencia`
+      para trazabilidad y auditoría. Ver `logic.md §45` para la especificación SQL.
 
   * Ambos tokens se registran en tabla `sesiones_emergencia`
     con `tipo`, `created_at`, `expires_at`, `id_terminal` y `consumido_at`.

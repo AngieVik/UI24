@@ -1173,8 +1173,9 @@ interface StockItem {
   stock_real:       number    // fuente de verdad en BBDD (última confirmación)
   stock_real_local: number    // cache optimista en Zustand (puede diferir temporalmente)
   stock_objetivo:   number
-  sync_pending:     boolean   // true → delta descontado localmente aún no confirmado por RPC
-  pending_delta:    number    // cantidad descontada pendiente de reconciliar (positivo = descuento)
+  sync_pending:          boolean        // true → delta descontado localmente aún no confirmado por RPC
+  pending_delta:         number         // cantidad descontada pendiente de reconciliar (positivo = descuento)
+  pending_mutation_uuid: string | null  // UUID de la mutación en vuelo — para filtro de eco Realtime
 }
 
 interface UseInventario {
@@ -1347,6 +1348,7 @@ Registra timestamp_confirmacion e ID_nombre_receptor_confirmador
 ```
 
 **Soporte offline parcial:**
+
 - `registrarGasto` (Doc-6): soporte offline via optimismo local. El descuento es inmediato en Zustand; el RPC se encola y se replaya al reconectar (ver PASO 3-C arriba).
 - `enviarMaterial` (Doc-10): **sin soporte offline** — requiere conexión sincrónica para ejecutar el guard atómico `stock_real >= p_cantidad`. Ver justificación en `logic.md §17.3`.
 - `confirmarRecepcion`: sin soporte offline — la reconciliación de stock en destino es atómica.
@@ -1366,11 +1368,18 @@ pendiente de sincronización local.
 // Handler Realtime en useInventarioStore
 supabase.channel(`inventario:${locationId}`)
   .on('postgres_changes', { event: 'UPDATE', table: 'stock_items' }, (payload) => {
-    const { item_id, stock_real: server_value } = payload.new
+    const { item_id, stock_real: server_value, mutation_uuid } = payload.new
 
     set((state) => {
       const item = state.items[locationId]?.[item_id]
       if (!item) return {}  // item no cargado en store — ignorar
+
+      // FILTRO DE ECO: ignorar eventos originados por este mismo terminal
+      // cuando hay un sync_pending activo para ese ítem.
+      // Confiar exclusivamente en la respuesta HTTP del propio RPC (PASO 3-A).
+      if (item.sync_pending && mutation_uuid && item.pending_mutation_uuid === mutation_uuid) {
+        return {}  // eco de mi propia mutación — ignorar; el RPC ya actualizará
+      }
 
       const pending = item.sync_pending ? item.pending_delta : 0
 
@@ -1394,14 +1403,28 @@ supabase.channel(`inventario:${locationId}`)
   .subscribe()
 ```
 
+**Filtro de eco:** cada mutación de stock local almacena su `mutation_uuid` en
+`item.pending_mutation_uuid` (generado con `crypto.randomUUID()` al encolar).
+La columna `mutation_uuid` debe incluirse en los eventos Realtime mediante la
+configuración de la publicación de PostgreSQL:
+
+```sql
+-- Asegura que mutation_uuid viaja en el payload de Realtime
+ALTER PUBLICATION supabase_realtime
+  SET TABLE stock_items (item_id, stock_real, mutation_uuid, updated_at);
+```
+
+Cuando el Realtime devuelve un UPDATE con el mismo `mutation_uuid` que el
+`pending_mutation_uuid` local, el evento se descarta — la respuesta HTTP del
+propio RPC ya actualizó el estado en PASO 3-A con el valor autoritativo del servidor.
+
 **Invariante:** `stock_real_local = stock_real - pending_delta` mientras `sync_pending = true`.
 Cuando el RPC propio confirma (PASO 3-A), `stock_real` se actualiza con el valor del servidor
 y `pending_delta` se pone a `0` — la invariante se satisface trivialmente.
 
-**Justificación:** sin esta reconciliación, una actualización Realtime de otro terminal
-durante un ciclo offline-local sobreescribiría el descuento optimista del usuario activo,
-haciendo que la UI mostrara un stock incorrecto hasta que el propio RPC confirme.
-Ver `logic.md §24.5` para el modelo formal.
+**Justificación:** sin filtro de eco + reconciliación, una actualización Realtime (propia
+o de otro terminal) durante un ciclo optimista sobreescribiría el delta pendiente del usuario
+activo. Ver `logic.md §24.5` para el modelo formal.
 
 ### Stores: `useInventarioStore`
 
@@ -1504,8 +1527,59 @@ interface BandejasStoreActions {
   // Mutación optimista síncrona para modo isReadOnly auto-dismiss:
   purgeMensaje(mensajeId: string): void
   // Efecto: elimina el mensaje del array Y decrementa unreadCount en el mismo tick
+  // GC local de mensajes archivados:
+  purgarArchivadasExpiradas(): void
+  // Elimina del array en memoria los mensajes en Solucionada_Archivada cuyo
+  // timestamp_resolucion es > 24 horas. Llamado en el montaje y cada hora via setInterval.
 }
 ```
+
+**Sliding Window — máximo 200 mensajes por instancia:**
+
+```typescript
+upsertMensaje: (instancia, mensaje) =>
+  set((state) => {
+    const existing = state.mensajes[instancia] ?? []
+    const idx      = existing.findIndex(m => m.id === mensaje.id)
+    let   updated  = idx >= 0
+      ? existing.with(idx, mensaje)          // actualización in-place
+      : [...existing, mensaje]               // append
+
+    // Limitar a 200 mensajes: truncar los más antiguos por timestamp
+    if (updated.length > 200) {
+      updated = updated
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 200)
+    }
+
+    return { mensajes: { ...state.mensajes, [instancia]: updated } }
+  })
+```
+
+**GC local — purga de archivadas expiradas (> 24 h):**
+
+```typescript
+purgarArchivadasExpiradas: () =>
+  set((state) => {
+    const LIMITE_MS = 24 * 60 * 60 * 1000
+    const ahora     = Date.now()
+    const filtradas: typeof state.mensajes = {}
+
+    for (const [instancia, mensajes] of Object.entries(state.mensajes)) {
+      filtradas[instancia] = mensajes.filter(m => {
+        if (m.estado !== 'Solucionada_Archivada') return true
+        const resolucion = m.timestamp_resolucion
+          ? new Date(m.timestamp_resolucion).getTime()
+          : 0
+        return ahora - resolucion < LIMITE_MS
+      })
+    }
+    return { mensajes: filtradas }
+  })
+```
+
+El historial completo permanece en Supabase. La purga local solo afecta al array
+en memoria de Zustand — reduce la presión de RAM en DRPs de larga duración.
 
 **Comportamiento de `purgeMensaje`:**
 
@@ -1779,19 +1853,59 @@ UI (vista de mutaciones fallidas en la cola):
     [ Confirmar ] [ Cancelar ]
 ```
 
-**Detección de estado de red:**
+**Borrado optimista de borradores offline:**
+
+Si `isOnline === false`, el descarte/borrado de un borrador **no intenta consultar
+Supabase**. Limpia el store local síncronamente y encola una mutación especial:
+
+```typescript
+// En useDocumentosStore.descartarBorrador()
+if (!useOfflineQueue.getState().isOnline) {
+  // 1. Limpiar en memoria inmediatamente (optimista)
+  useDocumentosStore.getState().eliminarBorrador(draftId)
+  // 2. Encolar para que el SW lo purgue al reconectar
+  useOfflineQueue.getState().enqueue('purge_drafts', {
+    draftId,
+    tipo_documento,
+    timestamp_descarte: ahora(),
+  })
+  return
+}
+// Si online → DELETE directo a Supabase
+```
+
+El tipo `purge_drafts` se procesa en `procesarCola` con una llamada DELETE al
+endpoint del draft correspondiente. No genera error si el draft ya no existe en
+Supabase (idempotente).
+
+---
+
+**Detección de estado de red + Rehidratación al volver al foreground:**
+
+El Background Sync de Service Worker no está garantizado en todos los sistemas
+operativos (iOS Safari, algunos Android con batería). Como fallback, el hook
+también dispara `procesarCola()` al detectar que la app vuelve al primer plano:
 
 ```typescript
 useEffect(() => {
-  const online  = () => { setIsOnline(true);  procesarCola() }
-  const offline = () => { setIsOnline(false) }
-  window.addEventListener('online',  online)
-  window.addEventListener('offline', offline)
-  return () => {
-    window.removeEventListener('online',  online)
-    window.removeEventListener('offline', offline)
+  const onOnline       = () => { setIsOnline(true);  procesarCola() }
+  const onOffline      = () => { setIsOnline(false) }
+  const onVisible      = () => {
+    if (document.visibilityState === 'visible' && isOnline) {
+      procesarCola()  // drenar cola al volver del fondo aunque el SW no lo hiciera
+    }
   }
-}, [])
+
+  window.addEventListener('online',  onOnline)
+  window.addEventListener('offline', onOffline)
+  document.addEventListener('visibilitychange', onVisible)
+
+  return () => {
+    window.removeEventListener('online',  onOnline)
+    window.removeEventListener('offline', onOffline)
+    document.removeEventListener('visibilitychange', onVisible)
+  }
+}, [isOnline])
 ```
 
 **Operaciones aptas para cola offline:**
@@ -1806,6 +1920,7 @@ useEffect(() => {
 | `doc11_create` | Aviso urgente |
 | `doc6_metadata` | Metadata del gasto (stock descontado localmente por optimismo; RPC reconcilia al reconectar) |
 | `doc7_create` | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `inoperativo_critico`. **Si `gravedad = 'Grave'` y se encola offline: modal rojo de balizamiento físico obligatorio antes de continuar (ver §3 setCondicionTecnica CASO B — Directiva de Balizamiento Físico).** |
+| `purge_drafts` | Borrado de borrador realizado offline. El SW ejecuta el DELETE al reconectar. Idempotente: si el draft ya no existe en Supabase, el error 404 se trata como éxito. |
 
 **Operaciones NO aptas para cola:**
 
@@ -1892,10 +2007,11 @@ const asistencias = await db.getAll('doc1_asistencias',
 ```
 
 **Ventajas:**
-* Cada mutación escribe O(1) bytes independientemente del tamaño del Doc-1
-* Las asistencias `synced: false` son exactamente las mutaciones pendientes —
+
+- Cada mutación escribe O(1) bytes independientemente del tamaño del Doc-1
+- Las asistencias `synced: false` son exactamente las mutaciones pendientes —
   no requieren cruce con `mutation_queue` para saber qué falta confirmar
-* La clave `asistenciaId` sirve como `mutation_uuid` para idempotencia en RPC
+- La clave `asistenciaId` sirve como `mutation_uuid` para idempotencia en RPC
 
 ### Stores: `useDocumentosStore` (borradores en curso)
 
@@ -2308,12 +2424,68 @@ interface UseImageCompressor {
 ```
 
 **Reglas arquitectónicas:**
+
 - Usa `createImageBitmap` (API nativa) para decodificar — no carga librerías externas.
 - Usa `OffscreenCanvas` para renderizar fuera del DOM — sin reflow ni repaint.
 - Devuelve siempre un `Blob` (nunca Base64 / data-URL).
 - Llamado **antes** de que el archivo toque Zustand o IndexedDB.
 - Ver `nucleo_flota_y_taller.md → Compresión de adjuntos Doc-7` para el
   pipeline completo y las reglas de almacenamiento.
+
+---
+
+## 20. useBandejaConflictos — Dead Letters / Resolución Manual
+
+> Vista de auditoría para mutaciones encoladas que fallaron definitivamente en el
+> servidor (estado `'fallido'` tras 3 intentos). Solo accesible a `coordinación`
+> y `logística` desde la `black_column`.
+
+```typescript
+interface Mutation {
+  id:          UUID
+  tipo:        string
+  payload:     unknown
+  timestamp:   ISOString
+  intentos:    number
+  estado:      'fallido'
+  errorMsg:    string
+}
+
+interface UseBandejaConflictos {
+  // Estado
+  deadLetters:   Mutation[]    // mutaciones fallidas de IndexedDB
+  isLoading:     boolean
+
+  // Carga las mutaciones fallidas desde IndexedDB
+  cargar(): Promise<void>
+
+  // Acciones por mutación
+  reintentar(mutationId: UUID): Promise<void>
+  descartar(mutationId: UUID): Promise<void>
+  asumirAutoria(mutationId: UUID, nuevoAutor: ID_nombre): Promise<void>
+}
+```
+
+**Criterio de "Dead Letter":** mutación con `estado = 'fallido'` e `intentos >= 3`.
+
+**Columnas de la vista:**
+
+| Columna | Contenido |
+|---|---|
+| `Tipo` | Código de operación (`doc1_asistencia`, `doc6_metadata`, etc.) |
+| `Timestamp` | Fecha y hora del intento original (offline) |
+| `Autor` | `payload.ID_nombre_registrador` si existe |
+| `Error` | `errorMsg` del último intento fallido |
+| `Intentos` | Número de reintentos realizados |
+| `Acciones` | `[Reintentar]` `[Descartar]` `[Asumir Autoría]`* |
+
+*`[Asumir Autoría]` solo aparece si `payload.ID_nombre_registrador` existe (documentos autoriales).
+
+**RBAC:** `coordinación` y `logística` ven todas las Dead Letters del terminal.
+La acción `[Asumir Autoría]` requiere que el nuevo autor tenga sesión activa en el terminal.
+
+**Nota:** la vista se rehidrata desde IndexedDB en cada montaje — no usa Realtime
+(las Dead Letters son locales al terminal, no viajan a Supabase hasta que se resuelven).
 
 ```typescript
 interface UseLocationListener {
@@ -2328,6 +2500,7 @@ interface UseLocationListener {
 ### Condición de activación
 
 El hook se monta cuando:
+
 ```
 useTerminalStore.ID_vehiculo IS NOT NULL
 ∧ checkin_on === true   (al menos un ID_nombre con checkin en el vehículo)
@@ -2396,6 +2569,7 @@ onPingLocation(payload):
 El fallback se activa por dos caminos alternativos — el que ocurra primero:
 
 **Camino A — `pong_error` recibido (inmediato):**
+
 ```typescript
 // El coordinador recibe pong_error antes de que expire el timer
 onPongError(payload):
@@ -2404,12 +2578,14 @@ onPongError(payload):
 ```
 
 **Camino B — timeout de 5 s agotado sin `pong_location` ni `pong_error`:**
+
 ```typescript
 // El coordinador no ha recibido respuesta alguna en 5 s
 fallbackTimer = setTimeout(() => ejecutarFallbackRPC(vehiculoId), 5000)
 ```
 
 **`ejecutarFallbackRPC`** (compartida por ambos caminos):
+
 ```typescript
 async function ejecutarFallbackRPC(vehiculoId: string) {
   const { data } = await supabase.rpc('get_ultima_ubicacion_vehiculo', {
@@ -2473,11 +2649,22 @@ El JWT congelado se almacena en el object store `bgs_tokens` de la base IndexedD
 Object store: bgs_tokens
   Clave: 'frozen_jwt'          (clave fija — siempre hay como máximo una entrada)
   Campos: {
-    key:      'frozen_jwt',
-    jwt:      string,          // JWT completo en texto plano
-    userId:   ID_nombre,       // dueño del token
-    savedAt:  ISOString,       // para debug / auditoría
+    key:        'frozen_jwt',
+    jwt:        string,          // JWT completo en texto plano
+    userId:     ID_nombre,       // dueño del token
+    savedAt:    ISOString,       // para debug / auditoría
+    expires_at: ISOString,       // TTL estricto — ver abajo
   }
+```
+
+**TTL estricto del JWT congelado:**
+El campo `expires_at` del registro se calcula como el **mínimo** entre la expiración
+natural del JWT y `savedAt + 48 horas`. Esto garantiza que, si la tablet permanece
+apagada o sin red durante días, el JWT congelado no siga siendo válido indefinidamente.
+
+```
+expires_at = MIN(jwt.exp * 1000,   // expiración natural del token (epoch ms)
+                 savedAt + 48h)     // cota absoluta de seguridad
 ```
 
 ### Comportamiento
@@ -2486,7 +2673,10 @@ Object store: bgs_tokens
 congelarJwt(jwt, userId):  [async]
   1. frozenUserId = userId     (Zustand en memoria — solo para el banner)
   2. hasFrozenJwt = true
-  3. await db.put('bgs_tokens', { key: 'frozen_jwt', jwt, userId, savedAt: NOW() })
+  3. Decodificar jwt para extraer exp (sin verificar firma — solo lectura)
+  4. Calcular expires_at = MIN(exp * 1000, Date.now() + 48 * 3600 * 1000)
+  5. await db.put('bgs_tokens', { key: 'frozen_jwt', jwt, userId, savedAt: NOW(),
+                                  expires_at: new Date(expires_at).toISOString() })
      ← IndexedDB: accesible tanto desde Main Thread como desde SW
 
 liberarJwt():  [async]
@@ -2497,7 +2687,11 @@ liberarJwt():  [async]
 
 getFrozenJwt():  [async — llamado exclusivamente por el SW]
   1. const record = await db.get('bgs_tokens', 'frozen_jwt')
-  2. return record?.jwt ?? null
+  2. if (!record) return null
+  3. if (new Date(record.expires_at) <= new Date()):
+       await db.delete('bgs_tokens', 'frozen_jwt')   // purgar entrada expirada
+       return null
+  4. return record.jwt
 ```
 
 ### Acceso desde el Service Worker
@@ -2548,18 +2742,61 @@ self.addEventListener('sync', async (event) => {
 > Esto elimina la necesidad de instanciar un nuevo `createClient` por mutación.
 
 ```typescript
+interface SessionEntry {
+  accessToken:  string       // JWT de acceso actual
+  refreshToken: string       // token de refresco de Supabase Auth
+  expiresAt:    number       // Unix epoch ms — cuando expira el accessToken
+}
+
 interface UseAuthStore {
-  // Mapa de sesiones activas: { ID_nombre → JWT }
-  jwtMap:   Record<ID_nombre, string>
+  // Mapa de sesiones activas: { ID_nombre → SessionEntry }
+  sessionMap:  Record<ID_nombre, SessionEntry>
 
   // Rol activo del usuario "principal" de la sesión actual del terminal
   // (usado solo para navegación y permisos de UI — no para mutaciones)
   rolActivo: string | null
 
-  addJwt(id: ID_nombre, jwt: string): void
-  getJwtFor(id: ID_nombre): string | null
+  addJwt(id: ID_nombre, accessToken: string, refreshToken: string, expiresAt: number): void
+  // getJwtFor es async: rota silenciosamente si el token expira en < 5 min
+  getJwtFor(id: ID_nombre): Promise<string | null>
   removeJwt(id: ID_nombre): void
   clearJwt(): void
+}
+```
+
+**Rotación Silenciosa — implementación de `getJwtFor`:**
+
+```typescript
+const REFRESH_MARGIN_MS = 5 * 60 * 1000   // 5 minutos en ms
+
+async function getJwtFor(id: ID_nombre): Promise<string | null> {
+  const entry = useAuthStore.getState().sessionMap[id]
+  if (!entry) return null
+
+  const ahoraMs = Date.now()
+  if (entry.expiresAt - ahoraMs > REFRESH_MARGIN_MS) {
+    // Token válido con margen suficiente — devolverlo sin rota
+    return entry.accessToken
+  }
+
+  // Token a menos de 5 minutos de expirar → refrescar silenciosamente
+  const { data, error } = await supabase.auth.refreshSession({
+    refresh_token: entry.refreshToken,
+  })
+  if (error || !data.session) {
+    // Refresco fallido — devolver el token antiguo (puede fallar en el servidor con 401)
+    console.warn(`[useAuthStore] refresh fallido para ${id}:`, error?.message)
+    return entry.accessToken
+  }
+
+  // Actualizar el mapa con el nuevo par de tokens
+  useAuthStore.getState().addJwt(
+    id,
+    data.session.access_token,
+    data.session.refresh_token,
+    data.session.expires_at! * 1000   // Supabase devuelve epoch en segundos
+  )
+  return data.session.access_token
 }
 ```
 
@@ -2578,7 +2815,8 @@ let _ejecutorIdActual: string | null = null
 const customFetch: typeof fetch = async (url, options = {}) => {
   const ejecutorId = _ejecutorIdActual
   if (ejecutorId) {
-    const jwt = useAuthStore.getState().getJwtFor(ejecutorId)
+    // getJwtFor es async: rota silenciosamente el token si está próximo a expirar
+    const jwt = await useAuthStore.getState().getJwtFor(ejecutorId)
     if (!jwt) throw new Error(`jwt_no_disponible: ${ejecutorId}`)
     options.headers = {
       ...options.headers,
@@ -2658,9 +2896,10 @@ de UUID de petición (ver `logic.md §34.6`).
 | INSERT / UPDATE / DELETE | `conEjecutor(ejecutorId, () => supabase.from(...).op(...))` |
 | Edge Functions | `conEjecutor(ejecutorId, () => supabase.functions.invoke(...))` |
 | Cola offline | JWT congelado en payload; reconstruido con `addJwt` temporal antes de drenar |
-| Expiración de JWT | `getJwtFor()` devuelve `null` → throw `'jwt_expirado'`, forzar re-login |
+| Rotación silenciosa | `getJwtFor()` es async; si el token expira en < 5 min rota automáticamente y devuelve el nuevo JWT antes de la petición. El caller no necesita saber que hubo rotación |
+| Expiración total | Si `refreshSession` falla también, `getJwtFor()` devuelve el token antiguo; el servidor responderá 401 y la capa de error forzará re-login |
 
-### Stores: `useAuthStore` (Zustand + persist en sessionStorage)
+### Stores: `useAuthStore` (Zustand + persist en IndexedDB — ver §15 Persistencia Asíncrona)
 
 ### Dependencias: ninguna (store primitivo)
 
@@ -2975,6 +3214,7 @@ function usePdfGenerator() {
 | B — Edge Function `generar_pdf_server` | Worker bloqueado por CSP o fallo en runtime | `{ signed_url }` | `window.open(signed_url)` o `<a href={signed_url} download>` |
 
 **Edge Function `generar_pdf_server`:**
+
 - Recibe `{ docDefinition: object, filename: string }` en el body.
 - Genera el PDF con pdfMake en Deno (entorno sin restricciones CSP).
 - Sube el PDF al bucket de Supabase Storage (`pdfs_temporales/`).
@@ -2983,12 +3223,102 @@ function usePdfGenerator() {
   (TTL de 10 minutos para evitar acumulación).
 
 **Reglas:**
+
 - Prohibido llamar a `pdfMake.createPdf()` directamente desde cualquier componente o hook del Main Thread.
 - El worker recibe el árbol de datos JSON del documento (`docDefinition`) y devuelve un `Blob`.
 - El componente receptor del `Blob` puede abrirlo con `URL.createObjectURL` o descargarlo.
 - El componente receptor de `{ signed_url }` debe abrir/descargar desde la URL firmada directamente.
 - El caller no necesita conocer qué ruta se usó — el comportamiento de descarga/apertura
   se adapta comprobando si el resultado es `Blob` (`instanceof Blob`) o tiene `signed_url`.
+
+### Persistencia Asíncrona de Zustand — adaptador idb-keyval
+
+El middleware `persist` de Zustand se configura con un **adaptador asíncrono basado
+en IndexedDB** (librería `idb-keyval`). Esto saca la serialización de los stores del
+hilo principal, evita el bloqueo del Main Thread en stores con payload grande
+(sessionMap de tokens, cola de mutaciones) y garantiza la misma base de persistencia
+que el resto del sistema offline-first.
+
+```typescript
+import { get, set, del } from 'idb-keyval'
+
+// Adaptador idb-keyval para Zustand persist middleware
+const idbStorage = {
+  getItem: (name: string) => get(name),
+  setItem: (name: string, value: string) => set(name, value),
+  removeItem: (name: string) => del(name),
+}
+
+// Ejemplo: useAuthStore con persist asíncrono
+export const useAuthStore = create(
+  persist(
+    (set, get) => ({ /* ...state... */ }),
+    {
+      name:    'u24_auth',
+      storage: createJSONStorage(() => idbStorage),
+    }
+  )
+)
+```
+
+**Política de persistencia por store:**
+
+| Store | Motor de persistencia | Motivo |
+|---|---|---|
+| `useAuthStore` | IndexedDB (idb-keyval) | sessionMap con tokens — no en localStorage |
+| `useTerminalStore` | IndexedDB (idb-keyval) | Estado de turno — sobrevive recargas |
+| `useIdleTimeout` | IndexedDB (idb-keyval) | `ultimoEventoInteraccion` epoch |
+| `useInventarioStore` (`stock_real_local`) | **Sin persist** (en memoria) | Revertible; no persistir estado huérfano |
+| `useBandejasStore` | **Sin persist** | Rehidratado desde Supabase al reconectar |
+| `useBackgroundSyncStore` | **Sin persist** (JWT en IndexedDB directamente) | Ver §17 |
+
+**Nota de migración:** cualquier store que antes usara `{ storage: createJSONStorage(() => localStorage) }`
+debe migrar al adaptador idb-keyval. `localStorage` queda reservado únicamente para
+la clave HMAC diaria de modo degradado y para el token precargado de turno siguiente
+(`u24_offline_session`, `u24_offline_session_next:{id}`).
+
+---
+
+### Single Source of Truth — TanStack Query + Zustand
+
+**Responsabilidades:**
+
+| Capa | Gestiona | Ejemplos |
+|---|---|---|
+| **TanStack Query** | Datos de negocio sincronizados con BBDD | Inventario (stock real), Doc-1 (asistencias leídas), listas de DRP, dotaciones |
+| **Zustand** | Estado de UI y hardware | JWT, estado de turno, GPS, idle timeout, bandejas en tiempo real |
+
+**Integración Realtime → TanStack Query:**
+
+Los handlers de Supabase Realtime para datos de negocio **no escriben directamente
+en Zustand**. En su lugar, invocan `queryClient.setQueryData()` para actualizar
+la caché de TanStack Query, que notifica a todos los componentes suscritos:
+
+```typescript
+// useInventario — handler Realtime actualiza TanStack Query, no Zustand
+supabase.channel(`inventario:${locationId}`)
+  .on('postgres_changes', { event: 'UPDATE', table: 'stock_items' }, (payload) => {
+    const { item_id, stock_real: server_value } = payload.new
+
+    queryClient.setQueryData(
+      ['stock_items', locationId],
+      (prev: StockItem[] | undefined) =>
+        prev?.map(item =>
+          item.item_id === item_id
+            ? { ...item, stock_real: server_value }
+            : item
+        ) ?? []
+    )
+    // Reconciliación del delta optimista en Zustand (si sync_pending activo):
+    // useInventarioStore.reconciliarDelta(item_id, server_value)  ← solo el delta local
+  })
+  .subscribe()
+```
+
+**Zustand mantiene únicamente** el `stock_real_local` (delta optimista) y la bandera
+`sync_pending`. La fuente de verdad del `stock_real` vive en TanStack Query.
+
+---
 
 ### Bloqueo de Persistencia de Almacenamiento — `navigator.storage.persist()`
 
@@ -3000,18 +3330,79 @@ de la caché LRU de IndexedDB/localStorage bajo presión de almacenamiento del S
 useEffect(() => {
   if (navigator.storage?.persist) {
     navigator.storage.persist().then((granted) => {
+      useTerminalStore.getState().setStoragePersisted(granted)
       if (!granted) {
         console.warn('[U24] storage.persist() denegado — almacenamiento offline vulnerable a evicción')
+        // Notificar a roles de supervisión con banner crítico (ver abajo)
       }
     })
   }
 }, [])
 ```
 
+**Banner de alerta crítico si `granted === false`:**
+
+Si `navigator.storage.persist()` devuelve `false`, se muestra un banner persistente
+visible **solo a roles `gerencia` y `coordinación`**:
+
+```
+⚠️ ALERTA: Este terminal no garantiza persistencia de almacenamiento offline.
+   El sistema operativo puede eliminar datos pendientes bajo presión de memoria.
+   Este terminal NO es apto para operar sin conexión a red.
+   Contacte con soporte técnico para instalar la PWA correctamente.
+```
+
+El banner no es dismissible y persiste durante toda la sesión. El personal operativo
+(`tes`, `due`, `médico`) no lo ve — el aviso es para quienes toman decisiones de
+despliegue de hardware.
+
 **Notas:**
+
 - En Chromium/Android la solicitud se concede automáticamente si el sitio está
   instalado como PWA o si el usuario ha interactuado suficientemente con él.
 - Si se deniega, el sistema sigue funcionando; el riesgo es que el SO expulse
   IndexedDB bajo presión extrema de memoria, perdiendo la cola de mutaciones offline.
 - El resultado (`granted`) se expone como `useTerminalStore.storagePersisted`
   para que el coordinador pueda ver el estado en `ajustes_terminal`.
+
+---
+
+### Mitigación de Reloj Local — `time_offset`
+
+**Problema:** en tablets de flota el reloj del sistema puede estar desfasado minutos
+o incluso horas respecto al tiempo real. Las timestamps generadas offline con
+`Date.now()` pueden ser incorrectas, afectando expiración de sesiones y orden de eventos.
+
+**Solución:** al arrancar la app y al recuperar conexión, calcular un `time_offset`
+entre el reloj local y el servidor:
+
+```typescript
+// useTimeSync — cálculo único al arrancar online
+async function sincronizarReloj(): Promise<void> {
+  const t0 = Date.now()
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/`, { method: 'HEAD' })
+  const t1 = Date.now()
+
+  const serverDateStr = response.headers.get('Date')
+  if (!serverDateStr) return
+
+  const serverMs    = new Date(serverDateStr).getTime()
+  const latencyMs   = (t1 - t0) / 2      // estimación de latencia de red
+  const localMs     = t0 + latencyMs
+  const offsetMs    = serverMs - localMs
+
+  useTerminalStore.getState().setTimeOffset(offsetMs)
+}
+
+// Función helper para captura de timestamps corregidos
+export function ahora(): number {
+  return Date.now() + (useTerminalStore.getState().timeOffset ?? 0)
+}
+```
+
+**Uso:**
+- `ahora()` reemplaza a `Date.now()` en **toda captura de timestamp offline**
+  (eventos Doc-8, timestamps de mutaciones encoladas, idle timeout `ultimoEventoInteraccion`).
+- `time_offset` se persiste en `useTerminalStore` (IndexedDB) y se recalcula al
+  recuperar conectividad.
+- Si la app está offline desde el arranque, `time_offset = 0` hasta que haya red.
