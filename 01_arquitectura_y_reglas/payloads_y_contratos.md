@@ -89,7 +89,7 @@ interface PayloadDoc7 {
   sistema_afectado: string;
   descripcion_detallada: string;
   timestamp_generacion: string; // Hora real del reporte.
-  // Las imágenes adjuntas en Base64 no deben superar los 500KB para no colapsar IndexedDB.
+  // Las imágenes se comprimen con Canvas API → WebP Blob antes de persistirse en IndexedDB. Base64 prohibido. Ver ADR-002.
 }
 ```
 

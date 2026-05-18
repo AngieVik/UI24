@@ -32,13 +32,22 @@ Ninguna política SQL se toca.
 
 ### Dónde se generan los claims
 
-Supabase Auth Hook (Edge Function `set_claims`) ejecutado al emitir cada JWT.
-Lee el rol del usuario desde la tabla `user_profiles` y mapea los claims correspondientes.
+Supabase Auth Hook (Edge Function `set_claims`) ejecutado al emitir cada JWT (login + refresh).
+Lee `rol` y `activo` del empleado desde `fichas_empleados` y mapea los claims correspondientes.
+Si `activo = false`, devuelve claims vacíos — acceso denegado sin revocar el JWT.
 
 ```typescript
-// Ejemplo conceptual del hook
-const claims = buildClaims(userRole)
-// Resultado embebido en el JWT como: { app_claims: { can_edit_inventory: true, ... } }
+// Pseudocódigo del hook (Deno Edge Function — auth.hook.jwt_claims)
+const { rol, activo } = await supabaseAdmin
+  .from('fichas_empleados')
+  .select('rol, activo')
+  .eq('auth_user_id', authUserId)
+  .single()
+
+if (!activo) return { app_claims: {} } // empleado desactivado — sin claims
+
+const claims = buildClaims(rol)
+// Resultado: { app_claims: { can_edit_inventory: true, can_view_inventory: true, ... } }
 ```
 
 ---
@@ -81,6 +90,8 @@ const claims = buildClaims(userRole)
 | `medico` | Operativa clínica. Doc-3 y DRP. |
 | `rrhh` | Gestión de personal, turnos, tablón y vacaciones. |
 | `invitado` | Asignado automáticamente por cookie de emergencia. Solo Check-in. Sin claims operativos. |
+
+> **Nota:** Los roles `due`, `medico`, `responsable_flota` y `responsable_logistica` son roles válidos del sistema cubiertos por el catálogo de claims y las policies RLS. No tienen usuario demo (seed) inicial — se asignan manualmente en producción según la estructura de cada base.
 
 ---
 

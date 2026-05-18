@@ -1,0 +1,930 @@
+# RLS, RPCs y Edge Functions — Proyecto U24
+
+> Documento de Fase 1 (2026-05-18). Fuente de verdad para todas las policies RLS, funciones RPC PostgreSQL y Edge Functions de seguridad.
+> La migración definitiva vive en `supabase/migrations/0001_init.sql`.
+> Las Edge Functions viven en `supabase/functions/`.
+
+---
+
+## 1. Convenciones
+
+### Helper de claims (PostgreSQL)
+
+Para mantener las policies legibles se define una función auxiliar:
+
+```sql
+CREATE OR REPLACE FUNCTION claim(key text) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY INVOKER
+  AS $$ SELECT (auth.jwt() -> 'app_claims' ->> key)::boolean = true $$;
+```
+
+Las policies usan `claim('can_X')` en lugar del literal completo.
+
+### Tipos de implementación
+
+| Tipo | Cuándo | Cómo |
+|---|---|---|
+| **Policy RLS** | Control de acceso a filas | `CREATE POLICY` — se evalúa en cada query |
+| **PostgreSQL RPC** | Operaciones atómicas en DB (inventario, revocaciones) | `CREATE FUNCTION ... SECURITY DEFINER LANGUAGE plpgsql` |
+| **Edge Function** | Crypto (PBKDF2), Supabase Admin API, lógica multi-paso | Deno/TypeScript en `supabase/functions/` |
+| **Trigger SQL** | Auditoría automática en eventos DB | `CREATE TRIGGER ... AFTER INSERT/UPDATE` |
+
+### RLS habilitado en todas las tablas
+
+```sql
+ALTER TABLE <tabla> ENABLE ROW LEVEL SECURITY;
+ALTER TABLE <tabla> FORCE ROW LEVEL SECURITY;
+```
+
+Tablas sin ninguna policy directa para usuarios JWT (solo modificadas por SECURITY DEFINER): el motor deniega cualquier acceso directo. Las Edge Functions y RPCs con SECURITY DEFINER bypasean RLS.
+
+---
+
+## 2. Policies RLS por tabla
+
+### 2.1 Dominio: Identidad y acceso
+
+#### `fichas_empleados`
+
+```sql
+-- SELECT: solo rrhh y gerencia (can_manage_rrhh los cubre a ambos)
+CREATE POLICY "fichas_select" ON fichas_empleados
+  FOR SELECT USING (claim('can_manage_rrhh'));
+
+-- INSERT: rrhh y gerencia pueden crear fichas
+CREATE POLICY "fichas_insert" ON fichas_empleados
+  FOR INSERT WITH CHECK (claim('can_manage_rrhh'));
+
+-- UPDATE: rrhh y gerencia (cambio de rol dispara trigger auditoria_rbac)
+CREATE POLICY "fichas_update" ON fichas_empleados
+  FOR UPDATE USING (claim('can_manage_rrhh'));
+
+-- DELETE: prohibido (soft delete via activo = false)
+-- Sin policy → nadie puede DELETE directo
+```
+
+#### `galletas_terminales`
+
+```sql
+-- SELECT: coordinacion y gerencia pueden listar terminales registrados
+CREATE POLICY "galletas_select" ON galletas_terminales
+  FOR SELECT USING (claim('can_manage_rbac'));
+
+-- INSERT/UPDATE: solo via ef_consumir_pin / rpc_revocar_y_reemitir_galleta (SECURITY DEFINER)
+-- Sin policies directas para JWT users
+
+-- DELETE: prohibido incondicional (soft delete via revocado_at)
+CREATE POLICY "galletas_no_delete" ON galletas_terminales
+  FOR DELETE USING (FALSE);
+```
+
+#### `sesiones_emergencia`
+
+```sql
+-- SELECT: quienes pueden generar tokens (coordinacion y gerencia)
+CREATE POLICY "sesiones_em_select" ON sesiones_emergencia
+  FOR SELECT USING (claim('can_create_emergency_token'));
+
+-- INSERT/UPDATE: solo via ef_generar_token_emergencia / ef_consumir_pin (SECURITY DEFINER)
+
+-- UPDATE y DELETE: prohibidos incondicionales
+CREATE POLICY "sesiones_em_no_update" ON sesiones_emergencia
+  FOR UPDATE USING (FALSE);
+CREATE POLICY "sesiones_em_no_delete" ON sesiones_emergencia
+  FOR DELETE USING (FALSE);
+```
+
+#### `solicitudes_desbloqueo`
+
+```sql
+-- SELECT: coordinacion y gerencia revisan solicitudes pendientes
+CREATE POLICY "solicitudes_select" ON solicitudes_desbloqueo
+  FOR SELECT USING (claim('can_manage_rbac'));
+
+-- INSERT: via rpc_solicitar_desbloqueo (SECURITY DEFINER, callable por anon)
+-- El terminal en estado_0 no tiene JWT → no puede INSERT directo
+
+-- UPDATE: coordinacion y gerencia para aprobar/rechazar
+CREATE POLICY "solicitudes_update" ON solicitudes_desbloqueo
+  FOR UPDATE USING (claim('can_manage_rbac'));
+
+-- DELETE: prohibido (el cron cambia estado a 'expirada', nunca elimina)
+```
+
+#### `auditoria_rbac`
+
+```sql
+-- SELECT: coordinacion y gerencia pueden auditar
+CREATE POLICY "audit_rbac_select" ON auditoria_rbac
+  FOR SELECT USING (claim('can_manage_rbac'));
+
+-- INSERT: solo triggers SQL y Edge Functions SECURITY DEFINER
+
+-- UPDATE y DELETE: prohibidos incondicionales
+CREATE POLICY "audit_rbac_no_update" ON auditoria_rbac
+  FOR UPDATE USING (FALSE);
+CREATE POLICY "audit_rbac_no_delete" ON auditoria_rbac
+  FOR DELETE USING (FALSE);
+```
+
+---
+
+### 2.2 Dominio: Vehículos y turnos
+
+#### `vehiculos`
+
+```sql
+-- SELECT: todos los autenticados (parque visible para cualquier rol operativo)
+CREATE POLICY "vehiculos_select" ON vehiculos
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+
+-- INSERT: solo can_manage_fleet (incorporar vehículo nuevo)
+CREATE POLICY "vehiculos_insert" ON vehiculos
+  FOR INSERT WITH CHECK (claim('can_manage_fleet'));
+
+-- UPDATE: cualquier autenticado (GPS updates frecuentes desde terminal)
+-- Los cambios a condicion_tecnica y tipo van siempre via RPC SECURITY DEFINER
+CREATE POLICY "vehiculos_update" ON vehiculos
+  FOR UPDATE USING (auth.uid() IS NOT NULL);
+
+-- DELETE: can_manage_fleet (baja de vehículo)
+CREATE POLICY "vehiculos_delete" ON vehiculos
+  FOR DELETE USING (claim('can_manage_fleet'));
+```
+
+#### `activaciones_vehiculo`
+
+```sql
+-- SELECT/INSERT/UPDATE: cualquier autenticado (apertura/cierre de turno)
+CREATE POLICY "activaciones_select" ON activaciones_vehiculo
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "activaciones_insert" ON activaciones_vehiculo
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "activaciones_update" ON activaciones_vehiculo
+  FOR UPDATE USING (auth.uid() IS NOT NULL);
+-- DELETE: prohibido (los turnos se cierran, no se eliminan)
+```
+
+#### `eventos_fisicos_vehiculo`
+
+```sql
+-- SELECT: can_manage_fleet
+CREATE POLICY "eventos_fis_select" ON eventos_fisicos_vehiculo
+  FOR SELECT USING (claim('can_manage_fleet'));
+-- INSERT: cualquier autenticado (cualquier rol puede reportar un evento)
+CREATE POLICY "eventos_fis_insert" ON eventos_fisicos_vehiculo
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+-- UPDATE/DELETE: prohibidos (append-only)
+CREATE POLICY "eventos_fis_no_update" ON eventos_fisicos_vehiculo
+  FOR UPDATE USING (FALSE);
+CREATE POLICY "eventos_fis_no_delete" ON eventos_fisicos_vehiculo
+  FOR DELETE USING (FALSE);
+```
+
+---
+
+### 2.3 Dominio: Inventario
+
+```sql
+-- catalogo_items
+CREATE POLICY "cat_select" ON catalogo_items FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "cat_insert" ON catalogo_items FOR INSERT WITH CHECK (claim('can_manage_catalog'));
+CREATE POLICY "cat_update" ON catalogo_items FOR UPDATE USING (claim('can_manage_catalog'));
+CREATE POLICY "cat_delete" ON catalogo_items FOR DELETE USING (claim('can_manage_catalog'));
+
+-- plantillas_stock / plantilla_lineas (mismo patrón)
+CREATE POLICY "plantillas_select" ON plantillas_stock FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "plantillas_insert" ON plantillas_stock FOR INSERT WITH CHECK (claim('can_manage_templates'));
+CREATE POLICY "plantillas_update" ON plantillas_stock FOR UPDATE USING (claim('can_manage_templates'));
+CREATE POLICY "plantillas_delete" ON plantillas_stock FOR DELETE USING (claim('can_manage_templates'));
+-- Aplicar el mismo patrón a plantilla_lineas
+
+-- inventario_vehiculo / inventario_base: solo lectura directa; escritura via RPC atómica
+CREATE POLICY "invv_select" ON inventario_vehiculo FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "invb_select" ON inventario_base FOR SELECT USING (claim('can_view_inventory'));
+-- Sin INSERT/UPDATE/DELETE policies → solo SECURITY DEFINER RPCs pueden modificar
+
+-- inventario_en_transito
+CREATE POLICY "invt_select" ON inventario_en_transito FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "invt_insert" ON inventario_en_transito FOR INSERT WITH CHECK (claim('can_edit_inventory'));
+CREATE POLICY "invt_update" ON inventario_en_transito FOR UPDATE USING (claim('can_edit_inventory'));
+
+-- locations
+CREATE POLICY "loc_select" ON locations FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "loc_insert" ON locations FOR INSERT WITH CHECK (claim('can_edit_inventory'));
+CREATE POLICY "loc_update" ON locations FOR UPDATE USING (claim('can_edit_inventory'));
+CREATE POLICY "loc_delete" ON locations FOR DELETE USING (claim('can_edit_inventory'));
+
+-- auditoria_inventario
+CREATE POLICY "auditinv_select" ON auditoria_inventario FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "auditinv_no_update" ON auditoria_inventario FOR UPDATE USING (FALSE);
+CREATE POLICY "auditinv_no_delete" ON auditoria_inventario FOR DELETE USING (FALSE);
+-- INSERT: solo RPCs SECURITY DEFINER
+```
+
+---
+
+### 2.4 Dominio: Documentos operativos
+
+#### `doc1_asistencias` (append-only, inmutable)
+
+```sql
+CREATE POLICY "doc1_select" ON doc1_asistencias
+  FOR SELECT USING (claim('can_view_clinical_docs'));
+CREATE POLICY "doc1_insert" ON doc1_asistencias
+  FOR INSERT WITH CHECK (
+    claim('can_create_clinical_docs') OR claim('can_view_drp')
+  );
+CREATE POLICY "doc1_no_update" ON doc1_asistencias FOR UPDATE USING (FALSE);
+CREATE POLICY "doc1_no_delete" ON doc1_asistencias FOR DELETE USING (FALSE);
+```
+
+#### `doc2_informes_svb` y `doc4_consentimientos` / `doc5_rechazos_alta`
+
+```sql
+-- SELECT
+CREATE POLICY "doc2_select" ON doc2_informes_svb
+  FOR SELECT USING (claim('can_view_clinical_docs'));
+
+-- INSERT: creador registra auth_uid_redactor = auth.uid()
+CREATE POLICY "doc2_insert" ON doc2_informes_svb
+  FOR INSERT WITH CHECK (claim('can_create_clinical_docs'));
+
+-- UPDATE: solo el creador mientras el documento está en borrador
+CREATE POLICY "doc2_update" ON doc2_informes_svb
+  FOR UPDATE USING (
+    estado = 'borrador' AND auth.uid() = auth_uid_redactor
+  );
+
+-- DELETE: can_manage_drp o gerencia (via can_manage_drp que gerencia posee)
+CREATE POLICY "doc2_delete" ON doc2_informes_svb
+  FOR DELETE USING (claim('can_manage_drp'));
+
+-- Aplicar el mismo patrón a doc4_consentimientos y doc5_rechazos_alta
+-- (UPDATE condiciona firmado = false en lugar de estado = 'borrador')
+```
+
+#### `doc3_informes_sva`
+
+```sql
+-- Igual que doc2 excepto INSERT: can_create_clinical_docs_sva
+CREATE POLICY "doc3_insert" ON doc3_informes_sva
+  FOR INSERT WITH CHECK (claim('can_create_clinical_docs_sva'));
+-- SELECT, UPDATE (por creador en borrador), DELETE (can_manage_drp): igual que doc2
+```
+
+#### `doc6_deducciones`
+
+```sql
+CREATE POLICY "doc6_select" ON doc6_deducciones FOR SELECT USING (claim('can_view_inventory'));
+-- INSERT/UPDATE: solo RPC atómica SECURITY DEFINER
+CREATE POLICY "doc6_no_update" ON doc6_deducciones FOR UPDATE USING (FALSE);
+```
+
+#### `doc7_averias`
+
+```sql
+CREATE POLICY "doc7_select" ON doc7_averias FOR SELECT USING (claim('can_manage_fleet'));
+-- INSERT: cualquier autenticado puede reportar una avería
+CREATE POLICY "doc7_insert" ON doc7_averias FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "doc7_update" ON doc7_averias FOR UPDATE USING (claim('can_manage_fleet'));
+CREATE POLICY "doc7_delete" ON doc7_averias FOR DELETE USING (claim('can_manage_fleet'));
+```
+
+#### `doc8_partes_trabajo` / `doc9_entradas_almacen` / `doc10_transferencias`
+
+```sql
+-- doc8: visible a flota y rrhh; inserción y actualización por cualquier autenticado
+CREATE POLICY "doc8_select" ON doc8_partes_trabajo
+  FOR SELECT USING (claim('can_manage_fleet') OR claim('can_manage_rrhh'));
+CREATE POLICY "doc8_insert" ON doc8_partes_trabajo FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "doc8_update" ON doc8_partes_trabajo FOR UPDATE USING (auth.uid() IS NOT NULL);
+
+-- doc9 / doc10: operaciones de logística
+CREATE POLICY "doc9_select" ON doc9_entradas_almacen FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "doc9_insert" ON doc9_entradas_almacen FOR INSERT WITH CHECK (claim('can_edit_inventory'));
+CREATE POLICY "doc9_update" ON doc9_entradas_almacen FOR UPDATE USING (claim('can_edit_inventory'));
+
+CREATE POLICY "doc10_select" ON doc10_transferencias FOR SELECT USING (claim('can_view_inventory'));
+CREATE POLICY "doc10_insert" ON doc10_transferencias FOR INSERT WITH CHECK (claim('can_edit_inventory'));
+CREATE POLICY "doc10_update" ON doc10_transferencias FOR UPDATE USING (claim('can_edit_inventory'));
+```
+
+#### `doc11_avisos`
+
+```sql
+-- SELECT: todos los autenticados (avisos críticos visibles para todo el personal)
+CREATE POLICY "doc11_select" ON doc11_avisos FOR SELECT USING (auth.uid() IS NOT NULL);
+-- INSERT: coordinacion, gerencia, rrhh
+CREATE POLICY "doc11_insert" ON doc11_avisos
+  FOR INSERT WITH CHECK (claim('can_manage_rbac') OR claim('can_manage_rrhh'));
+-- UPDATE de leido_por: via rpc_marcar_aviso_leido (SECURITY DEFINER) — no policy directa
+-- UPDATE general (editar texto): can_manage_rbac
+CREATE POLICY "doc11_update" ON doc11_avisos FOR UPDATE USING (claim('can_manage_rbac'));
+CREATE POLICY "doc11_delete" ON doc11_avisos FOR DELETE USING (claim('can_manage_rbac'));
+```
+
+---
+
+### 2.5 Dominio: DRP
+
+```sql
+CREATE POLICY "drp_select" ON drps FOR SELECT USING (claim('can_view_drp'));
+CREATE POLICY "drp_insert" ON drps FOR INSERT WITH CHECK (claim('can_manage_drp'));
+CREATE POLICY "drp_update" ON drps FOR UPDATE USING (claim('can_manage_drp'));
+
+CREATE POLICY "dotaciones_select" ON dotaciones_drp FOR SELECT USING (claim('can_view_drp'));
+CREATE POLICY "dotaciones_insert" ON dotaciones_drp FOR INSERT WITH CHECK (claim('can_manage_drp'));
+CREATE POLICY "dotaciones_update" ON dotaciones_drp FOR UPDATE USING (claim('can_manage_drp'));
+CREATE POLICY "dotaciones_delete" ON dotaciones_drp FOR DELETE USING (claim('can_manage_drp'));
+
+-- drp_personal_a_pie: mismo patrón que dotaciones_drp
+
+CREATE POLICY "mochilas_select" ON mochilas_backpack FOR SELECT USING (claim('can_view_drp'));
+CREATE POLICY "mochilas_insert" ON mochilas_backpack FOR INSERT WITH CHECK (claim('can_manage_drp'));
+CREATE POLICY "mochilas_update" ON mochilas_backpack FOR UPDATE USING (claim('can_manage_drp'));
+```
+
+---
+
+### 2.6 Dominio: Módulos especiales y Comunicación
+
+```sql
+-- PSA / Filiación
+CREATE POLICY "psa_select" ON psa_sesiones FOR SELECT USING (claim('can_use_modules'));
+CREATE POLICY "psa_insert" ON psa_sesiones FOR INSERT WITH CHECK (claim('can_use_modules'));
+CREATE POLICY "psa_update" ON psa_sesiones FOR UPDATE USING (claim('can_use_modules'));
+CREATE POLICY "psa_delete" ON psa_sesiones FOR DELETE USING (claim('can_manage_modules'));
+-- Aplicar mismo patrón a psa_pacientes, filiacion_sesiones, filiacion_pacientes
+
+-- mensajes_bandeja
+CREATE POLICY "bandeja_select" ON mensajes_bandeja FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "bandeja_insert" ON mensajes_bandeja FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "bandeja_update" ON mensajes_bandeja FOR UPDATE USING (auth.uid() IS NOT NULL);
+
+-- tablon_anuncios
+CREATE POLICY "tablon_select" ON tablon_anuncios FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "tablon_insert" ON tablon_anuncios FOR INSERT WITH CHECK (claim('can_manage_rrhh'));
+CREATE POLICY "tablon_update" ON tablon_anuncios FOR UPDATE USING (claim('can_manage_rrhh'));
+CREATE POLICY "tablon_delete" ON tablon_anuncios FOR DELETE USING (claim('can_manage_rrhh'));
+```
+
+---
+
+## 3. Edge Function: `set_claims` (Auth Hook)
+
+**Trigger:** `auth.hook.jwt_claims` — se ejecuta en cada emisión de JWT (login + refresh).
+**Ubicación:** `supabase/functions/set-claims/index.ts`
+
+```typescript
+// Deno Edge Function — Auth Hook
+Deno.serve(async (req) => {
+  const body = await req.json() // { user_id, claims, ... }
+  const authUserId = body.user_id
+
+  const { data: ficha } = await supabaseAdmin
+    .from('fichas_empleados')
+    .select('rol, activo')
+    .eq('auth_user_id', authUserId)
+    .maybeSingle()
+
+  if (!ficha || !ficha.activo) {
+    return new Response(JSON.stringify({ app_claims: {} }), { status: 200 })
+  }
+
+  return new Response(JSON.stringify({ app_claims: buildClaims(ficha.rol) }), { status: 200 })
+})
+
+// Mapa rol → claims. Única fuente de verdad de permisos.
+// Para cambiar qué puede un rol: modificar aquí + nuevo ADR.
+const ROLE_CLAIMS: Record<string, string[]> = {
+  can_view_inventory:           ['logistica', 'responsable_logistica', 'gerencia'],
+  can_edit_inventory:           ['logistica', 'responsable_logistica', 'gerencia'],
+  can_manage_catalog:           ['responsable_logistica', 'gerencia'],
+  can_manage_templates:         ['responsable_logistica', 'gerencia'],
+  can_manage_drp:               ['coordinacion', 'gerencia'],
+  can_view_drp:                 ['tes', 'due', 'medico', 'coordinacion', 'logistica', 'responsable_logistica', 'gerencia'],
+  can_manage_fleet:             ['flota', 'responsable_flota', 'gerencia'],
+  can_edit_maintenance:         ['responsable_flota', 'gerencia'],
+  can_manage_rrhh:              ['rrhh', 'gerencia'],
+  can_manage_rbac:              ['coordinacion', 'gerencia'],
+  can_create_emergency_token:   ['coordinacion', 'gerencia'],
+  can_view_clinical_docs:       ['tes', 'due', 'medico', 'coordinacion', 'gerencia'],
+  can_create_clinical_docs:     ['tes', 'gerencia'],
+  can_create_clinical_docs_sva: ['due', 'medico', 'gerencia'],
+  can_manage_modules:           ['coordinacion', 'gerencia'],
+  can_use_modules:              ['logistica', 'responsable_logistica', 'coordinacion', 'gerencia'],
+}
+
+function buildClaims(rol: string): Record<string, boolean> {
+  return Object.fromEntries(
+    Object.entries(ROLE_CLAIMS).map(([claim, roles]) => [claim, roles.includes(rol)])
+  )
+}
+```
+
+---
+
+## 4. Edge Function: `ef_generar_token_emergencia`
+
+**Auth:** JWT con `can_create_emergency_token`.
+**Body:** `{ tipo: 'permanente' | 'temporal' }`
+**Respuesta exitosa:** `{ pin: string }` — devuelto una sola vez.
+
+```typescript
+// 1. Verificar claim
+if (!jwtClaims.can_create_emergency_token) return 403
+
+// 2. Generar PIN 6 dígitos (criptográficamente seguro)
+const buf = crypto.getRandomValues(new Uint8Array(4))
+const pin = String((new DataView(buf.buffer).getUint32(0) % 900_000) + 100_000)
+
+// 3. Derivar PBKDF2-SHA256 del PIN
+const salt = crypto.getRandomValues(new Uint8Array(32))
+const key = await crypto.subtle.importKey('raw', enc(pin), 'PBKDF2', false, ['deriveBits'])
+const hash = await crypto.subtle.deriveBits(
+  { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 }, key, 256
+)
+
+// 4. Persistir en sesiones_emergencia (service role)
+const expires_at = new Date(Date.now() + 10 * 60 * 1000) // +10 min
+await supabaseAdmin.from('sesiones_emergencia').insert({
+  pin_hash: toHex(hash), pin_salt: toHex(salt),
+  tipo: body.tipo, id_nombre_emisor: callerIdNombre,
+  expires_at, consumido_at: null,
+})
+
+// 5. Auditar
+await insertAudit('sesion_emergencia_generada', callerIdNombre, null,
+  { tipo: body.tipo, expires_at })
+
+// 6. Devolver PIN (única vez — no se almacena en claro)
+return { pin }
+```
+
+> `callerIdNombre` se obtiene buscando `fichas_empleados.id_nombre WHERE auth_user_id = auth.uid()`.
+
+---
+
+## 5. Edge Function: `ef_consumir_pin`
+
+**Auth:** anon o auth — no requiere claim.
+**Body:** `{ pin: string, id_terminal: string }`
+**Respuesta exitosa:** `{ tipo: 'permanente' | 'temporal', authorized: true }`
+
+```typescript
+// 1. Obtener sesiones no consumidas y no expiradas
+const { data: sesiones } = await supabaseAdmin
+  .from('sesiones_emergencia')
+  .select('id_sesion, pin_hash, pin_salt, tipo')
+  .is('consumido_at', null)
+  .gt('expires_at', new Date().toISOString())
+
+if (!sesiones?.length) return { error: 'not_found' } // 401 tras sanitizar
+
+// 2. Verificar PBKDF2 (esperado < 5 sesiones activas en producción)
+let match: SesionEmergencia | null = null
+for (const s of sesiones) {
+  const salt = fromHex(s.pin_salt)
+  const key = await crypto.subtle.importKey('raw', enc(body.pin), 'PBKDF2', false, ['deriveBits'])
+  const hash = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 }, key, 256
+  )
+  if (toHex(hash) === s.pin_hash) { match = s; break }
+}
+
+if (!match) {
+  await insertAudit('fallo_autenticacion', null, body.id_terminal, { razon: 'pin_invalido' })
+  return 401
+}
+
+// 3. Marcar consumido (atómico — previene doble uso)
+await supabaseAdmin.from('sesiones_emergencia')
+  .update({ consumido_at: new Date() })
+  .eq('id_sesion', match.id_sesion)
+  .is('consumido_at', null) // check de integridad
+
+// 4. Si tipo === 'permanente' → crear galleta permanente
+if (match.tipo === 'permanente') {
+  await supabaseAdmin.from('galletas_terminales').insert({
+    id_terminal: body.id_terminal, tipo: 'permanente',
+    id_nombre: null, // terminal sin usuario asignado inicialmente
+    created_at: new Date(), expires_at: null, revocado_at: null,
+  })
+  await insertAudit('galleta_emitida', null, body.id_terminal, { via: 'pin_permanente' })
+}
+// Si tipo === 'temporal' → no se crea galleta; el terminal entra en estado_1 hasta
+// que se cierre la sesión o se expire. No queda rastro permanente en galletas_terminales.
+
+await insertAudit('sesion_emergencia_consumida', null, body.id_terminal, { tipo: match.tipo })
+return { tipo: match.tipo, authorized: true }
+```
+
+> Rate limiting recomendado: max 5 intentos por `id_terminal` en 10 min (configurar en API Gateway o middleware).
+
+---
+
+## 6. RPC PostgreSQL: `rpc_revocar_y_reemitir_galleta`
+
+**Tipo:** `CREATE FUNCTION ... SECURITY DEFINER LANGUAGE plpgsql`
+**Parámetros:** `p_id_terminal text, p_id_nombre_nuevo text, p_tipo 'permanente'|'temporal'`
+**Llamada via:** `supabase.rpc('rpc_revocar_y_reemitir_galleta', { ... })`
+**Quién la llama:** coordinacion o gerencia (verificar `can_manage_rbac` dentro de la función).
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_revocar_y_reemitir_galleta(
+  p_id_terminal text,
+  p_id_nombre_nuevo text,
+  p_tipo text  -- 'permanente' | 'temporal'
+) RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_caller_claim boolean;
+  v_nueva_galleta uuid;
+BEGIN
+  -- Verificar claim del caller
+  v_caller_claim := claim('can_manage_rbac');
+  IF NOT v_caller_claim THEN
+    RAISE EXCEPTION 'insufficient_privilege';
+  END IF;
+
+  -- Soft delete de la galleta activa para este terminal
+  UPDATE galletas_terminales
+    SET revocado_at = NOW()
+  WHERE id_terminal = p_id_terminal
+    AND revocado_at IS NULL;
+
+  -- Insertar nueva galleta (partial unique index lo permite)
+  INSERT INTO galletas_terminales (id_terminal, tipo, id_nombre, created_at, expires_at, revocado_at)
+    VALUES (p_id_terminal, p_tipo, p_id_nombre_nuevo, NOW(), NULL, NULL)
+  RETURNING id_galleta INTO v_nueva_galleta;
+
+  -- Auditar (dos eventos en una sola transacción)
+  INSERT INTO auditoria_rbac (tipo_evento, id_nombre, id_terminal, metadata, created_at)
+    VALUES
+      ('galleta_revocada', p_id_nombre_nuevo, p_id_terminal,
+       jsonb_build_object('motivo', 'revocacion_manual'), NOW()),
+      ('galleta_emitida', p_id_nombre_nuevo, p_id_terminal,
+       jsonb_build_object('tipo', p_tipo), NOW());
+
+  RETURN v_nueva_galleta;
+END;
+$$;
+```
+
+---
+
+## 7. Edge Function: `ef_revocar_sesion_usuario` (Gap F2)
+
+**Auth:** JWT con `can_manage_rbac`.
+**Body:** `{ id_nombre: string }`
+**Efecto:** invalida todos los JWT activos del usuario + registra evento.
+
+```typescript
+// 1. Verificar claim
+if (!jwtClaims.can_manage_rbac) return 403
+
+// 2. Obtener auth_user_id del empleado
+const { data: ficha } = await supabaseAdmin
+  .from('fichas_empleados')
+  .select('auth_user_id')
+  .eq('id_nombre', body.id_nombre)
+  .single()
+
+if (!ficha) return { error: 'not_found' }
+
+// 3. Invalidar todos los JWT activos del usuario
+// signOut 'global' revoca todos los refresh tokens — el access token expira según TTL
+await supabaseAdmin.auth.admin.signOut(ficha.auth_user_id, 'global')
+
+// 4. Registrar evento en auditoria_rbac
+await insertAudit('logout_forzado', body.id_nombre, null, {
+  ejecutado_por: callerIdNombre,
+  nota: 'Sesión revocada por administrador. Galletas de terminal no alteradas.'
+})
+
+// Nota de diseño: las galletas permanentes del hardware NO se revocan.
+// Garantiza que los terminales de las ambulancias sigan operativos
+// incluso si el usuario asignado es expulsado del sistema.
+return { success: true }
+```
+
+---
+
+## 8. Edge Function: `ef_reset_password` (Gap F1)
+
+**Auth:** JWT con `can_manage_rrhh`.
+**Body:** `{ id_nombre: string, nueva_password: string }`
+**Efecto:** fija la nueva contraseña directamente. El empleado se entera por el admin presencialmente.
+
+```typescript
+// 1. Verificar claim
+if (!jwtClaims.can_manage_rrhh) return 403
+
+// 2. Obtener auth_user_id
+const { data: ficha } = await supabaseAdmin
+  .from('fichas_empleados')
+  .select('auth_user_id')
+  .eq('id_nombre', body.id_nombre)
+  .single()
+
+// 3. Cambiar contraseña via Admin API
+await supabaseAdmin.auth.admin.updateUserById(ficha.auth_user_id, {
+  password: body.nueva_password
+})
+
+// 4. Auditar
+await insertAudit('cambio_password', body.id_nombre, null, {
+  ejecutado_por: callerIdNombre
+})
+
+// Nota: el u24_offline_session del empleado en IndexedDB queda stale.
+// La próxima vez que haga login online, se reescribirá con el nuevo hash.
+// En el ínterin, el acceso offline fallará (comportamiento deseado tras reset).
+return { success: true }
+```
+
+> **Validación de contraseña:** el cliente debe exigir mínimo 8 caracteres. El backend no impone política adicional — la responsabilidad recae en el componente de UI del formulario de reset.
+
+---
+
+## 9. PBKDF2 offline — flujo en cliente
+
+El hash que se cachea en `u24_offline_session` se deriva **en el cliente** inmediatamente tras un login online exitoso, mientras la contraseña aún está en memoria. El servidor nunca almacena ni recibe este hash.
+
+```typescript
+// Llamar justo después de supabase.auth.signInWithPassword() exitoso
+
+async function cacheOfflineSession(id_nombre: string, password: string): Promise<void> {
+  const salt = crypto.getRandomValues(new Uint8Array(32))
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
+  )
+  const hashBuf = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 }, key, 256
+  )
+  const now = Date.now()
+  await idbSet('u24_offline_session', {
+    id_nombre,
+    password_hash: toHex(hashBuf),
+    password_salt: toHex(salt),
+    iterations: 100_000,
+    cached_at: now,
+    ttl_expires_at: now + 7 * 24 * 60 * 60 * 1000, // 7 días
+  })
+}
+
+// Verificación offline (en estado_1 modo degradado)
+async function verifyOffline(input: string, session: U24OfflineSession): Promise<boolean> {
+  if (Date.now() > session.ttl_expires_at) return false // TTL expirado
+  const salt = fromHex(session.password_salt)
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(input), 'PBKDF2', false, ['deriveBits'])
+  const hashBuf = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: session.iterations }, key, 256
+  )
+  return toHex(hashBuf) === session.password_hash
+}
+
+// Helpers
+const enc = (s: string) => new TextEncoder().encode(s)
+const toHex = (buf: ArrayBuffer) =>
+  Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+const fromHex = (hex: string) =>
+  new Uint8Array(hex.match(/../g)!.map(h => parseInt(h, 16)))
+```
+
+**Invariantes:**
+
+- `cacheOfflineSession` se llama **solo** tras login online exitoso — la contraseña nunca se guarda en claro.
+- Si el usuario cambia contraseña (ef_reset_password), el hash cacheado queda stale y la verificación offline fallará hasta el próximo login online. Comportamiento deseado.
+- El TTL de 7 días se evalúa en el cliente; el servidor no conoce la existencia de `u24_offline_session`.
+
+---
+
+## 10. Edge Cron: `ef_cron_purge`
+
+**Frecuencia:** cada 5 minutos.
+**Ubicación:** `supabase/functions/cron-purge/index.ts` + entrada en `supabase/config.toml` (Supabase Cron).
+
+```typescript
+Deno.serve(async () => {
+  const now = new Date().toISOString()
+
+  // 1. Purgar sesiones_emergencia expiradas no consumidas (DELETE — el cron tiene service role)
+  const { count: purgadas } = await supabaseAdmin
+    .from('sesiones_emergencia')
+    .delete()
+    .is('consumido_at', null)
+    .lt('expires_at', now)
+
+  // 2. Marcar solicitudes_desbloqueo pendientes expiradas
+  const { count: expiradas } = await supabaseAdmin
+    .from('solicitudes_desbloqueo')
+    .update({ estado: 'expirada' })
+    .eq('estado', 'pendiente')
+    .lt('expires_at', now)
+
+  console.log(`Cron purge: ${purgadas} sesiones eliminadas, ${expiradas} solicitudes expiradas`)
+  return new Response('ok')
+})
+```
+
+> `sesiones_emergencia` es la única tabla donde el cron hace DELETE físico (filas expiradas sin consumir no tienen valor de auditoría). Las solicitudes_desbloqueo se marcan como 'expirada' para conservar el historial.
+
+---
+
+## 11. Triggers SQL: `auditoria_rbac` (Gap F6)
+
+Los eventos que ocurren en PostgreSQL se capturan via triggers AFTER. Los eventos de Supabase Auth se capturan via Edge Functions.
+
+### Trigger: cambio de rol en `fichas_empleados`
+
+```sql
+CREATE OR REPLACE FUNCTION trg_audit_cambio_rol() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF OLD.rol IS DISTINCT FROM NEW.rol THEN
+    INSERT INTO auditoria_rbac (tipo_evento, id_nombre, metadata, created_at)
+    VALUES ('cambio_rol', NEW.id_nombre,
+      jsonb_build_object('rol_anterior', OLD.rol, 'rol_nuevo', NEW.rol), NOW());
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_fichas_rol
+  AFTER UPDATE ON fichas_empleados
+  FOR EACH ROW EXECUTE FUNCTION trg_audit_cambio_rol();
+```
+
+### Trigger: nueva galleta emitida
+
+```sql
+CREATE OR REPLACE FUNCTION trg_audit_galleta_emitida() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO auditoria_rbac (tipo_evento, id_nombre, id_terminal, metadata, created_at)
+  VALUES ('galleta_emitida', NEW.id_nombre, NEW.id_terminal,
+    jsonb_build_object('tipo', NEW.tipo), NOW());
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_galleta_insert
+  AFTER INSERT ON galletas_terminales
+  FOR EACH ROW EXECUTE FUNCTION trg_audit_galleta_emitida();
+```
+
+### Trigger: galleta revocada
+
+```sql
+CREATE OR REPLACE FUNCTION trg_audit_galleta_revocada() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF OLD.revocado_at IS NULL AND NEW.revocado_at IS NOT NULL THEN
+    INSERT INTO auditoria_rbac (tipo_evento, id_nombre, id_terminal, metadata, created_at)
+    VALUES ('galleta_revocada', NEW.id_nombre, NEW.id_terminal,
+      jsonb_build_object('revocado_at', NEW.revocado_at), NOW());
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_galleta_revocada
+  AFTER UPDATE ON galletas_terminales
+  FOR EACH ROW EXECUTE FUNCTION trg_audit_galleta_revocada();
+```
+
+### Eventos gestionados por Edge Functions (no triggers SQL)
+
+| Evento | Edge Function responsable |
+|---|---|
+| `login_exitoso` | `set_claims` (al emitir JWT exitoso) |
+| `fallo_autenticacion` | `ef_consumir_pin` (PIN inválido) + cliente llama `ef_log_fallo` en error de login |
+| `logout` | `ef_logout` (llamada explícita al cerrar sesión) |
+| `cambio_password` | `ef_reset_password` |
+| `sesion_emergencia_generada` | `ef_generar_token_emergencia` |
+| `sesion_emergencia_consumida` | `ef_consumir_pin` |
+| `galleta_emitida` (via PIN) | `ef_consumir_pin` (además del trigger para inserciones directas) |
+| `logout_forzado` | `ef_revocar_sesion_usuario` |
+
+> **`fallo_autenticacion` desde el cliente:** el cliente llama a `ef_log_fallo({ id_nombre_intentado, id_terminal })` cuando Supabase Auth devuelve error de credenciales. El `id_nombre` se guarda como null si no existe en fichas_empleados. Esta llamada no requiere JWT (callable por anon). En producción, el log drain de Logflare captura también los errores de auth de Supabase como respaldo.
+
+---
+
+## 12. RPC adicional: `rpc_solicitar_desbloqueo` (callable por anon)
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_solicitar_desbloqueo(
+  p_id_terminal text,
+  p_id_nombre_solicitante text,
+  p_motivo text
+) RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_id uuid;
+BEGIN
+  INSERT INTO solicitudes_desbloqueo
+    (id_terminal, id_nombre_solicitante, motivo, estado, created_at, expires_at)
+  VALUES
+    (p_id_terminal, p_id_nombre_solicitante, p_motivo, 'pendiente',
+     NOW(), NOW() + INTERVAL '24 hours')
+  RETURNING id_solicitud INTO v_id;
+
+  RETURN v_id;
+END;
+$$;
+
+-- Conceder ejecución a anon y authenticated
+GRANT EXECUTE ON FUNCTION rpc_solicitar_desbloqueo TO anon, authenticated;
+```
+
+---
+
+## 13. RPC `cancelar_drp` (Gap R2)
+
+RBAC: `coordinacion`, `gerencia`. `SECURITY DEFINER`.
+Ver especificación SQL completa en `logic.md §48`.
+
+**RLS de llamada:**
+
+```sql
+-- Policy que protege la RPC a nivel de función
+-- (La SECURITY DEFINER ya ejecuta con privilegios elevados;
+--  la validación del invocador se hace dentro del cuerpo con auth.jwt())
+CREATE POLICY "solo_coordinacion_gerencia_cancelar_drp"
+  ON drps FOR UPDATE
+  USING (
+    claim('can_manage_drp')
+  );
+-- La RPC hace FOR UPDATE en el SELECT inicial — esta policy aplica.
+```
+
+**Resumen de efectos (idempotente si el DRP ya estaba Cancelado):**
+
+| Tabla | Acción |
+|---|---|
+| `drps` | `estado = 'Cancelado'`, `timestamp_cancelacion`, `cancelado_por_id` |
+| `dotaciones_drp` | `timestamp_salida = NOW()` para filas activas |
+| `drp_personal_a_pie` | `timestamp_salida = NOW()` para filas activas |
+| `psa_sesiones` | `timestamp_cierre = NOW()` para sesiones abiertas del DRP |
+| `filiacion_sesiones` | `timestamp_cierre = NOW()` para sesiones abiertas del DRP |
+| `mochilas_backpack` | `estado = 'disponible'`, `id_drp_activo = NULL` |
+
+---
+
+## 14. Gap B2 — Watchdog de boxes bloqueados (Edge Cron)
+
+Detecta pacientes que llevan más de 45 minutos en estado `en_consulta` dentro
+de un módulo de filiación activo, sin cambio de estado. Genera un aviso en
+`filiacion_eventos` y notifica a admisión vía `pg_notify` para que Realtime
+lo entregue al perfil_admision del módulo afectado.
+
+**La liberación del box sigue siendo manual** — el watchdog solo alerta.
+El coordinador o admisión usa `liberar_paciente_de_box` (logic.md §20.2).
+
+**Incorporado al `ef_cron_purge` existente (cada 5 minutos):**
+
+```typescript
+// Añadir al body de ef_cron_purge/index.ts — bloque 3
+
+// 3. Watchdog de boxes bloqueados (Gap B2)
+const TIMEOUT_BOX_MS = 45 * 60 * 1000   // 45 min en milisegundos
+const cutoff = new Date(Date.now() - TIMEOUT_BOX_MS).toISOString()
+
+const { data: atascados } = await supabaseAdmin
+  .from('filiacion_pacientes')
+  .select('id, filiacion_id, id_nombre_box, timestamp_inicio_consulta')
+  .eq('estado', 'en_consulta')
+  .lt('timestamp_inicio_consulta', cutoff)
+
+for (const paciente of atascados ?? []) {
+  // Insertar evento de aviso en filiacion_eventos (idempotente por filiacion_id + paciente_id + tipo)
+  await supabaseAdmin.from('filiacion_eventos').upsert({
+    filiacion_id:    paciente.filiacion_id,
+    paciente_id:     paciente.id,
+    tipo_evento:     'box_timeout_alert',
+    id_nombre_actor: 'system_watchdog',
+    timestamp_evento: new Date().toISOString(),
+    detalle: `Box ${paciente.id_nombre_box} sin actividad >45 min`,
+  }, { onConflict: 'filiacion_id,paciente_id,tipo_evento', ignoreDuplicates: true })
+
+  // Notificar al perfil_admision del módulo via Realtime (canal filiacion:{filiacion_id})
+  await supabaseAdmin.channel(`filiacion:${paciente.filiacion_id}`)
+    .send({ type: 'broadcast', event: 'box_timeout', payload: { paciente_id: paciente.id } })
+}
+
+console.log(`Watchdog boxes: ${atascados?.length ?? 0} alertas generadas`)
+```
+
+**Handler en el cliente (admisión del módulo filiación):**
+
+```typescript
+supabase.channel(`filiacion:${filiacionId}`)
+  .on('broadcast', { event: 'box_timeout' }, ({ payload }) => {
+    // Mostrar badge de alerta en la fila del paciente afectado en la lista de boxes
+    // Tooltip: "Box sin actividad >45 min — considera liberar al paciente"
+    useFiliacionStore.getState().marcarBoxTimeout(payload.paciente_id)
+  })
+  .subscribe()
+```

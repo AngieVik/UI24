@@ -1604,6 +1604,7 @@ $$ LANGUAGE plpgsql;
 ```
 
 **Invariantes:**
+
 * `revaluacion = TRUE` es inmutable: una vez establecido no puede revertirse a `FALSE`.
 * `timestamp_admision` nunca se sobreescribe. La antigüedad real del paciente en el sistema
   refleja su hora de entrada original.
@@ -1808,6 +1809,7 @@ Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disp
 ```
 
 **Seguridad del `password_hash`:**
+
 * PBKDF2-SHA-256 con 100.000 iteraciones — resiste ataques de fuerza bruta locales
   sin requerir la librería `bcrypt` (coste de bundle ≈ 0, sin bloqueo del Main Thread).
 * La derivación se ejecuta con `crypto.subtle` nativo del navegador: delegado a C++,
@@ -1958,6 +1960,7 @@ Al completar check-in online con éxito:
 ```
 
 **Seguridad:**
+
 * El payload precargado ofrece exactamente las mismas garantías que el estándar:
   HMAC firmado por servidor, `device_id` vinculado al terminal de destino,
   bcrypt de coste 12 para la contraseña.
@@ -1974,6 +1977,7 @@ Al completar check-in online con éxito:
 ### 26.1 Condición de aplicación
 
 Solo aplica cuando:
+
 * `useTerminalStore.tipoSesion ∈ ['galleta_pequeña', 'galleta']`
 * `useAuthStore.rolActivo === 'invitado'` (nadie ha hecho check-in aún)
 
@@ -2031,6 +2035,7 @@ Usuario se autentica → Supabase Auth emite JWT
 ### 27.2 Actualización de claims
 
 Si el rol de un usuario cambia (RBAC panel en coordinación):
+
 * El JWT activo no se invalida inmediatamente.
 * Los nuevos claims se aplican al **siguiente JWT** emitido (refresh o nuevo login).
 * Para forzar aplicación inmediata: `supabase.auth.refreshSession()` desde el cliente
@@ -2859,6 +2864,13 @@ BEGIN
       NEW.id_nombre,                     -- quien firmó el checklist
       NOW()
     );
+
+    -- Actualizar condicion_tecnica en la misma transacción
+    -- Solo si el estado actual no es ya más grave (nunca degradar hacia Leve)
+    UPDATE vehiculos
+       SET condicion_tecnica = 'averiado_leve'
+     WHERE id = NEW.id_vehiculo
+       AND condicion_tecnica NOT IN ('averiado_grave', 'inoperativo_critico');
   END IF;
   RETURN NEW;
 END;
@@ -2874,7 +2886,7 @@ CREATE TRIGGER trg_checklist_genera_doc7
 | Evento | Consecuencia automática |
 |---|---|
 | Checklist guardado con estado `Completado` | Sin acción de flota |
-| Checklist guardado con estado `Completado_Con_Incidencias` | Doc-7 auto-generado con gravedad `Leve` → inyectado en `bandeja_entrada_flota` |
+| Checklist guardado con estado `Completado_Con_Incidencias` | Doc-7 auto-generado con gravedad `Leve` → inyectado en `bandeja_entrada_flota` + `condicion_tecnica = 'averiado_leve'` actualizado en `vehiculos` (si no hay estado técnico más grave ya activo) |
 | Doc-7 en bandeja de flota | Técnico de flota lo recibe, lo revisa y puede escalarlo a `inoperativo_critico` si lo considera necesario (flujo normal de Doc-7) |
 
 ### 35.4 Trazabilidad
@@ -3189,6 +3201,7 @@ END IF;
 Ver `hooks.md §4 useDRP.crearDRP` para el manejo completo del error `409`.
 
 **Resultado del conflicto:**
+
 * El DRP no se crea (rollback total).
 * El formulario permanece abierto con los datos del coordinador.
 * Solo el campo `backpack_id` se limpia para nueva selección.
@@ -3392,11 +3405,11 @@ BEGIN
 
   -- 3. Cerrar el Doc-8 administrativamente
   IF v_doc8_id IS NOT NULL THEN
-    UPDATE doc8
-       SET km_fin                    = p_km_fin,
-           estado                    = 'Enviado_Cerrado_Administrativo',
-           timestamp_fin             = NOW(),
-           cerrado_por_coordinador_id = p_coordinador_id
+    UPDATE doc8_partes_trabajo
+       SET km_fin              = p_km_fin,
+           estado              = 'Enviado_Cerrado',
+           timestamp_fin       = NOW(),
+           cerrado_por_admin_id = p_coordinador_id   -- FK fichas_empleados; null = cierre normal
      WHERE id = v_doc8_id;
   END IF;
 
@@ -3406,11 +3419,18 @@ BEGIN
          estado_operativo = 'en_espera'
    WHERE id = p_vehiculo_id;
 
-  -- 5. Auditoría
-  INSERT INTO auditoria_acciones_admin
-    (accion, id_vehiculo, id_pilot_afectado, km_fin, id_coordinador, timestamp)
+  -- 5. Auditoría en auditoria_rbac
+  INSERT INTO auditoria_rbac
+    (tipo_evento, id_nombre, metadata, created_at)
   VALUES
-    ('forzar_checkout_admin', p_vehiculo_id, p_pilot_id, p_km_fin, p_coordinador_id, NOW());
+    ('checkout_forzado', p_coordinador_id,
+     jsonb_build_object(
+       'vehiculo_id', p_vehiculo_id,
+       'pilot_id',    p_pilot_id,
+       'km_fin',      p_km_fin,
+       'doc8_id',     v_doc8_id
+     ),
+     NOW());
 
   -- 6. Notificación a bandeja_entrada_coordinacion via trigger/Edge Function
   PERFORM pg_notify(
@@ -3430,9 +3450,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 ### 42.3 Estado de Doc-8 resultante
 
-`Enviado_Cerrado_Administrativo` — distinguible del cierre estándar (`Enviado_Cerrado`)
-para auditoría forense. El campo `cerrado_por_coordinador_id` registra el ID del
-coordinador que autorizó el cierre forzado.
+El Doc-8 cierra con `estado = 'Enviado_Cerrado'` (valor unificado del enum).
+La distinción del cierre administrativo se hace a través del campo `cerrado_por_admin_id`
+(UUID, FK `fichas_empleados`): si es `NULL`, fue un cierre normal por el pilot;
+si contiene un UUID, fue un cierre forzado y ese UUID identifica al coordinador responsable.
+El evento `checkout_forzado` en `auditoria_rbac` registra la trazabilidad completa.
 
 ### 42.4 RBAC
 
@@ -3883,3 +3905,116 @@ ON CONFLICT (mutation_uuid) DO NOTHING;
 
 Ver `hooks.md §9 useOfflineQueue.procesarCola — RAMA ESPECIAL` para el flujo
 del cliente que invoca esta RPC.
+
+---
+
+## 48. Cancelación Forzada de DRP — RPC `cancelar_drp` (Gap R2)
+
+### 48.1 Propósito
+
+Permite a coordinación o gerencia cancelar un DRP en estado `En_curso` directamente,
+sin pasar por `Finalizado`. El DRP pasa al estado terminal `Cancelado`.
+Nunca se elimina del sistema — el audit trail se preserva íntegramente para cualquier
+DRP que haya alcanzado `En_curso`.
+
+### 48.2 RPC `cancelar_drp`
+
+```sql
+CREATE OR REPLACE FUNCTION cancelar_drp(
+  p_drp_id          UUID,
+  p_coordinador_id  TEXT
+)
+RETURNS VOID AS $$
+DECLARE
+  v_estado_actual TEXT;
+BEGIN
+  -- 1. Guard: el DRP debe estar En_curso
+  SELECT estado INTO v_estado_actual
+    FROM drps WHERE id = p_drp_id FOR UPDATE;
+
+  IF v_estado_actual IS DISTINCT FROM 'En_curso' THEN
+    RAISE EXCEPTION 'drp_no_en_curso'
+      USING HINT = '409',
+            DETAIL = 'Solo pueden cancelarse DRPs en estado En_curso.';
+  END IF;
+
+  -- 2. Marcar el DRP como Cancelado
+  UPDATE drps
+     SET estado                = 'Cancelado',
+         timestamp_cancelacion = NOW(),
+         cancelado_por_id      = (SELECT id_persona FROM fichas_empleados WHERE id_nombre = p_coordinador_id)
+   WHERE id = p_drp_id;
+
+  -- 3. Desvincular dotaciones activas del DRP (vehículos salen del DRP; Doc-8 siguen abiertos)
+  UPDATE dotaciones_drp
+     SET timestamp_salida = NOW()
+   WHERE id_drp = p_drp_id
+     AND timestamp_salida IS NULL;
+
+  -- 4. Desvincular personal a pie activo
+  UPDATE drp_personal_a_pie
+     SET timestamp_salida = NOW()
+   WHERE id_drp = p_drp_id
+     AND timestamp_salida IS NULL;
+
+  -- 5. Cierre forzado de módulos PSA vinculados al DRP
+  UPDATE psa_sesiones
+     SET timestamp_cierre = NOW()
+   WHERE id_drp = p_drp_id
+     AND timestamp_cierre IS NULL;
+
+  -- 6. Cierre forzado de módulos de filiación vinculados al DRP
+  UPDATE filiacion_sesiones
+     SET timestamp_cierre = NOW()
+   WHERE id_drp = p_drp_id
+     AND timestamp_cierre IS NULL;
+
+  -- 7. Revertir mochilas BKP asignadas al DRP → disponible (bypass limpio, sin snapshot de reconciliación)
+  UPDATE mochilas_backpack
+     SET estado        = 'disponible',
+         id_drp_activo = NULL
+   WHERE id_drp_activo = p_drp_id;
+
+  -- Doc-1: sin acción (append-only — inmutable en su estado actual)
+  -- Doc-8: sin acción (pilots continúan sus turnos fuera del DRP; checkout normal)
+
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### 48.3 Comportamiento en cascada
+
+| Entidad | Acción al cancelar |
+|---|---|
+| `drps` | `estado = 'Cancelado'`, `timestamp_cancelacion`, `cancelado_por_id` |
+| `dotaciones_drp` activas | `timestamp_salida = NOW()` — vehículo desvinculado del DRP |
+| `drp_personal_a_pie` activos | `timestamp_salida = NOW()` |
+| `psa_sesiones` abiertas del DRP | `timestamp_cierre = NOW()` (cierre forzado) |
+| `filiacion_sesiones` abiertas del DRP | `timestamp_cierre = NOW()` (cierre forzado) |
+| `mochilas_backpack` asignadas al DRP | `estado = 'disponible'`, `id_drp_activo = NULL` |
+| **Doc-8** de los pilots activos | **Sin cambio** — pilots siguen su turno; checkout normal al terminar |
+| **Doc-1** del DRP | **Sin cambio** — append-only; queda congelado en estado `Activo_En_Curso` |
+| **Hard delete de `drps`** | **Prohibido** — DRPs que alcanzaron `En_curso` no se eliminan nunca |
+
+### 48.4 RBAC
+
+`SECURITY DEFINER`. La RLS de llamada verifica que el `auth.uid()` del invocador
+pertenece a un rol `coordinacion` o `gerencia`. Cualquier otro rol recibe `permission_denied`.
+
+### 48.5 Flujo UI
+
+```
+coordinacion / gerencia desde nucleo_coordinacion_y_seguridad:
+  1. Pulsa "Cancelar DRP" en la ficha del DRP activo
+  2. Modal de confirmación destructiva (no reversible):
+       "Esta acción:
+        • Desvinculará todos los vehículos y personal del DRP.
+        • Cerrará automáticamente los módulos PSA y Filiación vinculados.
+        • Los partes de trabajo (Doc-8) seguirán abiertos — los pilots
+          finalizarán sus turnos de forma normal.
+        • El DRP quedará en estado Cancelado (no se puede reactivar)."
+       [ Confirmar cancelación ] [ Volver ]
+  3. Si confirma → RPC cancelar_drp(drpId, coordinadorId)
+  4. Realtime notifica a todos los terminales del DRP via doc11_aviso
+  5. useDRPStore → estado = 'Cancelado'
+```

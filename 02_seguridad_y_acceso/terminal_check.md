@@ -37,14 +37,13 @@
 * **Botón condicional — "Acceder como Invitado Operativo":**
 
   Visible **únicamente** cuando el terminal está en `estado_0`
-  Y `useAuthStore` detecta la persistencia de una `galleta` válida
-  (tipo `'galleta'` — cookie permanente, no la `galleta_pequeña` temporal).
+  y `useTerminalStore.tipoGalleta === 'permanente'` (galleta permanente persistida
+  en IndexedDB — sobrevive al cierre de pestaña/navegador).
 
   ```
   Condición de renderizado:
     useTerminalStore.estado === 'estado_0'
-    ∧ useAuthStore.tipoSesion === 'galleta'   ← cookie permanente detectada en localStorage
-    ∧ galleta.expires_at === null             ← las galletas permanentes no expiran por TTL
+    ∧ useTerminalStore.tipoGalleta === 'permanente'   ← persistido en IndexedDB (idb-keyval)
   ```
 
   **Comportamiento al pulsar:**

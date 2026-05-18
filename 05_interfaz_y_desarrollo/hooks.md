@@ -705,14 +705,14 @@ FLUJO:
    b. UPDATE vehiculos:
         pilot_id = NULL,
         estado_operativo = 'en_espera'
-   c. UPDATE doc8:
+   c. UPDATE doc8_partes_trabajo:
         km_fin = p_km_fin,
-        estado = 'Enviado_Cerrado_Administrativo',
+        estado = 'Enviado_Cerrado',
         timestamp_fin = NOW(),
-        cerrado_por_coordinador_id = p_coordinador_id
-   d. INSERT en auditoría:
-        { accion: 'forzar_checkout_admin', vehiculo_id, pilot_id: p_pilot_id,
-          km_fin: p_km_fin, coordinador_id: p_coordinador_id, timestamp: NOW() }
+        cerrado_por_admin_id = p_coordinador_id   -- FK fichas_empleados; null = cierre normal
+   d. INSERT en auditoria_rbac:
+        { tipo_evento: 'checkout_forzado', id_nombre: p_coordinador_id,
+          metadata: { vehiculo_id, pilot_id, km_fin, doc8_id } }
    e. Notificación a bandeja_entrada_coordinacion:
         "Checkout administrativo aplicado: [pilotId] retirado de [vehiculoId]
          por [coordinadorId]. km_fin registrado: [kmFin]."
@@ -1628,6 +1628,7 @@ interface RealtimeChannelConfig {
 
 interface UseRealtime {
   isConnected:  boolean
+  mode:         'normal' | 'degraded'  // Gap C1 — degraded = polling fallback activo
   subscribe(
     config:    RealtimeChannelConfig,
     callback:  (payload: RealtimePayload) => void
@@ -1675,7 +1676,50 @@ El canal se destruye cuando no quedan suscriptores.
 `isConnected` refleja si la suscripción Realtime está activa.
 Se propaga a `useGlobalStore.isOnline` para mostrar indicadores en UI.
 
-### Stores: `useGlobalStore` (isOnline)
+**Degraded mode — polling fallback (Gap C1):**
+
+```
+DISPARO: onClose o error del WebSocket del canal Supabase Realtime.
+
+Al detectar la desconexión:
+  → mode = 'degraded'
+  → isConnected = false
+  → Se suspenden todos los canales activos excepto los críticos
+
+CANALES CRÍTICOS (siguen vivos en polling — intervalo 30 s):
+  - global:alertas_criticas    → SELECT * FROM doc11_avisos ORDER BY timestamp_publicacion DESC LIMIT 10
+  - vehiculo:{id}              → SELECT condicion_tecnica, estado_operativo FROM vehiculos WHERE id = {id}
+
+CANALES SUSPENDIDOS en degraded (sin polling — esperan reconexión WS):
+  - coordinacion:flota
+  - terminal:{device_id}:precache
+  - Cualquier otro canal de bandeja o inventario
+
+RECONEXIÓN:
+  → Reintentos exponenciales del WS: 1s, 2s, 4s, 8s, 16s (máx 30s)
+  → Al restaurar el WS: mode = 'normal', isConnected = true
+  → Re-fetch del estado completo vía TanStack Query (puede haber eventos perdidos)
+  → Polling de canales críticos se detiene — vuelven a escuchar el WS
+
+INDICADOR EN UI:
+  mode = 'degraded' → banner amarillo discreto: "Modo desconectado — actualizaciones limitadas"
+  Desaparece al restaurar mode = 'normal'
+```
+
+```typescript
+// Implementación interna del polling de canales críticos en degraded_mode
+const POLLING_INTERVAL_MS = 30_000
+
+useEffect(() => {
+  if (mode !== 'degraded') return
+  const timer = setInterval(() => {
+    criticalChannels.forEach(ch => ch.poll())
+  }, POLLING_INTERVAL_MS)
+  return () => clearInterval(timer)
+}, [mode])
+```
+
+### Stores: `useGlobalStore` (isOnline, realtimeMode)
 
 ### Nota: Solo para uso interno de otros hooks. No instanciar en componentes
 
@@ -1796,8 +1840,8 @@ interface UseOfflineQueue {
 
       RAMA ESTÁNDAR:
       - intentos++
-      - Si intentos < 3 → estado = 'pendiente' (reintento posterior)
-      - Si intentos >= 3 → estado = 'fallido'
+      - estado = 'pendiente'  (reintenta indefinidamente — sin límite automático)
+        → Solo se marca 'fallido' por: cascada de dependencia O descarte manual del usuario
       - PROPAGACIÓN DE FALLO EN CASCADA:
           Buscar en IndexedDB todas las mutaciones donde parentMutationId = mutacion.id
           → Para cada una: estado = 'fallido', errorMsg = 'padre_fallido: ' + mutacion.id
@@ -2406,39 +2450,59 @@ Al recargar la página con isActivo=true:
 
 ---
 
-## 19. useImageCompressor
+## 19. compressImage — Utilidad de compresión de imágenes
 
-> Hook utilitario de compresión de imágenes con Canvas API nativa.
+> Función utilitaria pura (no hook). Exportada desde `utils/imageCompressor`.
 > Reutilizable en cualquier flujo de adjuntos (Doc-7, Doc-11).
+> Ver ADR-002 para la prohibición estricta de Base64.
 
 ```typescript
-interface UseImageCompressor {
-  comprimirImagen(file: File): Promise<Blob>
-  // Opciones por defecto: max 1200 px, WebP quality 0.70
-  // Opciones personalizables:
-  comprimirImagenConOpciones(
-    file: File,
-    opciones: { maxPx?: number; calidad?: number }
-  ): Promise<Blob>
+async function compressImage(
+  file: File | Blob,
+  options?: { maxPx?: number; quality?: number }
+): Promise<Blob>
+// Opciones por defecto: maxPx = 1200, quality = 0.70, formato = WebP
+```
+
+**Pipeline:**
+
+```typescript
+// utils/imageCompressor.ts
+export async function compressImage(
+  file: File | Blob,
+  { maxPx = 1200, quality = 0.70 } = {}
+): Promise<Blob> {
+  const bitmap = await createImageBitmap(file)
+
+  const scale = Math.min(1, maxPx / Math.max(bitmap.width, bitmap.height))
+  const w = Math.round(bitmap.width  * scale)
+  const h = Math.round(bitmap.height * scale)
+
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx    = canvas.getContext('2d')!
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close()
+
+  return canvas.convertToBlob({ type: 'image/webp', quality })
 }
 ```
 
 **Reglas arquitectónicas:**
 
-- Usa `createImageBitmap` (API nativa) para decodificar — no carga librerías externas.
-- Usa `OffscreenCanvas` para renderizar fuera del DOM — sin reflow ni repaint.
-- Devuelve siempre un `Blob` (nunca Base64 / data-URL).
+- `createImageBitmap` + `OffscreenCanvas` — fuera del Main Thread de render, sin reflow.
+- Nunca devuelve Base64 / data-URL — solo `Blob` binario plano (ADR-002).
 - Llamado **antes** de que el archivo toque Zustand o IndexedDB.
 - Ver `nucleo_flota_y_taller.md → Compresión de adjuntos Doc-7` para el
   pipeline completo y las reglas de almacenamiento.
 
 ---
 
-## 20. useBandejaConflictos — Dead Letters / Resolución Manual
+## 20. useBandejaConflictos — Cola con Errores / Resolución Manual
 
-> Vista de auditoría para mutaciones encoladas que fallaron definitivamente en el
-> servidor (estado `'fallido'` tras 3 intentos). Solo accesible a `coordinación`
-> y `logística` desde la `black_column`.
+> Vista de auditoría para mutaciones encoladas que no han podido sincronizarse.
+> La cola reintenta indefinidamente al reconectar — el estado `'fallido'` solo
+> se alcanza por cascada de dependencia o por descarte manual del usuario.
+> Solo accesible a `coordinación` y `logística` desde la `black_column`.
 
 ```typescript
 interface Mutation {

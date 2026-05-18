@@ -78,6 +78,8 @@ El frontend es un entorno intrínsecamente inseguro. La seguridad y el control d
 
 * **Payloads minimizados (Reducción de carga):** Las consultas hacia Supabase usarán selectores estrictos (ej. `select('id, nombre, stock')`). Está expresamente prohibido el uso de `select('*')` en vistas de listas o inventarios masivos para no colapsar ni encarecer el consumo de las tarifas de datos móviles de las tablets en ruta.
 * **Sincronía de tipado (Single Source of Truth):** Se exige el uso de `supabase-cli` para autogenerar las interfaces de TypeScript directamente desde el esquema de PostgreSQL. Esto asegurará que los validadores de `Zod` en el cliente tengan una paridad exacta con la base de datos.
+* **Generador de tipos en pre-commit:** El comando `supabase gen types typescript` se integra como hook de pre-commit. Un commit con tipos desincronizados del esquema PostgreSQL falla automáticamente antes de llegar al repositorio.
+* **CI/CD — GitHub Actions:** El pipeline de integración continua corre en GitHub Actions. Los gates de bundle size (3 MB total, 800 KB entry chunk) son steps bloqueantes en el workflow de build. Un build que supere estos límites impide el merge a `main`.
 * **Prohibición de Criptografía Pesada en Frontend:** Queda prohibido el empaquetado o ejecución de la librería `bcrypt.js` en el Main Thread del cliente. Toda validación de credenciales en modo degradado offline debe realizarse utilizando algoritmos nativos de derivación de claves (`PBKDF2` / `SHA-256`) provistos de forma asíncrona por la **Web Crypto API** (`window.crypto.subtle`), garantizando que el chunk inicial del bundle no sea penalizado y el hilo principal nunca sufra congelamientos.
 * **Presupuesto de bundle — Límite global:** Vite se configurará con un límite estricto de peso. Si el build de producción supera los 3 MB totales, el pipeline de CI/CD abortará la compilación automáticamente.
 * **First Contentful Paint — Chunk inicial ≤ 800 KB:** El chunk de entrada (entry chunk) que determina el FCP no puede superar los 800 KB en producción (gzip incluido). Vite debe configurarse con `build.chunkSizeWarningLimit: 800` y un paso de verificación en CI que falle si se supera.
@@ -93,3 +95,29 @@ El frontend es un entorno intrínsecamente inseguro. La seguridad y el control d
 * **shadcn/ui** (Única librería de componentes permitida)
 * **Supabase**
 * **pdfMake**
+* **idb-keyval** (adaptador IndexedDB para el middleware `persist` de Zustand — obligatorio tras ADR-001)
+
+## 8. Stack de testing y calidad
+
+* **Vitest:** Unit tests e integración para lógica de negocio (stores Zustand, lógica de transformación, validadores Zod).
+* **React Testing Library:** Tests de componentes con interacciones de usuario simuladas. No se prueba la implementación interna, solo el comportamiento observable desde el DOM.
+* **Playwright — Smoke suite:** Verificar que las rutas principales renderizan sin error. Interacciones core: formulario de login completo y cierre de sesión exitoso.
+* **Playwright — Offline queue suite:** Interceptar red con `page.route('**', route => route.abort())`, ejecutar una mutación crítica (ej. Doc-7), verificar que la mutación entra en la cola de IndexedDB, reconectar con `page.unroute('**')` y verificar que el retry se dispara y el servidor confirma la operación.
+* **Gate de calidad en CI:** El pipeline falla si cualquier test falla. La cobertura se reporta pero no es gate de bloqueo en Fase 0.
+
+## 9. Observabilidad mínima
+
+* **Sentry (cliente):** Captura de errores JavaScript en el frontend. Inicialización diferida para no penalizar el FCP. Variable de entorno: `VITE_SENTRY_DSN` (placeholder — pendiente de provisionar proyecto Sentry).
+* **Logflare (Supabase logs):** Log drain nativo de Supabase hacia Logflare. Captura errores de RLS (policy violations), errores en funciones RPC y query timeouts. Variable de entorno: `SUPABASE_LOG_DRAIN_URL` (placeholder — pendiente de habilitar en Supabase dashboard).
+* **Variables de entorno requeridas** (en `.env.local`, nunca versionar valores reales):
+  * `VITE_SENTRY_DSN` — pendiente de provisionar.
+  * `SUPABASE_LOG_DRAIN_URL` — pendiente de habilitar en Supabase dashboard.
+
+## 10. Service Worker
+
+* **Estrategia de actualización:** `skipWaiting()` + `clients.claim()` en el evento `activate`. La nueva versión del SW toma control inmediatamente sin esperar a que el usuario cierre la pestaña.
+* **Assets precacheados:** App shell (`index.html`), webfonts Barlow y Barlow Condensed (Google Fonts CDN), chunks críticos de JS/CSS (entry chunk + vendor chunk), iconos de la PWA (manifest icons).
+* **Exposición de versión del build:** en dos puntos simultáneamente para que el SW pueda comparar su versión con la del documento activo:
+  * `<meta name="app-version" content="x.y.z">` inyectado en el `<head>` del HTML en build time.
+  * `window.__APP_VERSION__` como constante global inyectada por Vite (`define` en `vite.config.ts`).
+* **Lifecycle:** Install → precache assets → Activate (`skipWaiting` + `clients.claim`) → Fetch (cache-first para assets precacheados, network-first para llamadas a Supabase API).

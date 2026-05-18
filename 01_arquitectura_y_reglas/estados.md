@@ -200,6 +200,7 @@ Cada cambio genera entrada en Doc-8 con `timestamp_inicio` y `timestamp_fin`.
 | `En_espera` | Creación del DRP por coordinación/gerencia. | `timestamp_creacion` |
 | `En_preparacion` | Job Supabase (1h antes) **o** primera dotación unida — lo primero que ocurra. | `timestamp_inicio_preparacion` |
 | `En_curso` | Activación manual por coordinación/gerencia. | `timestamp_inicio_curso` |
+| `Cancelado` | Cancelación forzada desde `En_curso` por coordinación/gerencia. Nunca se borra del sistema (audit trail garantizado para DRPs que alcanzaron `En_curso`). | `timestamp_cancelacion` |
 | `Finalizado` | Cierre manual desde `resumen_drp`. | `timestamp_finalizacion` |
 | `Finalizado_Retenido` | El cron job de archivado detectó descuadres contables `Pendiente_Revision` asociados al DRP. El archivado queda bloqueado hasta que logística liquide todos los descuadres. | `timestamp_retencion` |
 | `Archivado` | Automático 48h después de `Finalizado` **o** cuando el DRP estaba en `Finalizado_Retenido` y el último descuadre pasa a `Resuelto`/`Archivado`. | `timestamp_archivado` |
@@ -210,11 +211,20 @@ Cada cambio genera entrada en Doc-8 con `timestamp_inicio` y `timestamp_fin`.
 En_espera            → En_preparacion      (job 1h antes / primera dotación se une)
 En_preparacion       → En_curso            (acción manual coordinación/gerencia)
 En_curso             → Finalizado          (acción manual coordinación/gerencia)
+En_curso             → Cancelado           (RPC cancelar_drp — coordinación/gerencia)
 Finalizado           → Archivado           (cron +48h — solo si sin descuadres pendientes)
 Finalizado           → Finalizado_Retenido (cron +48h — si descuadres Pendiente_Revision > 0)
 Finalizado_Retenido  → Archivado           (trigger: último descuadre del DRP resuelto/archivado)
 En_espera            → [eliminado]         (Cancelar — bloqueado si Doc-1 tiene asistencias)
 ```
+
+**Efectos de la cancelación (`En_curso → Cancelado`):**
+
+- Dotaciones y personal a pie: `timestamp_salida = NOW()` para todos los activos (los vehículos quedan desvinculados del DRP pero sus Doc-8 siguen abiertos — el pilot hace checkout normal al terminar el turno).
+- Módulos PSA y Filiación vinculados al DRP: cierre forzado (`timestamp_cierre = NOW()`).
+- Subinventarios `Asignado` al DRP: revierten directamente a `Operativo` (bypass limpio).
+- Doc-1 del DRP: queda inmutable en su estado actual — ninguna acción adicional.
+- Ver `logic.md §48` para el RPC completo `cancelar_drp`.
 
 **Aviso automático:** si la hora de inicio programada llega y el DRP sigue en `En_preparacion`,
 se envía aviso a todos los terminales del DRP: "Aviso: el DRP no ha sido activado. Contactar con coordinación."
@@ -521,19 +531,19 @@ Ver `logic.md §35` para el SQL completo del trigger.
 
 ## 16. resumen de stores Zustand
 
+> **ADR-001 (2026-05-18):** Todos los stores persistentes migran a `IndexedDB` vía `idb-keyval`. `localStorage` queda prohibido para estados de sesión. Única excepción documentada: `useAuthStore` permanece en `sessionStorage` — JWT y permisos no deben sobrevivir al cierre de la pestaña del navegador. Clarificación Fase 1: `tipoGalleta` e `id_terminal` residen en `useTerminalStore` (IndexedDB) para sobrevivir al cierre de navegador. Ver `adrs.md`.
+
 | Store | Estados que gestiona | Persistencia |
 |---|---|---|
-| `useTerminalStore` | `terminal.estado`, `sesion_terminal.tipo` | `localStorage` |
-| `useAuthStore` | ID_nombre activo, rol, JWT, permisos | `sessionStorage` |
-| `usePersonaStore` | `checkin_on`, `pilot`, `carry` por ID_nombre | `localStorage` |
-| `useVehiculoStore` | `estadoOperativo`, `condicionTecnica`, `tipoServicio`, GPS, km activos | `localStorage` |
-| `useDRPStore` | `estado` DRP activo, dotaciones, timestamps | `localStorage` |
-| `useInventarioStore` | stock por location, `subinventariosEstado`, descuadres | Supabase (no persist local) |
-| `useBandejasStore` | mensajes por instancia, contadores sin leer | Supabase Realtime |
-| `useModulosStore` | PSA estado, filiación estado, pacientes | `localStorage` |
+| `useTerminalStore` | `terminal.estado`, `sesion_terminal.tipo`, `tipoGalleta` ('permanente'/'temporal'/null), `id_terminal` (fingerprint SHA-256) | `IndexedDB (idb-keyval)` |
+| `useAuthStore` | ID_nombre activo, rol, JWT, permisos (`tipoGalleta` migrado a `useTerminalStore` — ver ADR-001 clarificación) | `sessionStorage` ⚠ excepción documentada — ver ADR-001 |
+| `usePersonaStore` | `checkin_on`, `pilot`, `carry` por ID_nombre | `IndexedDB (idb-keyval)` |
+| `useVehiculoStore` | `estadoOperativo`, `condicionTecnica`, `tipoServicio`, GPS, km activos | `IndexedDB (idb-keyval)` |
+| `useDRPStore` | `estado` DRP activo, dotaciones, timestamps | `IndexedDB (idb-keyval)` |
+| `useInventarioStore` | stock por location, `subinventariosEstado`, descuadres | Supabase (sin persist local) |
+| `useBandejasStore` | mensajes por instancia, contadores sin leer | Supabase Realtime + `IndexedDB` (caché fallback offline) |
+| `useModulosStore` | PSA estado, filiación estado, pacientes | `IndexedDB (idb-keyval)` |
 | `useDocumentosStore` | Documentos en `Borrador_En_Curso` (forms abiertos) | `IndexedDB` |
-| `useGlobalStore` | `periodoVacaciones`, texto marquesina, estado tablón | Supabase Realtime |
+| `useGlobalStore` | `periodoVacaciones`, texto marquesina, estado tablón | Supabase Realtime + `IndexedDB` (caché fallback offline) |
 
-**Regla de persistencia (ver `rules.md`):** los estados vitales de turno
-(`vehiculo_activo`, `turno_iniciado`, `modo_noche`) usan middleware `persist`
-apuntando a `localStorage` para sobrevivir recargas accidentales del navegador.
+**Regla de persistencia (ver `rules.md §4` y `adrs.md ADR-001`):** todos los stores persistentes usan middleware `persist` con adaptador `idb-keyval` sobre `IndexedDB`. `localStorage` queda estrictamente prohibido para estados de sesión. Excepción documentada: `useAuthStore` en `sessionStorage` para garantizar que las credenciales se borran al cerrar la pestaña.
