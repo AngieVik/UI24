@@ -101,7 +101,7 @@ const claims = buildClaims(userRole)
 ## 5. Matriz de permisos por entidad (claims que aplican)
 
 | Entidad | INSERT | SELECT | UPDATE | DELETE/ARCHIVE |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **`doc1_asistencias`** (append-only) | `can_create_clinical_docs` o `can_view_drp` (DRP `En_curso`) | `can_view_clinical_docs` | **`FALSE` incondicional — todos los roles** | **`FALSE` incondicional — todos los roles** |
 | Doc-2 al Doc-5 (asistenciales) | `can_create_clinical_docs` | `can_view_clinical_docs` | Creador en Borrador | `can_manage_drp` o `gerencia` |
 | Doc-3 (clínico SVA) | `can_create_clinical_docs_sva` | `can_view_clinical_docs` | Creador en Borrador | `gerencia` |
