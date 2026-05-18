@@ -282,8 +282,45 @@ Nunca calcula el nuevo stock en el cliente.
 | Deducción de stock | Doc-6 | Descuenta cantidad del location origen |
 | Transferencia (reserva) | Doc-10 emit | Mueve a `inventario_en_transito` |
 | Confirmación recepción | Doc-10 confirm | Suma al location destino, cierra tránsito |
-| Repostaje combustible | — | Registra entrada en Doc-8, sin cambio de inventario de ítems |
+| Repostaje combustible | — | Registra en `eventos_fisicos_vehiculo` (ver §19), sin cambio de inventario de ítems |
 | Reconciliación DRP | cierre subinventario | Ver §11 |
+
+### 6.4 Coherencia automática: archivado de ítems del catálogo
+
+Cuando un ítem del catálogo se archiva (`archivado = true`), no debe permanecer
+en ninguna plantilla de stock estándar. De lo contrario, el siguiente despliegue
+basado en esa plantilla fallaría al intentar asignar un ítem inexistente.
+
+**Trigger `trg_purgar_plantillas_al_archivar`:**
+
+```sql
+-- Se dispara AFTER UPDATE ON catalogo_items
+-- Condición: NEW.archivado = TRUE AND OLD.archivado = FALSE
+
+CREATE OR REPLACE FUNCTION fn_purgar_plantillas_al_archivar()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.archivado = TRUE AND (OLD.archivado IS DISTINCT FROM TRUE) THEN
+    DELETE FROM plantillas_stock
+    WHERE item_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_purgar_plantillas_al_archivar
+  AFTER UPDATE ON catalogo_items
+  FOR EACH ROW EXECUTE FUNCTION fn_purgar_plantillas_al_archivar();
+```
+
+**Comportamiento:**
+* El ítem desaparece automáticamente de **todas** las plantillas genéricas existentes.
+* Las plantillas afectadas quedan con el ítem simplemente eliminado de su lista —
+  no se invalida la plantilla entera.
+* Los subinventarios ya desplegados (con stock real asignado) **no se ven afectados**:
+  el trigger solo actúa sobre `plantillas_stock`, no sobre `inventario`.
+* Ninguna Edge Function ni código cliente necesita ejecutar esta limpieza manualmente.
+  Es atómica y se garantiza en la misma transacción que el archivado del ítem.
 
 ### 6.3 Inventario en tránsito
 
@@ -465,7 +502,7 @@ snapshots_reconciliacion:
   drp_destino_id    UUID NULL     -- DRP al que se reasignó el subinventario
   stock_snapshot    JSONB         -- { [item_id]: stock_real en el momento del snapshot }
   created_at        TIMESTAMPTZ   -- orden FIFO obligatorio
-  estado            TEXT          -- 'pendiente' | 'resuelto'
+  estado            TEXT          -- 'pendiente' | 'resuelto' | 'resuelto_por_transferencia'
   resolved_at       TIMESTAMPTZ NULL
   resolved_by       TEXT NULL     -- ID_nombre_resolutor
 ```
@@ -486,33 +523,53 @@ Petición de asignación de subinventario en estado En_Transito a nuevo DRP/PSA:
      La responsabilidad del descuadre pasa a la nueva dotación."
 
   → SÍ:
-      1. INSERT en snapshots_reconciliacion:
-           { subinventario_id, drp_origen_id, drp_destino_id (nuevo DRP),
-             stock_snapshot = stock_real actual por ítem, estado = 'pendiente' }
-      2. El descuadre del DRP anterior queda abierto, marcado con ref al snapshot
+      1. UPDATE snapshots_reconciliacion
+              SET estado = 'resuelto_por_transferencia', resolved_at = NOW()
+            WHERE subinventario_id = $1
+              AND estado = 'pendiente'
+         — Cierra automáticamente cualquier snapshot pendiente del DRP anterior.
+           La nueva dotación asume ciegamente el stock_real teórico actual como
+           punto de partida, sin responsabilidad contable por el DRP anterior.
+
+      2. INSERT en snapshots_reconciliacion:
+           { subinventario_id,
+             drp_origen_id    = nuevo_drp_id,
+             drp_destino_id   = NULL,           -- se rellena cuando el nuevo DRP finalice
+             stock_snapshot   = stock_real actual por ítem,
+             estado           = 'pendiente' }
+         — Este snapshot es el ÚNICO que logística verá en su cola activa.
+           Cuando el nuevo DRP finalice y el subinventario regrese a base,
+           logística ejecutará un único cuadre contra este snapshot.
+           Cualquier merma acumulada (del DRP anterior + del nuevo DRP)
+           aflorará en ese momento — responsabilidad técnica de la última dotación.
+
       3. Subinventario → Operativo_Condicionado (transitorio)
       4. Asignación al nuevo DRP/PSA ejecutada → Asignado
-         (el nuevo DRP parte del stock_snapshot del entry más reciente como referencia)
 
   → NO:
       Subinventario permanece en En_Transito hasta que logística complete el cuadre.
 ```
 
-#### Reconciliación FIFO
+#### Reconciliación única al retorno
 
 ```
-Logística abre la cola de snapshots pendientes para un subinventario:
-  → Ordenados por created_at ASC (el más antiguo primero)
-  → Solo el primer snapshot está desbloqueado para edición
+Logística abre la cola de snapshots para un subinventario al regresar a base:
+  → Solo muestra entradas con estado = 'pendiente'
+  → Los snapshots con estado = 'resuelto_por_transferencia' son visibles en
+     el historial de auditoría pero NUNCA aparecen en la cola activa de tareas
 
-Al resolver el snapshot más antiguo:
-  1. Logística aplica el cuadre físico contra el stock_snapshot del entry
-  2. Si hay diferencia → descuadre generado con referencia al nuevo DRP
-     (drp_destino_id) como responsable
-  3. El descuadre del DRP anterior se cierra (marcado como 'condicionado_transferido')
+Por diseño, un subinventario siempre tiene como máximo UN snapshot 'pendiente':
+  → Cada reasignación condicionada cierra el snapshot anterior por transferencia
+     antes de abrir uno nuevo
+
+Al resolver el snapshot activo:
+  1. Logística compara el stock_real físico contra el stock_snapshot del entry
+  2. Cualquier diferencia cubre la merma acumulada de TODOS los DRP que
+     manejaron el subinventario desde el último cuadre completo
+  3. Si hay diferencia → se aplica el flujo de §7 (Descuadre_Pendiente_Revision)
+     con responsabilidad asignada a la última dotación (drp_origen_id del snapshot)
   4. snapshot → estado = 'resuelto', resolved_at, resolved_by registrados
-  5. El siguiente snapshot en la cola queda desbloqueado para resolución
-  6. El subinventario no se interrumpe — sigue en Asignado si tiene DRP activo
+  5. El subinventario pasa a Operativo y queda disponible para nuevas asignaciones
 ```
 
 Transiciones del estado condicionado:
@@ -750,9 +807,12 @@ Cierre: flujo_checkout_automatico paso 4
 |---|---|
 | Cambio de función operativa (Ruta, Estacionado, etc.) | timestamp_inicio y timestamp_fin del estado |
 | Entrada/salida de DRP | timestamp_entrada_drp / timestamp_salida_drp |
-| Repostaje combustible | km_marcador, litros, euros (si aplica), ubicación |
-| Repostaje AdBlue | km_marcador |
 | Función operativa asignada por RRHH (Programado, DRP, etc.) | registrada como estado base del bloque |
+
+**Nota:** los repostajes de combustible y AdBlue ya **no** escriben en `doc8_eventos`.
+Se registran en la tabla independiente `eventos_fisicos_vehiculo` (ver §19). La interfaz
+del Doc-8 muestra estos eventos mediante un JOIN sobre esa tabla cuando hay un Doc-8
+abierto, pero no los almacena como entradas propias del parte de trabajo.
 
 ### 14.3 Regla de bloque abierto
 
@@ -887,7 +947,37 @@ se entregan a través de Supabase Realtime a los terminales afectados.
 
 ---
 
-## 19. Repostaje — integración con Doc-8
+## 19. Eventos físicos del vehículo — tabla `eventos_fisicos_vehiculo`
+
+Los repostajes y mantenimientos son eventos físicos del vehículo, no del turno
+del pilot. Se registran en una tabla propia referenciada por `ID_vehiculo` y
+**no por Doc-8**. Esto permite:
+
+* Consultar el historial físico de un vehículo con independencia de qué
+  pilots lo han conducido o si había Doc-8 abierto.
+* Evitar que el cierre de un Doc-8 deje huérfanos eventos que no pertenecen
+  semánticamente al turno.
+
+```sql
+eventos_fisicos_vehiculo:
+  id              UUID          PK
+  id_vehiculo     TEXT          FK → vehiculos
+  tipo_evento     TEXT          -- 'repostaje_combustible' | 'repostaje_adblue'
+                                --   | 'mantenimiento_preventivo' | 'incidencia_tecnica'
+  km_marcador     INT NULL
+  litros          NUMERIC NULL
+  euros           NUMERIC NULL
+  ubicacion_tipo  TEXT NULL     -- 'gasolinera' | 'base'
+  notas           TEXT NULL
+  doc8_id         UUID NULL     -- FK nullable → doc8 abierto en ese momento (JOIN cosmético)
+  id_nombre       TEXT NULL     -- quien lo registró
+  timestamp       TIMESTAMPTZ   -- automático (NOW())
+```
+
+**JOIN en Doc-8:** si hay un Doc-8 abierto cuando se registra el evento, el campo
+`doc8_id` se rellena como referencia. La vista del parte de trabajo hace un `LEFT JOIN`
+sobre `eventos_fisicos_vehiculo WHERE doc8_id = $1` para mostrar los eventos físicos
+dentro del parte — pero son datos de la tabla externa, no entradas del Doc-8.
 
 ### 19.1 Repostaje combustible
 
@@ -898,8 +988,9 @@ Usuario abre Repostar combustible desde black_column
       Gasolinera: además solicita euros (obligatorio)
       Base:       solo km y litros
   → Guardar:
-      → INSERT en doc8_eventos tipo 'repostaje_combustible'
-        { km_marcador, litros, euros?, ubicacion_tipo, timestamp }
+      → INSERT en eventos_fisicos_vehiculo tipo 'repostaje_combustible'
+        { id_vehiculo, km_marcador, litros, euros?, ubicacion_tipo,
+          doc8_id (si hay Doc-8 abierto), id_nombre, timestamp }
       → No afecta inventario de ítems del catálogo
         (el combustible no está en catalogo_items)
 ```
@@ -912,8 +1003,9 @@ Usuario abre Repostar AdBlue
       SÍ: solicita km_marcador (obligatorio)
       NO: no hace nada (usuario cancela)
   → Guardar:
-      → INSERT en doc8_eventos tipo 'repostaje_adblue'
-        { km_marcador, timestamp }
+      → INSERT en eventos_fisicos_vehiculo tipo 'repostaje_adblue'
+        { id_vehiculo, km_marcador,
+          doc8_id (si hay Doc-8 abierto), id_nombre, timestamp }
       → El repostaje es considerado siempre completo (no se registran litros)
 ```
 
@@ -1085,7 +1177,7 @@ Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disp
      role:            string,
      claims_snapshot: { ...claims del JWT },
      shift_start:     ISOString,
-     expires_at:      ISOString (shift_start + 12h),
+     expires_at:      ISOString (shift_start + 36h),
      device_id:       fingerprint del terminal
    }
 
@@ -1349,21 +1441,78 @@ COORDINADOR — recibe `pong_location`
 Si el coordinador no recibe `pong_location` en **5 segundos**:
 
 1. Aborta el listener del evento `pong_location`.
-2. Ejecuta una consulta directa a Supabase:
+2. Invoca la función RPC `get_ultima_ubicacion_vehiculo($id_vehiculo)`:
+
    ```sql
-   SELECT lat, lon, accuracy, timestamp_gps
-   FROM gps_historial
-   WHERE id_vehiculo = $1
-   ORDER BY timestamp_gps DESC
-   LIMIT 1
+   -- La función hace UNION ALL entre telemetría y eventos operativos
+   -- y devuelve la posición matemáticamente más reciente, sin importar la fuente.
+
+   CREATE OR REPLACE FUNCTION get_ultima_ubicacion_vehiculo(p_id_vehiculo TEXT)
+   RETURNS TABLE(lat NUMERIC, lon NUMERIC, accuracy NUMERIC,
+                 timestamp_gps TIMESTAMPTZ, origen TEXT)
+   AS $$
+     SELECT lat, lon, accuracy, timestamp_gps, 'telemetria' AS origen
+       FROM gps_historial
+      WHERE id_vehiculo = p_id_vehiculo
+
+     UNION ALL
+
+     SELECT coords_lat, coords_lon, NULL AS accuracy, timestamp_evento,
+            'cambio_operativo' AS origen
+       FROM doc8_eventos
+      WHERE id_vehiculo = p_id_vehiculo
+        AND coords_lat IS NOT NULL
+
+     ORDER BY timestamp_gps DESC
+     LIMIT 1;
+   $$ LANGUAGE sql STABLE;
    ```
-3. Muestra las coordenadas históricas en la tarjeta con estado `fallback`:
+
+   **Justificación del UNION ALL:** `gps_historial` contiene posiciones de telemetría
+   (pings explícitos). `doc8_eventos` contiene las coordenadas GPS capturadas en cada
+   cambio de estado operativo (activación, ruta, alerta…). El sistema devuelve siempre
+   la posición más reciente disponible, independientemente de si fue generada por un
+   ping de coordinación o por un cambio operativo del pilot.
+
+3. Muestra las coordenadas en la tarjeta con estado `fallback`:
    * Opacidad reducida (`opacity-60`).
    * Badge `Ubicación offline` en gris.
-   * Timestamp de la lectura histórica visible para que el coordinador
-     evalúe la antigüedad de la posición.
+   * Timestamp de la lectura y campo `origen` visibles para que el coordinador
+     evalúe la antigüedad y procedencia de la posición.
 
-### 29.4 Consideraciones de seguridad y canal
+### 29.4 Throttle local en el terminal de vehículo
+
+El terminal embarcado almacena el `timestamp` del último ping procesado.
+Si recibe un nuevo evento `ping_location` antes de que transcurran **15 segundos**
+desde el anterior, el evento se ignora silenciosamente — sin ejecutar
+`getCurrentPosition`, sin publicar `pong_location`.
+
+```
+useLocationListener — pseudocódigo de throttle:
+
+  lastPingProcessed: ISOString | null = null   // persistido en useVehiculoStore
+
+  on('ping_location'):
+    now = Date.now()
+    if lastPingProcessed && (now - lastPingProcessed) < 15_000:
+      return  // ignorar — throttle activo
+    lastPingProcessed = now
+    // → continuar con getCurrentPosition (ver §29.2)
+```
+
+**Efecto en coordinación:** como el `pong_location` se emite al canal general
+`vehiculo:${ID_vehiculo}`, todos los coordinadores suscritos a ese canal reciben
+la respuesta del primer ping de forma simultánea y actualizan su interfaz al mismo
+tiempo. Los pings duplicados enviados en los primeros 15 segundos no sobrecargan
+el hardware del vehículo y, a su vez, todos los coordinadores ya dispondrán de las
+coordenadas actualizadas gracias al pong del primer ping.
+
+**Justificación:** el hardware GPS de los terminales embarcados (especialmente
+en tablets de gama media) tarda entre 2 y 8 segundos en obtener un fix preciso.
+Sin throttle, pings simultáneos de múltiples coordinadores despertarían el chip GPS
+en ráfaga, drenando batería e introduciendo latencia adicional en la respuesta.
+
+### 29.5 Consideraciones de seguridad y canal
 
 * El canal `vehiculo:${ID_vehiculo}` es privado. Las políticas RLS de Supabase
   Realtime validan que solo terminales con `checkin_on` en ese `ID_vehiculo` y
@@ -1371,6 +1520,84 @@ Si el coordinador no recibe `pong_location` en **5 segundos**:
 * El `useLocationListener` no publica `pong_location` si el terminal no tiene
   un `ID_nombre` activo con `checkin_on` — previene respuestas de terminales
   ociosos o bloqueados.
+* El throttle de 15 segundos (§29.4) se aplica también en este nivel: un terminal
+  sin `checkin_on` que recibe pings no los procesa ni los cuenta contra el throttle.
 * La tabla `gps_historial` registra únicamente eventos de tipo `ping`
   (solicitudes explícitas). El historial pasivo de ruta (si se implementa en
   el futuro) usará `origen: 'track'` para distinguirlos.
+
+---
+
+## 30. Retención de JWT para sincronización offline post-checkout
+
+### 30.1 Problema
+
+Si un usuario ejecuta el checkout mientras está offline y existen mutaciones críticas
+en la cola IndexedDB, el flujo estándar destruye el JWT inmediatamente en Zustand.
+Esto provoca que el Service Worker pierda el token necesario para autenticarse contra
+Supabase al recuperar la conexión, dejando las mutaciones huérfanas y sin poder enviar.
+
+### 30.2 Condición de activación
+
+```
+usuario ejecuta checkout()
+∧ useOfflineQueue.isOnline === false
+∧ useOfflineQueue.pendingCount > 0
+```
+
+### 30.3 Comportamiento del mecanismo
+
+```
+CASO NORMAL (online o sin pendientes):
+  → checkout completo, flujo_checkout_automatico, JWT destruido → estado_0
+
+CASO RETENCIÓN (offline + pendientes):
+
+  1. INTERFAZ — transición visual inmediata a estado_0:
+     - UI presenta pantalla de estado_0 (el personal no puede operar)
+     - Banner persistente: "Sincronizando datos... No cierre el navegador"
+     - Contador visible: "N operaciones pendientes de envío"
+
+  2. MOTOR — JWT retenido en caché técnica:
+     - useAuthStore.jwtRetenido = true
+     - El JWT permanece en Zustand (NO destruido)
+     - useTerminalStore.estado = 'estado_0'  ← UI bloqueada
+     - El resto del flujo_checkout_automatico se ejecuta con normalidad
+       (Doc-8 cerrado, estados del vehículo actualizados, etc.)
+     - EXCEPCIÓN: useAuthStore.clearJwt() NO se llama todavía
+
+  3. SERVICE WORKER — vaciado de cola:
+     - Al recuperar conexión, el SW lee el JWT retenido desde useAuthStore
+     - Ejecuta procesarCola() con el JWT del usuario que hizo checkout
+     - Cada mutación procesada con HTTP 200 se elimina de IndexedDB
+     - Si alguna falla → marcada como 'fallido'; el resto continúa
+
+  4. DESTRUCCIÓN DIFERIDA del JWT:
+     - Cuando pendingCount === 0 (cola vacía):
+       → useOfflineQueue llama a useAuthStore.clearJwtAfterSync()
+       → JWT eliminado de Zustand y de localStorage
+       → jwtRetenido = false
+       → Banner actualizado: "Sincronización completada"
+     - Si hay mutaciones en estado 'fallido':
+       → El JWT sigue retenido
+       → Banner: "N operaciones fallidas — requieren atención"
+       → El supervisor / next pilot puede revisar y descartar manualmente
+```
+
+### 30.4 Seguridad del JWT retenido
+
+* El JWT retenido **no eleva los permisos** de nadie: la UI está en `estado_0`
+  (bloqueada), ningún componente puede operar ni renderizar módulos protegidos.
+* El JWT solo es accesible por el Service Worker para ejecutar las mutaciones
+  encoladas — operaciones que ya se habían iniciado y autorizado antes del checkout.
+* El JWT tiene su TTL natural (`shift_start + 36h`). Si expira antes de que se
+  complete la sincronización, las mutaciones fallarán con 401 y se marcarán como
+  `fallido` para revisión manual.
+
+### 30.5 Exposición en useOfflineQueue e useAuthStore
+
+| Store | Campo / Método | Descripción |
+|---|---|---|
+| `useOfflineQueue` | `hasCriticalPending: boolean` | true si pendingCount > 0 y isOnline === false en el momento del checkout |
+| `useAuthStore` | `jwtRetenido: boolean` | true mientras el JWT está retenido post-checkout |
+| `useAuthStore` | `clearJwtAfterSync(): void` | Destruye el JWT y limpia el store; solo llamado por useOfflineQueue cuando pendingCount === 0 |

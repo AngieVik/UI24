@@ -140,6 +140,7 @@ interface UseCheckin {
 
 ```
 CASO A — ID_nombre tiene estado 'pilot':
+  → Comprueba retención de sync (ver lógica abajo)
   → Delega a flujo_checkout_automatico() (ver §2.1)
 
 CASO B — ID_nombre tiene estado 'carry':
@@ -153,6 +154,24 @@ CASO C — ID_nombre solo tiene 'checkin_on' (sin vehículo):
   1. UPDATE checkin: timestamp_checkout = NOW()
   2. usePersonaStore[ID_nombre] = sin_sesion
   3. Si es el último → useTerminalAuth.logout()
+```
+
+**Retención de JWT en checkout offline (aplica solo a CASO A):**
+
+```
+Antes de ejecutar flujo_checkout_automatico:
+
+  if (!useOfflineQueue.isOnline && useOfflineQueue.pendingCount > 0):
+    → useTerminalStore.estado = 'estado_0'   ← UI bloqueada visualmente
+    → useAuthStore.jwtRetenido = true        ← JWT NO destruido todavía
+    → UI muestra banner: "Sincronizando datos... No cierre el navegador"
+    → flujo_checkout_automatico ejecuta todos sus pasos normales
+      EXCEPTO useAuthStore.clearJwt() (omitido)
+    → El Service Worker vaciará la cola con el JWT retenido
+    → Al completar: useOfflineQueue.clearJwtAfterSync() destruye el JWT
+
+  if (isOnline || pendingCount === 0):
+    → flujo normal → useAuthStore.clearJwt() incluido
 ```
 
 ### §2.1 flujo_checkout_automatico (orquestado desde checkout)
@@ -916,16 +935,18 @@ interface Mutation {
 
 interface UseOfflineQueue {
   // Estado
-  isOnline:     boolean
-  pendingCount: number
-  failedCount:  number
-  hasFailed:    boolean
+  isOnline:            boolean
+  pendingCount:        number
+  failedCount:         number
+  hasFailed:           boolean
+  hasCriticalPending:  boolean   // true si pendingCount > 0 y !isOnline en el momento del checkout
 
   // Acciones
   enqueue(tipo: string, payload: unknown): UUID
   procesarCola(): Promise<void>        // llamado automáticamente al reconectar
   reintentarFallidos(): Promise<void>
   descartarFallido(mutationId: UUID): void
+  clearJwtAfterSync(): void            // llamado internamente cuando pendingCount llega a 0 post-retención
 }
 ```
 
@@ -1322,6 +1343,96 @@ timer se restaura con el tiempo restante — no se reinicia a 20 minutos.
 
 ---
 
+## 16. useLocationListener
+
+> Hook activo en el terminal de vehículo que escucha eventos `ping_location`
+> en el canal Realtime `vehiculo:${ID_vehiculo}` y responde con la posición GPS
+> actual del dispositivo. Implementa un throttle de 15 segundos para proteger
+> el hardware GPS embarcado.
+> Ver `logic.md §29` para la especificación completa del mecanismo.
+
+```typescript
+interface UseLocationListener {
+  // Estado
+  isEscuchando:       boolean    // true si el canal Realtime está suscrito
+  ultimoPingAt:       ISOString | null   // timestamp del último ping procesado
+  throttleActivo:     boolean    // true si un nuevo ping sería ignorado ahora mismo
+  segundosThrottle:   number     // segundos hasta que el throttle se levante (0 si libre)
+}
+```
+
+### Condición de activación
+
+El hook se monta cuando:
+```
+useTerminalStore.ID_vehiculo IS NOT NULL
+∧ checkin_on === true   (al menos un ID_nombre con checkin en el vehículo)
+∧ estadoOperativo ≠ 'desactivado'
+```
+
+Se desmonta (y desuscribe el canal Realtime) cuando el terminal pasa a
+`estado_0` o cuando no queda ningún `ID_nombre` con `checkin_on`.
+
+### Flujo al recibir `ping_location`
+
+```typescript
+onPingLocation(payload):
+  // 1. Guardia de checkin
+  if (!hayCheckinActivo()) return
+
+  // 2. Throttle de 15 segundos
+  const ahora = Date.now()
+  if (ultimoPingAt && (ahora - ultimoPingAt) < 15_000) return   // ignorar
+
+  ultimoPingAt = ahora   // persistido en useVehiculoStore
+
+  // 3. Obtener posición GPS (una sola lectura, no watchPosition)
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords
+      const timestamp_gps = new Date().toISOString()
+
+      // 4. Publicar pong al canal (todos los coordinadores suscritos lo reciben)
+      supabase.channel(`vehiculo:${ID_vehiculo}`)
+        .send({ type: 'broadcast', event: 'pong_location',
+                payload: { lat: latitude, lon: longitude, accuracy, timestamp_gps } })
+
+      // 5. Registrar en historial persistente
+      supabase.from('gps_historial').insert({
+        id_vehiculo: ID_vehiculo,
+        lat: latitude, lon: longitude, accuracy,
+        timestamp_gps,
+        origen: 'ping'
+      })
+    },
+    (_err) => { /* timeout o permiso denegado — no publicar pong */ },
+    { timeout: 5000, maximumAge: 0, enableHighAccuracy: true }
+  )
+```
+
+### Fallback en coordinación (lado coordinador — no en el terminal de vehículo)
+
+El timeout de 5 segundos y la consulta de fallback se gestionan en el componente
+`VisorSeguimientoOperativo` (lado coordinador), no en este hook. Cuando el coordinador
+no recibe `pong_location` tras 5 s, llama a la RPC de Supabase en lugar de un SELECT
+directo sobre `gps_historial`:
+
+```typescript
+// Fallback del coordinador al agotar el timeout de pong
+const { data } = await supabase.rpc('get_ultima_ubicacion_vehiculo', {
+  p_id_vehiculo: vehiculoId
+})
+// La RPC hace UNION ALL gps_historial + doc8_eventos ordenado por timestamp DESC LIMIT 1
+// Garantiza la posición más reciente independientemente de su fuente
+// Ver logic.md §29.3 para el SQL completo
+```
+
+### Stores: `useVehiculoStore` (lee `ID_vehiculo`, `estadoOperativo`; escribe `ultimoPingAt`)
+
+### Dependencias: `useRealtime` (gestiona el canal `vehiculo:${ID_vehiculo}`)
+
+---
+
 ## 14. Árbol de dependencias entre hooks
 
 ```
@@ -1329,10 +1440,11 @@ useTerminalAuth
   └── (base para todos)
 
 useCheckin
-  ├── useTerminalAuth (lee estado terminal)
-  ├── useVehiculo     (desacopla carry al checkout)
-  ├── useDRP          (sale del DRP en checkout pilot)
-  └── useDoc8         (cierra Doc-8 en checkout pilot)
+  ├── useTerminalAuth  (lee estado terminal)
+  ├── useVehiculo      (desacopla carry al checkout)
+  ├── useDRP           (sale del DRP en checkout pilot)
+  ├── useDoc8          (cierra Doc-8 en checkout pilot)
+  └── useOfflineQueue  (detecta pendingCount > 0 en checkout offline para retención de JWT)
 
 useVehiculo
   ├── useDoc8         (abre/cierra Doc-8, registra eventos)
@@ -1372,6 +1484,11 @@ useIdleTimeout
   └── useAuthStore     (limpia JWT y rolActivo al expirar)
   Condición: tipoSesion ∈ {galleta_pequeña, galleta} ∧ rolActivo = 'invitado'
   Orquestado por: useTerminalAuth (llama a iniciar/detener)
+
+useLocationListener
+  ├── useRealtime     (suscripción al canal vehiculo:${ID_vehiculo})
+  └── useVehiculoStore (lee estadoOperativo; escribe ultimoPingAt para throttle)
+  Condición: ID_vehiculo asignado ∧ checkin_on ∧ estadoOperativo ≠ 'desactivado'
 ```
 
 *`useModuloPSA` y `useModuloFiliacion` no están especificados en detalle aquí —
@@ -1422,6 +1539,7 @@ excepto `km_fin` en checkout (bloqueante — el flujo no puede continuar).
 drp:{drp_id}                  → cambios de DRP específico
 bandeja:{instancia}           → mensajes de una bandeja
 inventario:{location_id}      → stock de un location
+vehiculo:{id_vehiculo}        → ping/pong de coordenadas GPS (ping_location / pong_location)
 global:marquesina             → texto del ticker
 global:tablon                 → anuncios del tablón
 global:vacaciones             → estado periodo vacaciones

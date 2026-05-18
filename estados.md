@@ -226,7 +226,7 @@ Estado de cada slot de subinventario para DRP o PSA.
 | `Operativo` | Disponible para asignar a un nuevo DRP o PSA. |
 | `Asignado` | Vinculado a un DRP o PSA activo. |
 | `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación. Asignación estándar bloqueada. |
-| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. Se apila un snapshot en `snapshots_reconciliacion` (FIFO). El stock en el momento de la reasignación actúa como referencia inicial del nuevo DRP. Descuadre pendiente transferido a nueva dotación. |
+| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. El snapshot del DRP anterior pasa automáticamente a `resuelto_por_transferencia` (no visible en la cola activa de logística). Se crea un nuevo snapshot con el `stock_real` actual como única referencia activa. La nueva dotación asume ciegamente el stock teórico. Al retornar a base, logística hace un único cuadre que cubre la merma acumulada de todos los DRP anteriores. |
 
 **Flujo estándar:**
 
@@ -240,9 +240,12 @@ En_Transito            → Operativo             (logística confirma reconcilia
 
 ```
 En_Transito            → Operativo_Condicionado  (operario acepta reasignación anticipada)
+                                                  snapshot anterior → resuelto_por_transferencia
+                                                  nuevo snapshot creado con stock_real actual
 Operativo_Condicionado → Asignado                (asignación al nuevo DRP/PSA)
-Asignado (condicionado)→ Asignado                (reconciliación del DRP anterior completada;
-                                                  descuadre transferido, subinventario sigue activo)
+Asignado               → En_Transito             (nuevo DRP finaliza)
+En_Transito            → Operativo               (logística reconcilia único snapshot activo —
+                                                  cubre merma acumulada de todos los DRP)
 ```
 
 Ver `logic.md §9.1` para el flujo de modal y la mecánica de snapshot de stock.
