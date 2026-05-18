@@ -98,11 +98,11 @@
        * Modal de confirmación: "¿Devolver [Nombre] a la lista de espera
          para revaluación? El hilo de Doc-3 se conservará."
        * Si confirma:
-         - `estado → en_espera`
-         - `revaluacion = true` (inmutable)
-         - `id_nombre_box = NULL`
-         - `timestamp_inicio_consulta = NULL`
-         - `timestamp_admision` preservado
+         * `estado → en_espera`
+         * `revaluacion = true` (inmutable)
+         * `id_nombre_box = NULL`
+         * `timestamp_inicio_consulta = NULL`
+         * `timestamp_admision` preservado
        * El paciente reaparece en la lista de espera de todos los boxes
          vía Realtime con badge visual diferenciado.
        * Ver `logic.md §20.3` para el flujo y SQL completo.

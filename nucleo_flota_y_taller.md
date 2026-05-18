@@ -190,6 +190,7 @@ El badge muestra **el peor estado** entre la alerta por fecha y la alerta por km
 ### Vista de detalle por vehículo
 
 Al hacer clic en una fila:
+
 * Se abre el detalle completo del vehículo con todos los campos de `vehiculos_metadata`.
 * Botón `Editar mantenimiento` *(RBAC: `responsable_flota`, `gerencia`)* →
   abre los campos de mantenimiento en modo edición inline.
@@ -260,8 +261,8 @@ async function comprimirImagen(file: File): Promise<Blob> {
 3. El `Blob` se añade al array de adjuntos del draft en IndexedDB.
 4. El componente renderiza una miniatura con `URL.createObjectURL(blob)`.
 5. Al guardar el Doc-7:
-   - Si online: upload a Supabase Storage + INSERT del path en el registro del Doc-7.
-   - Si offline: el `Blob` permanece en IndexedDB; la mutación se encola con el path
+   * Si online: upload a Supabase Storage + INSERT del path en el registro del Doc-7.
+   * Si offline: el `Blob` permanece en IndexedDB; la mutación se encola con el path
      temporal. Al reconectar: upload primero, luego INSERT con path real.
 6. El `Blob` en IndexedDB se elimina una vez confirmada la sincronización con Supabase.
 

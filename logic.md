@@ -314,6 +314,7 @@ CREATE TRIGGER trg_purgar_plantillas_al_archivar
 ```
 
 **Comportamiento:**
+
 * El ítem desaparece automáticamente de **todas** las plantillas genéricas existentes.
 * Las plantillas afectadas quedan con el ítem simplemente eliminado de su lista —
   no se invalida la plantilla entera.
@@ -548,11 +549,11 @@ Desde `black_column → Logística → Descuadres`:
   ```
 
   **Validación frontend:**
-  - Campo `cantidad_recuperada` con rango `[1, diferencia]` (control numérico).
-  - Si `cantidad_recuperada = diferencia` → merma = 0, se muestra "Recuperación total".
-  - Si `cantidad_recuperada < diferencia` → merma residual visible en el formulario
+  * Campo `cantidad_recuperada` con rango `[1, diferencia]` (control numérico).
+  * Si `cantidad_recuperada = diferencia` → merma = 0, se muestra "Recuperación total".
+  * Si `cantidad_recuperada < diferencia` → merma residual visible en el formulario
     antes de confirmar: "Se imputarán [N] unidades como merma definitiva."
-  - El operario debe confirmar explícitamente antes de ejecutar el RPC.
+  * El operario debe confirmar explícitamente antes de ejecutar el RPC.
 
 * **Archivar**: cierra el descuadre sin clasificación contable. Estado → `Archivado`.
   No genera entrada en `auditoria_inventario`. Para casos donde el descuadre no requiere
@@ -749,6 +750,7 @@ con el badge `Multi-DRP` en naranja, indicando que requiere análisis contextual
 de tomar medidas disciplinarias o contables.
 
 Transiciones del estado condicionado:
+
 ```
 En_Transito            → Operativo_Condicionado  (reasignación aceptada, snapshot apilado)
 Operativo_Condicionado → Asignado                (asignación inmediata al nuevo DRP)
@@ -1412,6 +1414,7 @@ estado de otro paciente, desincronizando la cola para el resto de boxes activos.
 
 El cambio de orden **nunca** se implementa como un UPDATE directo desde el cliente.
 Toda modificación del orden de la cola se realiza via RPC que:
+
 1. Recibe el array de IDs con el orden deseado.
 2. Valida internamente que todos los pacientes involucrados siguen en `en_espera`.
 3. Si alguno ha pasado a `en_consulta` o `archivado` → `ROLLBACK` completo de la transacción.
@@ -1601,14 +1604,14 @@ $$ LANGUAGE plpgsql;
 ```
 
 **Invariantes:**
-- `revaluacion = TRUE` es inmutable: una vez establecido no puede revertirse a `FALSE`.
-- `timestamp_admision` nunca se sobreescribe. La antigüedad real del paciente en el sistema
+* `revaluacion = TRUE` es inmutable: una vez establecido no puede revertirse a `FALSE`.
+* `timestamp_admision` nunca se sobreescribe. La antigüedad real del paciente en el sistema
   refleja su hora de entrada original.
-- El hilo Doc-3 es continuo: cuando el box reabre al paciente ve el mismo documento,
+* El hilo Doc-3 es continuo: cuando el box reabre al paciente ve el mismo documento,
   no uno nuevo. El profesional puede continuar el registro clínico donde lo dejó.
-- `orden` se conserva: el paciente no pierde su posición en la cola al ser revaluado.
+* `orden` se conserva: el paciente no pierde su posición en la cola al ser revaluado.
   El perfil_admision puede ajustar el orden manualmente si la prioridad clínica cambia.
-- La acción `revaluar_paciente` no interactúa con `liberar_paciente_de_box`:
+* La acción `revaluar_paciente` no interactúa con `liberar_paciente_de_box`:
   son flujos distintos (box activo revalúa vs. administración rescata box bloqueado).
 
 **RBAC:** cualquier usuario con acceso al box activo (no limitado a roles específicos).
@@ -1805,17 +1808,17 @@ Cuando un pilot hace check-in y activa el vehículo (turno iniciado con red disp
 ```
 
 **Seguridad del `password_hash`:**
-- PBKDF2-SHA-256 con 100.000 iteraciones — resiste ataques de fuerza bruta locales
+* PBKDF2-SHA-256 con 100.000 iteraciones — resiste ataques de fuerza bruta locales
   sin requerir la librería `bcrypt` (coste de bundle ≈ 0, sin bloqueo del Main Thread).
-- La derivación se ejecuta con `crypto.subtle` nativo del navegador: delegado a C++,
+* La derivación se ejecuta con `crypto.subtle` nativo del navegador: delegado a C++,
   asíncrono, sin impacto en el hilo de UI.
-- La sal es única por sesión de check-in — distintas sesiones del mismo usuario
+* La sal es única por sesión de check-in — distintas sesiones del mismo usuario
   producen hashes distintos, evitando ataques de precómputo de tabla.
-- El hash se calcula en el servidor durante el check-in online. El cliente solo
+* El hash se calcula en el servidor durante el check-in online. El cliente solo
   recibe el hash y la sal ya derivados — nunca la contraseña en claro.
-- Si el usuario cambia su contraseña online, el payload previo queda invalidado
+* Si el usuario cambia su contraseña online, el payload previo queda invalidado
   automáticamente porque la firma HMAC será inconsistente en el próximo ciclo de clave.
-- El hash no se sincroniza entre terminales — cada terminal genera el suyo propio
+* El hash no se sincroniza entre terminales — cada terminal genera el suyo propio
   en el momento del check-in.
 
 ### 25.3 Activación del modo degradado
@@ -1955,13 +1958,13 @@ Al completar check-in online con éxito:
 ```
 
 **Seguridad:**
-- El payload precargado ofrece exactamente las mismas garantías que el estándar:
+* El payload precargado ofrece exactamente las mismas garantías que el estándar:
   HMAC firmado por servidor, `device_id` vinculado al terminal de destino,
   bcrypt de coste 12 para la contraseña.
-- `shift_start` apunta al inicio del turno SIGUIENTE. Si existe ya una sesión activa
+* `shift_start` apunta al inicio del turno SIGUIENTE. Si existe ya una sesión activa
   (`u24_offline_session`) para ese `user_id`, tiene prioridad absoluta; el precaché
   solo se consulta en ausencia de sesión de turno activo.
-- El servidor no transmite contraseñas en claro en ningún momento. El `password_hash`
+* El servidor no transmite contraseñas en claro en ningún momento. El `password_hash`
   se recupera del almacén interno del servidor, no del cliente.
 
 ---
@@ -1971,8 +1974,8 @@ Al completar check-in online con éxito:
 ### 26.1 Condición de aplicación
 
 Solo aplica cuando:
-- `useTerminalStore.tipoSesion ∈ ['galleta_pequeña', 'galleta']`
-- `useAuthStore.rolActivo === 'invitado'` (nadie ha hecho check-in aún)
+* `useTerminalStore.tipoSesion ∈ ['galleta_pequeña', 'galleta']`
+* `useAuthStore.rolActivo === 'invitado'` (nadie ha hecho check-in aún)
 
 ### 26.2 Comportamiento
 
@@ -2028,9 +2031,9 @@ Usuario se autentica → Supabase Auth emite JWT
 ### 27.2 Actualización de claims
 
 Si el rol de un usuario cambia (RBAC panel en coordinación):
-- El JWT activo no se invalida inmediatamente.
-- Los nuevos claims se aplican al **siguiente JWT** emitido (refresh o nuevo login).
-- Para forzar aplicación inmediata: `supabase.auth.refreshSession()` desde el cliente
+* El JWT activo no se invalida inmediatamente.
+* Los nuevos claims se aplican al **siguiente JWT** emitido (refresh o nuevo login).
+* Para forzar aplicación inmediata: `supabase.auth.refreshSession()` desde el cliente
   o revocar la sesión desde el panel de Supabase.
 
 ### 27.3 Claims en el frontend (cosmético)
@@ -2540,6 +2543,7 @@ de flota. El error puede ocurrir por fatiga o por confundir el odómetro entre v
 La validación se aplica en dos niveles:
 
 **Nivel frontend (UX inmediata):**
+
 ```
 Al solicitar km_inicio en el flujo de activación (hook useVehiculo.activar, paso 3):
 
@@ -2561,6 +2565,7 @@ Al solicitar km_inicio en el flujo de activación (hook useVehiculo.activar, pas
 ```
 
 **Nivel base de datos (defensa en profundidad):**
+
 ```sql
 -- CHECK CONSTRAINT en tabla doc8 (o trigger BEFORE INSERT)
 -- Se compara contra el km_fin del Doc-8 anterior del mismo vehículo.
@@ -2701,6 +2706,7 @@ cuando el pilot confirma la activación.
 
 Al concederse el desbloqueo y ejecutarse la activación, se genera automáticamente
 un Doc-11 (Aviso urgente) con:
+
 * Tipo: `activacion_bajo_override`
 * `ID_vehiculo`, `ID_piloto_solicitante`, `ID_coordinador_autorizante`
 * `timestamp_solicitud`, `timestamp_autorizacion`, `timestamp_activacion`
@@ -2777,6 +2783,7 @@ y la interfaz de `useAuthStore`.
 ### 34.4 Auditoría e imputación
 
 El `ejecutorId` inyectado en cada petición asegura que:
+
 * La política RLS de INSERT/UPDATE evalúa el `auth.uid()` correcto del JWT.
 * Los campos automáticos `id_nombre_ejecutor` se rellenan via `auth.jwt()` en el servidor.
 * El log de auditoría imputa la acción al usuario real.
@@ -2980,13 +2987,13 @@ de días aprobados.
 
 Una entrada con `es_excepcion_absoluta = TRUE` en la tabla de cuadrantes:
 
-- **Tiene prioridad absoluta** sobre cualquier turno del mismo `(ID_nombre, fecha)`
+* **Tiene prioridad absoluta** sobre cualquier turno del mismo `(ID_nombre, fecha)`
   generado por un patrón de asignación.
-- **No puede ser sobrescrita** por una reaplicación de patrón. El motor de aplicación
+* **No puede ser sobrescrita** por una reaplicación de patrón. El motor de aplicación
   de patrones debe verificar, para cada día del rango, si existe una excepción absoluta
   y saltarla incondicionalmente.
-- **Solo puede eliminarse** con acción explícita de `rrhh` o `gerencia`.
-- Si el Doc-12 es revertido a `Denegada` (acción manual de RRHH), las excepciones
+* **Solo puede eliminarse** con acción explícita de `rrhh` o `gerencia`.
+* Si el Doc-12 es revertido a `Denegada` (acción manual de RRHH), las excepciones
   absolutas inyectadas deben eliminarse (rollback manual o trigger AFTER UPDATE).
 
 ### 37.3 Trigger de inyección
@@ -3098,12 +3105,12 @@ sin alterar el `stock_real`.
 
 ### 38.2 Semántica del estado `Rechazado_Devuelto`
 
-- **Terminal e irreversible**: no existe transición de salida desde `Rechazado_Devuelto`.
-- **NO-OP contable**: ninguna fila de `inventario_items` se toca. El `stock_real`
+* **Terminal e irreversible**: no existe transición de salida desde `Rechazado_Devuelto`.
+* **NO-OP contable**: ninguna fila de `inventario_items` se toca. El `stock_real`
   del almacén de destino permanece inalterado.
-- **Cierre logístico**: el Doc-9 desaparece de la bandeja activa y queda archivado.
+* **Cierre logístico**: el Doc-9 desaparece de la bandeja activa y queda archivado.
   Consulta disponible en el historial de documentos del `inventory_location` de destino.
-- **Trazabilidad completa**: el documento registra `motivo_rechazo`, `ID_nombre_rechazador`
+* **Trazabilidad completa**: el documento registra `motivo_rechazo`, `ID_nombre_rechazador`
   y `timestamp_rechazo`. Permanece accesible para auditoría.
 
 ### 38.3 Flujo UI
@@ -3182,10 +3189,10 @@ END IF;
 Ver `hooks.md §4 useDRP.crearDRP` para el manejo completo del error `409`.
 
 **Resultado del conflicto:**
-- El DRP no se crea (rollback total).
-- El formulario permanece abierto con los datos del coordinador.
-- Solo el campo `backpack_id` se limpia para nueva selección.
-- El selector `selector_vehiculo_drp` y las dotaciones se conservan.
+* El DRP no se crea (rollback total).
+* El formulario permanece abierto con los datos del coordinador.
+* Solo el campo `backpack_id` se limpia para nueva selección.
+* El selector `selector_vehiculo_drp` y las dotaciones se conservan.
 
 ### 39.4 Estados válidos para asignación
 
@@ -3607,16 +3614,19 @@ galletas_terminales:
 ```
 
 **Flujo de pre-registro (generación del `token_especial`):**
+
 1. El coordinador rellena el campo `descripcion` (obligatorio — validado en UI y servidor).
 2. El servidor genera el PIN, hace hash, e inserta en `galletas_terminales` con
    `id_terminal = ''` y `activa = false` — la fila existe pero el terminal aún no está vinculado.
 3. El PIN se muestra una vez en pantalla al coordinador.
 
 **Flujo de binding (consumo del PIN en el terminal):**
+
 1. El terminal genera su `id_terminal` (fingerprint — ver `terminal_check.md`).
 2. Envía el PIN + `id_terminal` a la Edge Function `consumir_pin`.
 3. La Edge Function evalúa el tipo de PIN:
-   - **Permanente (`token_especial`):**
+   * **Permanente (`token_especial`):**
+
      ```sql
      UPDATE galletas_terminales
         SET id_terminal  = p_id_terminal,
@@ -3626,8 +3636,9 @@ galletas_terminales:
         AND activa   = FALSE
         AND id_terminal = '';   -- solo fila pre-registrada sin terminal
      ```
+
      Inyecta cookie segura permanente. La fila en `galletas_terminales` queda activa.
-   - **Temporal (`token_de_seguridad`):**
+   * **Temporal (`token_de_seguridad`):**
      No toca `galletas_terminales`. Registra `id_terminal` y `consumido_at` en
      `sesiones_emergencia` únicamente (trazabilidad de auditoría).
 

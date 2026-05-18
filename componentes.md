@@ -95,6 +95,7 @@ const esMutacionGeneral = !isReadOnly
 ```
 
 Consecuencias:
+
 * El botón `Marcar_Solucionada` aparece **habilitado** para Doc-11 en cualquier bandeja.
 * Los botones `Marcar_En_Proceso` y `Archivar` permanecen **deshabilitados** si `isReadOnly={true}`.
 * El acuse de recibo (`timestamp_lectura`) se registra igualmente, como en cualquier isReadOnly.
@@ -304,6 +305,7 @@ necesario.
 ### Comportamiento
 
 * Carga la lista de vehículos ejecutando la RPC `get_vehiculos_disponibles_para_drp()`:
+
   ```sql
   -- Excluye inoperativo_critico
   -- Excluye vehículos ya en DRP En_curso

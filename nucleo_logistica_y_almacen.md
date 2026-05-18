@@ -94,6 +94,7 @@ Los subgrupos se crean directamente en cada location según necesidades.
 ### Estructura de una plantilla
 
 Cada entrada en `plantillas_stock` tiene:
+
 ```
 plantilla_id   → nombre de la plantilla (ej. 'plantilla_B')
 tipo           → tipo de location al que aplica (ej. 'B')
