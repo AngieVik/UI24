@@ -54,7 +54,8 @@ El espacio es un recurso crítico en pantallas móviles montadas en ambulancias.
   2. `sm` (640px+): Tablets pequeñas en posición vertical (Portrait).
   3. `md` (768px+): Tablets estándar en posición horizontal (Landscape).
   4. `lg` (1024px+): Pantallas de portátiles (Puestos de Coordinación/RRHH).
-  5. `xl` y `2xl` (1280px+): Monitores de Base y Centros de Control.
+  5. `xl` (1280px+): Monitores de base (Puestos de Coordinación/RRHH).
+  6. `2xl` (1536px+): Monitor de base grande / centro de control |
 * **Adaptabilidad algorítmica (Fluid design):** Fomentar propiedades matemáticas fluidas como `clamp()` en Tailwind para anchos y tipografías. El estilo base será uniforme de móvil a monitor.
 * **Cambio estructural justificado:** Prohibidos los rediseños estéticos en distintos breakpoints. El layout solo mutará por limitación física (ej. transformar una tabla masiva en *Cards* en móvil).
 

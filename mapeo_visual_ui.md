@@ -63,7 +63,6 @@ Se restaura al pulsar `Home` (`ti-home`) o el botón de atrás desde cualquier v
 
 ```
 visual_info_home
-├── selector_vehiculos          (siempre visible)
 ├── panel_personal              (visible si hay ID_nombre con checkin_on)
 │   └── por cada ID_nombre: nombre + estado + icono + telefono
 ├── panel_vehiculo              (visible si hay ID_vehiculo activo/seleccionado)
@@ -108,7 +107,7 @@ Tipo de renderizado:
 | 3.7 | → Repostar combustible | `ti-gas-station` | in-place | Formulario repostaje | Toggle Gasolinera/Base. |
 | 3.8 | → Repostar AdBlue | `ti-droplet` | in-place | Formulario AdBlue | Toggle activo/no. |
 | 3.9 | → Doc-Checklist360 Revisión 360° | `ti-checkbox` | in-place | Formulario Checklist360 | RBAC crear: tes, flota, gerencia. |
-| 3.10 | → Selector vehículos | `ti-steering-wheel` | retorno (parcial) | `visual_info_home` | Hace scroll/foco al `selector_vehiculos` dentro de `visual_info_home`. |
+| 3.10 | → Vehículos | `ti-steering-wheel` | in-place | `vista_vehiculos` | Vista combinada: parte superior = lista completa de flota con ID, matrícula, `estado_operativo` y `condicion_tecnica`. Al seleccionar un vehículo se expande debajo el `selector_estados_ID_vehiculo` (selector `estado_operativo`, badge `condicion_tecnica`, selector `tipo_servicio`). Único punto de acceso al listado de flota — `selector_vehiculos` ya no aparece en `visual_info_home`. |
 | 4 | **DRP** | `ti-map-pin` | sin-render | — | Expande/colapsa subgrupo. |
 | 4.1 | → Operativa DRP | `ti-activity` | in-place | Lista docs DRP activos | Cada doc abre MODAL sobre `home_area`. RBAC: todos los roles DRP. |
 | 4.2 | → Visor DRP | `ti-selector` | in-place | `visor_drp` | Lista de DRP en En_espera / En_preparacion / En_curso con tarjetas expandibles. |
@@ -125,12 +124,15 @@ Tipo de renderizado:
 | 6.3 | → Doc-10 Envío material | `ti-transfer` | in-place | Formulario Doc-10 | Contexto logística: origen almacén central. |
 | 6.4 | → Inventario en tránsito | `ti-truck` | in-place | Vista tránsito | Lista de Doc-10 en estado En_Transito. |
 | 6.5 | → Descuadres | `ti-alert-circle` | in-place | Vista descuadres | Lista de Descuadre_Pendiente_Revision con acciones de resolución. |
-| 6.6 | → Bandeja logística | `ti-inbox` | modal | `bandeja_entrada_logistica` | Flujo estándar. Ver `componentes.md`. |
+| 6.6 | → Catálogo de ítems | `ti-tags` | in-place | Vista `catalogo_items` | Tabla del catálogo maestro (245 ítems): ID, categoría, nombre, especificación, estado archivado. Acciones: Añadir ítem \| Editar \| Archivar. El archivado activa el trigger que purga el ítem de todas las plantillas (ver `logic.md §6.4`). RBAC: `responsable_logistica`, `gerencia` (`can_manage_catalog`). |
+| 6.7 | → Bandeja logística | `ti-inbox` | modal | `bandeja_entrada_logistica` | Flujo estándar. Ver `componentes.md`. |
 | 7 | **Flota y taller** | `ti-car` | sin-render | — | |
 | 7.1 | → Incidencias | `ti-tool` | in-place | Vista incidencias activas | Lista de incidencias abiertas con filtros. |
 | 7.2 | → Doc-7 Informe avería | `ti-engine` | in-place | Formulario Doc-7 | |
 | 7.3 | → Metadata vehículo (ITV/docs) | `ti-id` | in-place | Vista metadata | Datos ITV, seguros y documentación por ID_vehiculo. |
-| 7.4 | → Bandeja flota | `ti-inbox` | modal | `bandeja_entrada_flota` | Flujo estándar. Ver `componentes.md`. |
+| 7.4 | → Mantenimiento flota | `ti-tool-2` | in-place | `visor_mantenimiento` | Tabla de estado de mantenimiento preventivo de toda la flota: aceite, frenos, neumáticos. Badges OK/Próximo/Urgente. RBAC lectura: `flota`, `responsable_flota`, `gerencia`. RBAC edición: `responsable_flota`, `gerencia`. |
+| 7.5 | → Historial eventos físicos | `ti-history` | in-place | Vista `eventos_fisicos_vehiculo` | Historial de repostajes (combustible, AdBlue) y otros eventos físicos registrados en la tabla `eventos_fisicos_vehiculo`. Filtros: ID_vehiculo, tipo_evento, rango de fechas. Independiente del Doc-8. RBAC: `flota`, `responsable_flota`, `gerencia`. Ver `logic.md §19`. |
+| 7.6 | → Bandeja flota | `ti-inbox` | modal | `bandeja_entrada_flota` | Flujo estándar. Ver `componentes.md`. |
 | 8 | **Coordinación y seguridad** | `ti-shield-lock` | sin-render | — | |
 | 8.1 | → Token de emergencia | `ti-cookie` | in-place | Generador de token | Formulario: tipo (temporal/permanente) + PIN 6 dígitos generado. |
 | 8.2 | → RBAC roles | `ti-users` | in-place | Vista gestión de roles | Asignación de rol por ID_nombre. |
@@ -141,7 +143,9 @@ Tipo de renderizado:
 | 9.3 | → Gestión tablón | `ti-news` | in-place | Editor tablón central | Crear / Editar / Archivar anuncios. RBAC: gerencia, rrhh. |
 | 9.4 | → Marquesina | `ti-antenna` | in-place | Editor marquesina | Texto del ticker de header. RBAC: gerencia, rrhh. |
 | 9.5 | → Doc-12 Solicitud vacaciones | `ti-beach` | in-place | Formulario Doc-12 (activación) | RRHH activa el periodo de vacaciones que hace Doc-12 visible en Tablón central. |
-| 9.6 | → Bandeja RRHH | `ti-inbox` | modal | `bandeja_entrada_rrhh` | Flujo Estándar+ (Doc-12 Aprobar/Denegar, Doc-13 Marcar_Leida). Ver `componentes.md`. |
+| 9.6 | → Repositorio documentos | `ti-folder-open` | in-place | Vista `repositorio_documentos` | Normativas, protocolos y documentación corporativa. Lectura: todos los roles autenticados. Gestión (crear/editar/archivar): `gerencia`, `rrhh`. |
+| 9.7 | → Gestión de bajas y ausencias | `ti-calendar-x` | in-place | Vista `gestion_bajas` | Registro y seguimiento de bajas médicas, ausencias justificadas y días de compensación por ID_nombre. Separado de los cuadrantes de turno. RBAC: `rrhh`, `gerencia`. |
+| 9.8 | → Bandeja RRHH | `ti-inbox` | modal | `bandeja_entrada_rrhh` | Flujo Estándar+ (Doc-12 Aprobar/Denegar, Doc-13 Marcar_Leida). Ver `componentes.md`. |
 | 10 | **Tablón central** | `ti-speakerphone` | in-place | Vista tablón central | Lectura para todos los roles. gerencia/rrhh ven además controles de gestión. Doc-12 aparece aquí cuando está activado. |
 | 11 | **Buzón interno** (Doc-13) | `ti-message-report` | in-place | Formulario Doc-13 | Propuestas y quejas. Todos los roles autenticados. |
 
@@ -175,11 +179,16 @@ Tipo de renderizado:
 * Permite rellenar documentos manteniendo `visual_info_drp` visible.
 * Varios docs pueden abrirse en secuencia; se abren uno a uno.
 
-### 4.5 Selector vehículos (ítem 3.10)
+### 4.5 Vista Vehículos (ítem 3.10)
 
-* No reemplaza `home_area`. Es un **retorno parcial**: lleva a `visual_info_home`
-  haciendo foco/scroll en el componente `selector_vehiculos`.
-* Equivale a pulsar `Home` pero con scroll automático al selector.
+* Reemplaza el contenido del `home_area` — renderizado **in-place**.
+* Parte superior: lista completa de la flota (`selector_vehiculos`) con ID, matrícula,
+  badge de `estado_operativo` y badge de `condicion_tecnica`.
+* Al seleccionar un vehículo de la lista: se expande debajo el panel
+  `selector_estados_ID_vehiculo` con los controles de `estado_operativo`,
+  `condicion_tecnica` (solo lectura) y `tipo_servicio`.
+* Es el único punto de acceso al listado de flota — `selector_vehiculos` ya no
+  aparece en `visual_info_home`.
 
 ---
 
@@ -221,6 +230,7 @@ Si no hay vehículo activo, muestran aviso en home_area.
 | Repostar combustible (3.7) | ID_vehiculo activo |
 | Repostar AdBlue (3.8) | ID_vehiculo activo |
 | Doc-Checklist360 (3.9) | ID_vehiculo seleccionado |
+| Vehículos — selector_estados (3.10) | ID_vehiculo seleccionado en la vista para mostrar el panel de controles |
 | Operativa DRP — docs Doc-2/3/4/5 (4.1) | ID_vehiculo en DRP activo |
 | Logística DRP (4.4) | DRP activo con locations asignadas |
 | Estados DRP (4.6) | DRP activo existente |
@@ -243,7 +253,7 @@ Los ítems con RBAC restringido se comportan así para roles sin permiso:
 
 | Zona | Store | Fuente | Qué actualiza |
 |---|---|---|---|
-| `selector_vehiculos` | `useVehiculoStore` | Supabase Realtime | Estado operativo y función de cada ID_vehiculo |
+| `vista_vehiculos` (ítem 3.10) | `useVehiculoStore` | Supabase Realtime | Estado operativo, condición técnica y tipo de servicio de cada ID_vehiculo |
 | `panel_personal` | `usePersonaStore` | Supabase Realtime | checkin_on, pilot, carry por ID_nombre |
 | `visual_info_drp` | `useDRPStore` | Supabase Realtime | Estado DRP, dotaciones, módulos activos |
 | `bandeja_entrada_*` (iconos) | `useBandejasStore` | Supabase Realtime | Iluminación amarilla del icono `ti-mail` si hay mensajes sin leer |
@@ -314,7 +324,10 @@ El botón `ti-arrow-left` está en el extremo derecho del header.
 |---|---|---|
 | `base` | < 640 px | Teléfono / tablet pequeña vertical |
 | `sm` | ≥ 640 px | Tablet / tablet apaisada |
+| `md` | ≥ 768 px | Tablet apaisada / portátil pequeña |
 | `lg` | ≥ 1024 px | Terminal de escritorio / montaje en vehículo |
+| `xl` | ≥ 1280 px | Monitor de base / Puestos de Coordinación |
+| `2xl` | ≥ 1536 px | Monitor de base grande / centro de control |
 
 **Vistas no accesibles en base (< 640 px):**
 
@@ -330,7 +343,6 @@ Algunos componentes son accesibles desde más de un punto. El componente renderi
 
 | Componente | Ruta A | Ruta B |
 |---|---|---|
-| `selector_vehiculos` | `visual_info_home` (siempre visible) | `black_column → Operativa rutinaria → Selector vehículos` |
 | `operativa_drp` (lista docs) | `visual_info_drp → desplegable` (abre docs como modal) | `black_column → DRP → Operativa DRP` (in-place + docs como modal) |
 | `modulo_filiacion` (entrar) | `visual_info_drp → icono ti-door-enter` | `black_column → Módulos especiales → Filiación → Entrar` |
 | Doc-10 Envío material | `black_column → Operativa rutinaria → Doc-10` (contexto vehículo) | `black_column → Logística → Doc-10` (contexto almacén central) |

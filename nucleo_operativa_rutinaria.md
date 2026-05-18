@@ -2,17 +2,27 @@
 
 * RBAC: `tes`, `logistica`, `flota`, `coordinación`, `gerencia`.
 
-* **selector_vehiculos**
-  * Muestra todos los vehículos del sistema con su estado actual visible.
-  * Cualquier rol autorizado puede cambiar el estado de cualquier vehículo
-    desde cualquier terminal.
-  * Formato: lista o desplegable con `ID_vehiculo` + `Matricula` + `estado`.
-  * `condicion_tecnica` se muestra como badge secundario junto a cada vehículo:
-    * `averiado_leve` → badge amarillo informativo; no bloquea la activación.
+* **vista_vehiculos** *(acceso: `black_column → Operativa rutinaria → Vehículos`, ítem 3.10)*
+
+  Vista combinada in-place. Dos zonas en pantalla:
+
+  **Zona superior — `selector_vehiculos`:**
+  * Lista completa de la flota con `ID_vehiculo`, `Matrícula`,
+    badge `estado_operativo` y badge `condicion_tecnica`.
+  * Actualización en tiempo real vía Supabase Realtime.
+  * Cualquier rol autorizado puede ver el estado de todos los vehículos.
+  * Al pulsar una fila → expande la Zona inferior para ese vehículo.
+  * `condicion_tecnica` como badge secundario junto a cada fila:
+    * `averiado_leve` → badge amarillo; no bloquea la activación.
     * `inoperativo_critico` → badge rojo; la activación requiere confirmación
       explícita de `gerencia` o `coordinación`.
 
-* **selector_estados_ID_vehiculo**
+  > **Nota de layout:** `selector_vehiculos` ya no forma parte de
+  > `visual_info_home`. El home raíz muestra únicamente `panel_personal`,
+  > `panel_vehiculo` (vehículo activo), `visual_info_drp` y bandejas.
+  > Ver `mapeo_visual_ui.md §2`.
+
+* **selector_estados_ID_vehiculo** *(Zona inferior de `vista_vehiculos`)*
 
   El vehículo tiene dos dimensiones de estado independientes
   (ver `estados.md §4`). El selector expone ambas.

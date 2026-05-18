@@ -37,7 +37,11 @@
       * Repostar combustible — `ti-gas-station`
       * Repostar AdBlue — `ti-droplet`
       * Doc-Checklist360 Revisión 360° — `ti-checkbox`
-      * Selector vehículos — `ti-steering-wheel`
+      * Vehículos — `ti-steering-wheel`
+        *(Vista combinada in-place: selector de flota en la parte superior + selector de
+        estado operativo / condición técnica / tipo de servicio del vehículo seleccionado.
+        El selector de vehículos ya no vive en visual_info_home — este es el único punto
+        de acceso al listado completo de la flota.)*
 
   * `DRP` — `ti-map-pin`
     * Subgrupo:
@@ -63,6 +67,10 @@
       * Doc-10 Envío material — `ti-transfer`
       * Inventario en tránsito — `ti-truck`
       * Descuadres — `ti-alert-circle`
+      * Catálogo de ítems — `ti-tags`
+        *(RBAC: `responsable_logistica`, `gerencia`. Gestión del catálogo maestro de 245 ítems:
+        añadir, editar, archivar. El archivado dispara automáticamente la purga en plantillas_stock
+        via trigger. Ver `logic.md §6.4`.)*
       * Bandeja logística — `ti-inbox`
 
   * `Flota y taller` — `ti-car`
@@ -74,6 +82,11 @@
         *(Visor de mantenimiento preventivo: aceite, frenos, neumáticos.
         RBAC lectura: `flota`, `responsable_flota`, `gerencia`.
         RBAC edición: `responsable_flota`, `gerencia`.)*
+      * Historial eventos físicos — `ti-history`
+        *(Visor de `eventos_fisicos_vehiculo`: repostajes de combustible y AdBlue,
+        mantenimientos y otros eventos físicos registrados. Filtros por ID_vehiculo,
+        tipo_evento y rango de fechas. Independiente del Doc-8.
+        RBAC: `flota`, `responsable_flota`, `gerencia`. Ver `logic.md §19`.)*
       * Bandeja flota — `ti-inbox`
 
   * `Coordinación y seguridad` — `ti-shield-lock`
@@ -90,6 +103,14 @@
         * Añadir, editar y archivar anuncios del tablón central.
       * Marquesina — `ti-antenna`
       * Doc-12 Solicitud vacaciones — `ti-beach`
+      * Repositorio documentos — `ti-folder-open`
+        *(Normativas, protocolos y documentación corporativa.
+        Lectura: todos los roles autenticados.
+        Gestión (crear/editar/archivar): `gerencia`, `rrhh`.)*
+      * Gestión de bajas y ausencias — `ti-calendar-x`
+        *(Registro y seguimiento de bajas médicas, ausencias justificadas
+        y días de compensación. Separado de los cuadrantes de turno.
+        RBAC: `rrhh`, `gerencia`.)*
       * Bandeja RRHH — `ti-inbox`
 
   * `Tablón central` — `ti-speakerphone`
