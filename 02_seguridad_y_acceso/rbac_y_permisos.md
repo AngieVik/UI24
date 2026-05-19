@@ -91,7 +91,49 @@ const claims = buildClaims(rol)
 | `rrhh` | Gestión de personal, turnos, tablón y vacaciones. |
 | `invitado` | Asignado automáticamente por cookie de emergencia. Solo Check-in. Sin claims operativos. |
 
-> **Nota:** Los roles `due`, `medico`, `responsable_flota` y `responsable_logistica` son roles válidos del sistema cubiertos por el catálogo de claims y las policies RLS. No tienen usuario demo (seed) inicial — se asignan manualmente en producción según la estructura de cada base.
+### 3.1 Enum canónico de roles — fuente de verdad
+
+El array `ROLES_VALIDOS` es la única fuente de verdad para la validación de roles en todo el sistema.
+Está definido de forma idéntica en dos lugares:
+
+```typescript
+// ef_alta_empleado (§50.3 de logic.md) y rpc_cambiar_rol (§55.3 de logic.md)
+const ROLES_VALIDOS = [
+  'tes', 'due', 'medico',
+  'flota', 'responsable_flota',
+  'coordinacion',
+  'logistica', 'responsable_logistica',
+  'rrhh', 'gerencia',
+  // 'invitado' NO está aquí: se asigna solo via cookie de emergencia, nunca por RRHH
+]
+```
+
+**Roles con seed inicial (6 usuarios demo):** `tes`, `flota`, `coordinacion`, `logistica`, `gerencia`, `rrhh`.
+
+**Roles válidos sin seed inicial** — se asignan manualmente en producción según la estructura de cada base:
+
+| Rol | Cuándo se usa |
+|---|---|
+| `due` | DUE en ambulancia SVA; comparte turno con `tes` |
+| `medico` | Médico de guardia; solo Doc-3 y DRP |
+| `responsable_flota` | Jefe de flota; autoriza mantenimiento preventivo |
+| `responsable_logistica` | Jefe de logística; gestiona catálogo y plantillas |
+
+### 3.2 Comportamiento de `set_claims` ante rol desconocido
+
+El Auth Hook `set_claims` (ver §3 de `rls_y_rpcs.md`) opera de la siguiente manera:
+
+| Situación en `fichas_empleados` | Respuesta de `set_claims` | Efecto |
+|---|---|---|
+| `activo = false` | `{ app_claims: {} }` | Acceso denegado — sin claims, ninguna policy RLS pasa |
+| `activo = true`, rol válido | `{ app_claims: { can_X: true/false, ... } }` | Claims completos según `buildClaims(rol)` |
+| `activo = true`, rol desconocido (no en ROLES_VALIDOS) | `{ app_claims: { can_X: false, ... } }` | Todos los claims a `false` — acceso denegado en la práctica |
+| Fila no encontrada en fichas_empleados (huérfano en auth.users) | `{ app_claims: {} }` | Acceso denegado — el empleado no existe en el sistema |
+
+> **Invariante:** ningún rol desconocido o inválido en `fichas_empleados.rol` otorga acceso.
+> `buildClaims` itera sobre el mapa `ROLE_CLAIMS` y para cada claim devuelve
+> `roles.includes(rol)` — si el rol no aparece en ningún array, todos los claims son `false`.
+> Es un fallback seguro por diseño, no por excepción explícita.
 
 ---
 

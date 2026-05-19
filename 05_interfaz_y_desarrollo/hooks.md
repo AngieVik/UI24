@@ -15,11 +15,11 @@
 // Las interfaces usan tipos simplificados para legibilidad.
 // Las implementaciones deben importar los tipos reales del proyecto.
 
-type ID_nombre  = string   // identificador de persona
-type ID_vehiculo = string  // identificador de vehículo
-type ID_drp     = string   // identificador de DRP
-type UUID       = string   // crypto.randomUUID()
-type ISOString  = string   // UTC timestamp
+type ID_nombre = string; // identificador de persona
+type ID_vehiculo = string; // identificador de vehículo
+type ID_drp = string; // identificador de DRP
+type UUID = string; // crypto.randomUUID()
+type ISOString = string; // UTC timestamp
 ```
 
 Todos los hooks que realizan llamadas a Supabase devuelven `Promise`
@@ -37,15 +37,15 @@ o a través de `useMutation` de TanStack Query.
 ```typescript
 interface UseTerminalAuth {
   // Estado
-  estado:        'estado_0' | 'estado_1'
-  tipoSesion:    'sin_sesion' | 'estandar' | 'galleta_pequeña' | 'galleta'
-  rolActivo:     string | null          // extraído del JWT claim 'rol'
-  isAutenticado: boolean                // estado === 'estado_1'
+  estado: "estado_0" | "estado_1";
+  tipoSesion: "sin_sesion" | "estandar" | "galleta_pequeña" | "galleta";
+  rolActivo: string | null; // extraído del JWT claim 'rol'
+  isAutenticado: boolean; // estado === 'estado_1'
 
   // Acciones
-  login(ID_nombre: string, password: string): Promise<void>
-  loginConPin(pin: string): Promise<void>
-  logout(): Promise<void>
+  login(ID_nombre: string, password: string): Promise<void>;
+  loginConPin(pin: string): Promise<void>;
+  logout(): Promise<void>;
 }
 ```
 
@@ -53,7 +53,7 @@ interface UseTerminalAuth {
 
 **`login`**
 
-```
+```text
 1. POST credenciales a Supabase Auth
 2. Si error → throw Error('credenciales_incorrectas')
    (mensaje genérico — no revelar qué campo falló)
@@ -68,7 +68,7 @@ interface UseTerminalAuth {
 
 **`loginConPin`**
 
-```
+```text
 1. Detecta patrón: campo usuario = 'PIN', campo password = 6 dígitos
 2. Llama Edge Function 'validar_pin_emergencia' con el PIN
 3. Edge Function valida: hash + expires_at > NOW() + consumido_at IS NULL
@@ -106,7 +106,7 @@ Al montar useTerminalAuth (y al arrancar la PWA):
         → useAuthStore.galletaPersistente = true
         → El componente terminal_check renderiza el botón
           "Acceder como Invitado Operativo"
-          
+
 accederComoInvitado():
   1. Validar que galletaPersistente === true (guard)
   2. useAuthStore.rolActivo = 'invitado'
@@ -128,18 +128,24 @@ accederComoInvitado():
 ```typescript
 interface UseCheckin {
   // Estado
-  personas: Map<ID_nombre, {
-    estado:    'checkin_on'
-    esPilot:   boolean
-    esCarry:   boolean
-    vehiculoId: ID_vehiculo | null
-  }>
-  hayAlguienCheckedIn: boolean
+  personas: Map<
+    ID_nombre,
+    {
+      estado: "checkin_on";
+      esPilot: boolean;
+      esCarry: boolean;
+      vehiculoId: ID_vehiculo | null;
+    }
+  >;
+  hayAlguienCheckedIn: boolean;
 
   // Acciones
-  checkin(ID_nombre: string, password: string): Promise<void>
-  checkout(ID_nombre: string): Promise<void>
-  promoverCarryAPilot(ID_nombre: string, vehiculoId: ID_vehiculo): Promise<void>
+  checkin(ID_nombre: string, password: string): Promise<void>;
+  checkout(ID_nombre: string): Promise<void>;
+  promoverCarryAPilot(
+    ID_nombre: string,
+    vehiculoId: ID_vehiculo,
+  ): Promise<void>;
 }
 ```
 
@@ -353,81 +359,82 @@ el segundo recibe 0 rows afectados y falla limpiamente sin corromper el estado.
 ```typescript
 interface UseVehiculo {
   // Estado
-  vehiculos:      Vehiculo[]          // todos los vehículos del sistema
-  vehiculoActivo: Vehiculo | null     // el seleccionado en este terminal
+  vehiculos: Vehiculo[]; // todos los vehículos del sistema
+  vehiculoActivo: Vehiculo | null; // el seleccionado en este terminal
 
   // Consultas
-  getVehiculo(id: ID_vehiculo): Vehiculo | undefined
+  getVehiculo(id: ID_vehiculo): Vehiculo | undefined;
 
   // Selección UI
-  seleccionarVehiculo(id: ID_vehiculo): void
+  seleccionarVehiculo(id: ID_vehiculo): void;
 
   // Ciclo de vida (desactivado ↔ en_espera)
-  activar(id: ID_vehiculo, kmInicio: number): Promise<void>
-  desactivar(id: ID_vehiculo, kmFin: number): Promise<void>
+  activar(id: ID_vehiculo, kmInicio: number): Promise<void>;
+  desactivar(id: ID_vehiculo, kmFin: number): Promise<void>;
 
   // Dimensión 1 — estado operativo (cambios manuales en ruta)
-  setEstadoOperativo(
-    id:     ID_vehiculo,
-    estado: EstadoOperativo
-  ): Promise<void>
+  setEstadoOperativo(id: ID_vehiculo, estado: EstadoOperativo): Promise<void>;
 
   // Dimensión 2 — condición técnica (actualizada por Doc-7, no manual)
   setCondicionTecnica(
-    id:       ID_vehiculo,
-    condicion: CondicionTecnica
-  ): Promise<void>
+    id: ID_vehiculo,
+    condicion: CondicionTecnica,
+  ): Promise<void>;
 
   // Dimensión 3 — tipo de servicio (actualizable en cualquier momento del turno)
-  setTipoServicio(
-    id:   ID_vehiculo,
-    tipo: TipoServicio
-  ): Promise<void>
+  setTipoServicio(id: ID_vehiculo, tipo: TipoServicio): Promise<void>;
 
   // Cierre de bloques activos (llamado por flujo_checkout_automatico)
   cerrarEstadosActivos(
-    id:            ID_vehiculo,
-    timestamp_fin: ISOString
-  ): Promise<void>
+    id: ID_vehiculo,
+    timestamp_fin: ISOString,
+  ): Promise<void>;
 
   // Roles
-  asignarPilot(vehiculoId: ID_vehiculo, personaId: ID_nombre): Promise<void>
-  asignarCarry(vehiculoId: ID_vehiculo, personaId: ID_nombre): Promise<void>
-  quitarPersona(vehiculoId: ID_vehiculo, personaId: ID_nombre): Promise<void>
+  asignarPilot(vehiculoId: ID_vehiculo, personaId: ID_nombre): Promise<void>;
+  asignarCarry(vehiculoId: ID_vehiculo, personaId: ID_nombre): Promise<void>;
+  quitarPersona(vehiculoId: ID_vehiculo, personaId: ID_nombre): Promise<void>;
   intercambiarRoles(
     vehiculoId: ID_vehiculo,
-    personaA:   ID_nombre,
-    personaB:   ID_nombre
-  ): Promise<void>
+    personaA: ID_nombre,
+    personaB: ID_nombre,
+  ): Promise<void>;
 
   // Acción administrativa (RBAC: coordinación, gerencia)
   forzarCheckoutAdministrativo(
-    vehiculoId:    ID_vehiculo,
-    pilotId:       ID_nombre,
-    kmFin:         number,
-    coordinadorId: ID_nombre   // ID del coordinador que autoriza la acción
-  ): Promise<void>
+    vehiculoId: ID_vehiculo,
+    pilotId: ID_nombre,
+    kmFin: number,
+    coordinadorId: ID_nombre, // ID del coordinador que autoriza la acción
+  ): Promise<void>;
 }
 
 // Dimensión 1: estado físico/operativo del vehículo
 type EstadoOperativo =
-  | 'desactivado'     // sin turno activo, sin Doc-8 — solo acción manual explícita
-  | 'en_espera'       // operativo y disponible — con pilot (Doc-8 activo) o sin pilot (sin Doc-8)
-  | 'activado'        // servicio activo despachado (tipo_servicio asignado)
-  | 'ruta'            // en tránsito — captura GPS al iniciar y al finalizar
-  | 'estacionado'     // parado fuera de base — captura GPS al activar
-  | 'alerta'          // respuesta a emergencia activa (luces/sirenas) — captura GPS al activar y al desactivar
+  | "desactivado" // sin turno activo, sin Doc-8 — solo acción manual explícita
+  | "en_espera" // operativo y disponible — con pilot (Doc-8 activo) o sin pilot (sin Doc-8)
+  | "activado" // servicio activo despachado (tipo_servicio asignado)
+  | "ruta" // en tránsito — captura GPS al iniciar y al finalizar
+  | "estacionado" // parado fuera de base — captura GPS al activar
+  | "alerta"; // respuesta a emergencia activa (luces/sirenas) — captura GPS al activar y al desactivar
 
 // Dimensión 2: condición mecánica del vehículo (badge, no selector manual)
 type CondicionTecnica =
-  | 'operativo'           // sin incidencias
-  | 'averiado_leve'       // incidencia leve/moderada (Doc-7) — badge amarillo
-  | 'inoperativo_critico' // fallo grave (Doc-7) — badge rojo, confirmación requerida
+  | "operativo" // sin incidencias
+  | "averiado_leve" // incidencia leve/moderada (Doc-7) — badge amarillo
+  | "inoperativo_critico"; // fallo grave (Doc-7) — badge rojo, confirmación requerida
 
 // Dimensión 3: tipo de servicio asignado al turno
 type TipoServicio =
-  | 'Programado' | 'Dispositivo' | 'Traslado' | 'Guardia_urgencias'
-  | 'DRP' | 'Privado' | 'Simulacro' | 'Formacion' | 'Sin_asignar'
+  | "Programado"
+  | "Dispositivo"
+  | "Traslado"
+  | "Guardia_urgencias"
+  | "DRP"
+  | "Privado"
+  | "Simulacro"
+  | "Formacion"
+  | "Sin_asignar";
 ```
 
 ### Comportamiento
@@ -684,7 +691,7 @@ PASO 2 — SEGÚN ESTADO DE RED:
 Nota: visible solo mientras estadoOperativo ≠ 'desactivado'
 ```
 
-**`forzarCheckoutAdministrativo`** *(RBAC: coordinación, gerencia — solo desde panel de coordinación/flota)*
+**`forzarCheckoutAdministrativo`** _(RBAC: coordinación, gerencia — solo desde panel de coordinación/flota)_
 
 ```
 PRECONDICIONES:
@@ -802,47 +809,50 @@ emiten por Realtime y actualizan `useVehiculoStore` en todos los terminales.
 ```typescript
 interface UseDRP {
   // Estado
-  drpActivos:      DRP[]               // En_espera | En_preparacion | En_curso
-  drpSeleccionado: DRP | null          // DRP expandido en visor_drp
-  drpDelTerminal:  DRP | null          // DRP al que pertenece este terminal
+  drpActivos: DRP[]; // En_espera | En_preparacion | En_curso
+  drpSeleccionado: DRP | null; // DRP expandido en visor_drp
+  drpDelTerminal: DRP | null; // DRP al que pertenece este terminal
 
   // Consultas
-  getDRP(id: ID_drp): DRP | undefined
-  getDotaciones(drpId: ID_drp): Dotacion[]
+  getDRP(id: ID_drp): DRP | undefined;
+  getDotaciones(drpId: ID_drp): Dotacion[];
 
   // Selección UI
-  seleccionarDRP(id: ID_drp): void
+  seleccionarDRP(id: ID_drp): void;
 
   // Creación y gestión
-  crearDRP(data: CrearDRPInput): Promise<ID_drp>
-  editarRecursosDRP(drpId: ID_drp, data: EditarDRPInput): Promise<void>
+  crearDRP(data: CrearDRPInput): Promise<ID_drp>;
+  editarRecursosDRP(drpId: ID_drp, data: EditarDRPInput): Promise<void>;
 
   // Transiciones de estado (RBAC: coordinación, gerencia)
-  activarDRP(drpId: ID_drp, opcion: 'cuenta_atras' | 'ahora'): Promise<void>
-  finalizarDRP(drpId: ID_drp): Promise<void>
-  cancelarDRP(drpId: ID_drp): Promise<void>
-  archivarDRP(drpId: ID_drp, guardarPDF: boolean): Promise<void>
+  activarDRP(drpId: ID_drp, opcion: "cuenta_atras" | "ahora"): Promise<void>;
+  finalizarDRP(drpId: ID_drp): Promise<void>;
+  cancelarDRP(drpId: ID_drp): Promise<void>;
+  archivarDRP(drpId: ID_drp, guardarPDF: boolean): Promise<void>;
 
   // Dotaciones — entrada
-  entrarConVehiculo(drpId: ID_drp, vehiculoId: ID_vehiculo): Promise<void>
-  entrarAPie(drpId: ID_drp, personaId: ID_nombre): Promise<void>
+  entrarConVehiculo(drpId: ID_drp, vehiculoId: ID_vehiculo): Promise<void>;
+  entrarAPie(drpId: ID_drp, personaId: ID_nombre): Promise<void>;
 
   // Dotaciones — salida
-  salirConVehiculo(drpId: ID_drp, vehiculoId: ID_vehiculo): Promise<void>
-  salirIndividual(drpId: ID_drp, personaId: ID_nombre): Promise<void>
+  salirConVehiculo(drpId: ID_drp, vehiculoId: ID_vehiculo): Promise<void>;
+  salirIndividual(drpId: ID_drp, personaId: ID_nombre): Promise<void>;
 
   // Alias interno (llamado por flujo_checkout_automatico)
-  exitarDRP(vehiculoId: ID_vehiculo, modo: 'con_vehiculo' | 'individual'): Promise<void>
+  exitarDRP(
+    vehiculoId: ID_vehiculo,
+    modo: "con_vehiculo" | "individual",
+  ): Promise<void>;
 }
 
 interface CrearDRPInput {
-  nombre_drp: string
-  fecha:      string
-  hora:       string
-  ubicacion:  string
-  dotaciones_vehiculo?: DotacionVehiculo[]
-  dotaciones_terrestre?: DotacionTerrestre[]
-  backpack_id?: string
+  nombre_drp: string;
+  fecha: string;
+  hora: string;
+  ubicacion: string;
+  dotaciones_vehiculo?: DotacionVehiculo[];
+  dotaciones_terrestre?: DotacionTerrestre[];
+  backpack_id?: string;
 }
 ```
 
@@ -1080,46 +1090,46 @@ FLUJO:
 ```typescript
 interface UseDoc8 {
   // Estado
-  doc8Activo:     Doc8 | null          // Doc-8 del turno en curso
-  doc8UltimoCerrado: Doc8 | null       // último Doc-8 cerrado (lectura)
-  estaAbierto:    boolean
+  doc8Activo: Doc8 | null; // Doc-8 del turno en curso
+  doc8UltimoCerrado: Doc8 | null; // último Doc-8 cerrado (lectura)
+  estaAbierto: boolean;
 
   // Ciclo de vida (llamados por useVehiculo y useCheckin)
   abrir(
     vehiculoId: ID_vehiculo,
-    pilotId:    ID_nombre,
-    km_inicio:  number
-  ): Promise<void>
+    pilotId: ID_nombre,
+    km_inicio: number,
+  ): Promise<void>;
   cerrar(
     vehiculoId: ID_vehiculo,
-    km_fin:     number,
-    timestamp:  ISOString
-  ): Promise<void>
+    km_fin: number,
+    timestamp: ISOString,
+  ): Promise<void>;
 
   // Escritura de eventos (llamados internamente por useVehiculo)
   registrarCambioEstadoOperativo(
-    vehiculoId:    ID_vehiculo,
-    estado:        EstadoOperativo,
+    vehiculoId: ID_vehiculo,
+    estado: EstadoOperativo,
     timestamp_ini: ISOString,
-    coords?:       Coords          // obligatorio si estado = 'ruta' | 'estacionado'
-  ): Promise<void>
+    coords?: Coords, // obligatorio si estado = 'ruta' | 'estacionado'
+  ): Promise<void>;
   registrarCambioTipoServicio(
-    vehiculoId:    ID_vehiculo,
-    tipo:          TipoServicio,
-    timestamp_ini: ISOString
-  ): Promise<void>
-  registrarEntradaDRP(drpId: ID_drp, timestamp: ISOString): Promise<void>
-  registrarSalidaDRP(drpId: ID_drp, timestamp: ISOString): Promise<void>
-  registrarRepostaje(data: RepostajeData): Promise<void>
-  cerrarBloquesAbiertos(timestamp_fin: ISOString): Promise<void>
+    vehiculoId: ID_vehiculo,
+    tipo: TipoServicio,
+    timestamp_ini: ISOString,
+  ): Promise<void>;
+  registrarEntradaDRP(drpId: ID_drp, timestamp: ISOString): Promise<void>;
+  registrarSalidaDRP(drpId: ID_drp, timestamp: ISOString): Promise<void>;
+  registrarRepostaje(data: RepostajeData): Promise<void>;
+  cerrarBloquesAbiertos(timestamp_fin: ISOString): Promise<void>;
 }
 
 interface RepostajeData {
-  tipo:        'combustible' | 'adblue'
-  km_marcador: number
-  litros?:     number           // solo combustible
-  euros?:      number           // solo gasolinera
-  ubicacion?:  'gasolinera' | 'base'
+  tipo: "combustible" | "adblue";
+  km_marcador: number;
+  litros?: number; // solo combustible
+  euros?: number; // solo gasolinera
+  ubicacion?: "gasolinera" | "base";
 }
 ```
 
@@ -1169,54 +1179,57 @@ Si hay pérdida de conexión, los eventos se encolan y se replayan al reconectar
 
 ```typescript
 interface StockItem {
-  itemId:           string
-  stock_real:       number    // fuente de verdad en BBDD (última confirmación)
-  stock_real_local: number    // cache optimista en Zustand (puede diferir temporalmente)
-  stock_objetivo:   number
-  sync_pending:          boolean        // true → delta descontado localmente aún no confirmado por RPC
-  pending_delta:         number         // cantidad descontada pendiente de reconciliar (positivo = descuento)
-  pending_mutation_uuid: string | null  // UUID de la mutación en vuelo — para filtro de eco Realtime
+  itemId: string;
+  stock_real: number; // fuente de verdad en BBDD (última confirmación)
+  stock_real_local: number; // cache optimista en Zustand (puede diferir temporalmente)
+  stock_objetivo: number;
+  sync_pending: boolean; // true → delta descontado localmente aún no confirmado por RPC
+  pending_delta: number; // cantidad descontada pendiente de reconciliar (positivo = descuento)
+  pending_mutation_uuid: string | null; // UUID de la mutación en vuelo — para filtro de eco Realtime
 }
 
 interface UseInventario {
   // Consultas (TanStack Query para stock_real; Zustand para stock_real_local)
-  stockPorLocation: (locationId: string) => StockItem[]
-  stockItem:        (locationId: string, itemId: string) => StockItem | undefined
-  descuadres:       Descuadre[]
-  enTransito:       ItemTransito[]
-  subinventariosEstado: Map<string, 'Operativo' | 'Operativo_Condicionado' | 'Asignado' | 'En_Transito'>
+  stockPorLocation: (locationId: string) => StockItem[];
+  stockItem: (locationId: string, itemId: string) => StockItem | undefined;
+  descuadres: Descuadre[];
+  enTransito: ItemTransito[];
+  subinventariosEstado: Map<
+    string,
+    "Operativo" | "Operativo_Condicionado" | "Asignado" | "En_Transito"
+  >;
 
   // Guard: detecta gastos pendientes de sincronización en un subinventario
-  tieneSyncPendiente(subinventarioId: string): boolean
-    // Evalúa si algún StockItem del subinventario tiene sync_pending = true.
-    // Llamado por useDRP antes de finalizar el DRP y antes de ceder un subinventario.
-    // Ver logic.md §9.1 y §12 para el flujo completo del guard.
+  tieneSyncPendiente(subinventarioId: string): boolean;
+  // Evalúa si algún StockItem del subinventario tiene sync_pending = true.
+  // Llamado por useDRP antes de finalizar el DRP y antes de ceder un subinventario.
+  // Ver logic.md §9.1 y §12 para el flujo completo del guard.
 
   // Mutaciones via RPC (siempre requieren conexión)
-  registrarGasto(data: Doc6Input): Promise<void>
-  enviarMaterial(data: Doc10Input): Promise<Doc10Id>
+  registrarGasto(data: Doc6Input): Promise<void>;
+  enviarMaterial(data: Doc10Input): Promise<Doc10Id>;
   confirmarRecepcion(
-    doc10Id:        string,
-    itemsRecibidos: ItemRecibido[]
-  ): Promise<void>
+    doc10Id: string,
+    itemsRecibidos: ItemRecibido[],
+  ): Promise<void>;
   resolverDescuadre(
-    descuadreId:           string,
-    clasificacion:         'perdida_rotura' | 'recuperacion',
-    destinoRecuperacion?:  'ID_origen' | 'ID_destino'  // obligatorio si clasificacion = 'recuperacion'
-  ): Promise<void>
-  archivarDescuadre(descuadreId: string): Promise<void>
+    descuadreId: string,
+    clasificacion: "perdida_rotura" | "recuperacion",
+    destinoRecuperacion?: "ID_origen" | "ID_destino", // obligatorio si clasificacion = 'recuperacion'
+  ): Promise<void>;
+  archivarDescuadre(descuadreId: string): Promise<void>;
 }
 
 interface Doc6Input {
-  locationId:  string               // vehículo, backpack o subinventario
-  items:       { itemId: string; cantidad: number }[]
-  ID_nombre:   ID_nombre
-  drpId?:      ID_drp               // si se registra durante un DRP
+  locationId: string; // vehículo, backpack o subinventario
+  items: { itemId: string; cantidad: number }[];
+  ID_nombre: ID_nombre;
+  drpId?: ID_drp; // si se registra durante un DRP
 }
 
 interface ItemRecibido {
-  itemId:           string
-  cantidad_recibida: number          // puede diferir de cantidad_enviada
+  itemId: string;
+  cantidad_recibida: number; // puede diferir de cantidad_enviada
 }
 ```
 
@@ -1366,41 +1379,50 @@ pendiente de sincronización local.
 
 ```typescript
 // Handler Realtime en useInventarioStore
-supabase.channel(`inventario:${locationId}`)
-  .on('postgres_changes', { event: 'UPDATE', table: 'stock_items' }, (payload) => {
-    const { item_id, stock_real: server_value, mutation_uuid } = payload.new
+supabase
+  .channel(`inventario:${locationId}`)
+  .on(
+    "postgres_changes",
+    { event: "UPDATE", table: "stock_items" },
+    (payload) => {
+      const { item_id, stock_real: server_value, mutation_uuid } = payload.new;
 
-    set((state) => {
-      const item = state.items[locationId]?.[item_id]
-      if (!item) return {}  // item no cargado en store — ignorar
+      set((state) => {
+        const item = state.items[locationId]?.[item_id];
+        if (!item) return {}; // item no cargado en store — ignorar
 
-      // FILTRO DE ECO: ignorar eventos originados por este mismo terminal
-      // cuando hay un sync_pending activo para ese ítem.
-      // Confiar exclusivamente en la respuesta HTTP del propio RPC (PASO 3-A).
-      if (item.sync_pending && mutation_uuid && item.pending_mutation_uuid === mutation_uuid) {
-        return {}  // eco de mi propia mutación — ignorar; el RPC ya actualizará
-      }
+        // FILTRO DE ECO: ignorar eventos originados por este mismo terminal
+        // cuando hay un sync_pending activo para ese ítem.
+        // Confiar exclusivamente en la respuesta HTTP del propio RPC (PASO 3-A).
+        if (
+          item.sync_pending &&
+          mutation_uuid &&
+          item.pending_mutation_uuid === mutation_uuid
+        ) {
+          return {}; // eco de mi propia mutación — ignorar; el RPC ya actualizará
+        }
 
-      const pending = item.sync_pending ? item.pending_delta : 0
+        const pending = item.sync_pending ? item.pending_delta : 0;
 
-      return {
-        items: {
-          ...state.items,
-          [locationId]: {
-            ...state.items[locationId],
-            [item_id]: {
-              ...item,
-              stock_real:       server_value,
-              // Recalcula el valor local preservando el delta pendiente:
-              stock_real_local: server_value - pending,
-              // sync_pending y pending_delta no se tocan — se resuelven en PASO 3
+        return {
+          items: {
+            ...state.items,
+            [locationId]: {
+              ...state.items[locationId],
+              [item_id]: {
+                ...item,
+                stock_real: server_value,
+                // Recalcula el valor local preservando el delta pendiente:
+                stock_real_local: server_value - pending,
+                // sync_pending y pending_delta no se tocan — se resuelven en PASO 3
+              },
             },
           },
-        },
-      }
-    })
-  })
-  .subscribe()
+        };
+      });
+    },
+  )
+  .subscribe();
 ```
 
 **Filtro de eco:** cada mutación de stock local almacena su `mutation_uuid` en
@@ -1440,42 +1462,42 @@ activo. Ver `logic.md §24.5` para el modelo formal.
 
 ```typescript
 type BandejaInstancia =
-  | 'bandeja_entrada_flota'
-  | 'bandeja_entrada_logistica'
-  | 'bandeja_entrada_coordinacion'
-  | 'bandeja_entrada_rrhh'
-  | 'bandeja_entrada_logistica_drp'
-  | 'bandeja_entrada_vehiculo'
-  | 'bandeja_entrada_personal'
+  | "bandeja_entrada_flota"
+  | "bandeja_entrada_logistica"
+  | "bandeja_entrada_coordinacion"
+  | "bandeja_entrada_rrhh"
+  | "bandeja_entrada_logistica_drp"
+  | "bandeja_entrada_vehiculo"
+  | "bandeja_entrada_personal";
 
 interface UseBandeja {
   // Estado
-  mensajes:         Mensaje[]
-  unreadCount:      number
-  hayMensajesSinLeer: boolean         // → icono ti-mail amarillo
+  mensajes: Mensaje[];
+  unreadCount: number;
+  hayMensajesSinLeer: boolean; // → icono ti-mail amarillo
 
   // Acciones base (todas las instancias)
-  marcarLeida(mensajeId: string): Promise<void>
-  marcarEnProceso(mensajeId: string): Promise<void>
-  marcarSolucionada(mensajeId: string): Promise<void>
-  archivar(mensajeId: string): Promise<void>
+  marcarLeida(mensajeId: string): Promise<void>;
+  marcarEnProceso(mensajeId: string): Promise<void>;
+  marcarSolucionada(mensajeId: string): Promise<void>;
+  archivar(mensajeId: string): Promise<void>;
 
   // Acciones extendidas (bandeja_entrada_rrhh)
-  aprobarDoc12?(mensajeId: string): Promise<void>
-  denegarDoc12?(mensajeId: string): Promise<void>
-  marcarLeidaDoc13?(mensajeId: string): Promise<void>
+  aprobarDoc12?(mensajeId: string): Promise<void>;
+  denegarDoc12?(mensajeId: string): Promise<void>;
+  marcarLeidaDoc13?(mensajeId: string): Promise<void>;
 
   // Acciones extendidas (bandeja_entrada_logistica_drp)
   confirmarRecepcionDoc10?(
     mensajeId: string,
-    itemsRecibidos: ItemRecibido[]
-  ): Promise<void>
+    itemsRecibidos: ItemRecibido[],
+  ): Promise<void>;
 }
 
 function useBandeja(
   instancia: BandejaInstancia,
-  filtro?:   { vehiculoId?: string; personaId?: string; drpId?: string }
-): UseBandeja
+  filtro?: { vehiculoId?: string; personaId?: string; drpId?: string },
+): UseBandeja;
 ```
 
 ### Comportamiento
@@ -1486,18 +1508,24 @@ function useBandeja(
 useEffect(() => {
   const channel = supabase
     .channel(`bandeja:${instancia}`)
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table:  'mensajes_bandeja',
-      filter: `instancia=eq.${instancia}`
-    }, (payload) => {
-      useBandejasStore.getState().upsertMensaje(instancia, payload.new)
-    })
-    .subscribe()
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "mensajes_bandeja",
+        filter: `instancia=eq.${instancia}`,
+      },
+      (payload) => {
+        useBandejasStore.getState().upsertMensaje(instancia, payload.new);
+      },
+    )
+    .subscribe();
 
-  return () => { supabase.removeChannel(channel) }
-}, [instancia])
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [instancia]);
 ```
 
 **`marcarLeida`**
@@ -1523,12 +1551,12 @@ Recibe también: Doc-6 en tiempo real (solo lectura) y alertas de stock.
 ```typescript
 // Acciones relevantes del store (Zustand)
 interface BandejasStoreActions {
-  upsertMensaje(instancia: BandejaInstancia, mensaje: Mensaje): void
+  upsertMensaje(instancia: BandejaInstancia, mensaje: Mensaje): void;
   // Mutación optimista síncrona para modo isReadOnly auto-dismiss:
-  purgeMensaje(mensajeId: string): void
+  purgeMensaje(mensajeId: string): void;
   // Efecto: elimina el mensaje del array Y decrementa unreadCount en el mismo tick
   // GC local de mensajes archivados:
-  purgarArchivadasExpiradas(): void
+  purgarArchivadasExpiradas(): void;
   // Elimina del array en memoria los mensajes en Solucionada_Archivada cuyo
   // timestamp_resolucion es > 24 horas. Llamado en el montaje y cada hora via setInterval.
 }
@@ -1539,21 +1567,25 @@ interface BandejasStoreActions {
 ```typescript
 upsertMensaje: (instancia, mensaje) =>
   set((state) => {
-    const existing = state.mensajes[instancia] ?? []
-    const idx      = existing.findIndex(m => m.id === mensaje.id)
-    let   updated  = idx >= 0
-      ? existing.with(idx, mensaje)          // actualización in-place
-      : [...existing, mensaje]               // append
+    const existing = state.mensajes[instancia] ?? [];
+    const idx = existing.findIndex((m) => m.id === mensaje.id);
+    let updated =
+      idx >= 0
+        ? existing.with(idx, mensaje) // actualización in-place
+        : [...existing, mensaje]; // append
 
     // Limitar a 200 mensajes: truncar los más antiguos por timestamp
     if (updated.length > 200) {
       updated = updated
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 200)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        )
+        .slice(0, 200);
     }
 
-    return { mensajes: { ...state.mensajes, [instancia]: updated } }
-  })
+    return { mensajes: { ...state.mensajes, [instancia]: updated } };
+  });
 ```
 
 **GC local — purga de archivadas expiradas (> 24 h):**
@@ -1561,21 +1593,21 @@ upsertMensaje: (instancia, mensaje) =>
 ```typescript
 purgarArchivadasExpiradas: () =>
   set((state) => {
-    const LIMITE_MS = 24 * 60 * 60 * 1000
-    const ahora     = Date.now()
-    const filtradas: typeof state.mensajes = {}
+    const LIMITE_MS = 24 * 60 * 60 * 1000;
+    const ahora = Date.now();
+    const filtradas: typeof state.mensajes = {};
 
     for (const [instancia, mensajes] of Object.entries(state.mensajes)) {
-      filtradas[instancia] = mensajes.filter(m => {
-        if (m.estado !== 'Solucionada_Archivada') return true
+      filtradas[instancia] = mensajes.filter((m) => {
+        if (m.estado !== "Solucionada_Archivada") return true;
         const resolucion = m.timestamp_resolucion
           ? new Date(m.timestamp_resolucion).getTime()
-          : 0
-        return ahora - resolucion < LIMITE_MS
-      })
+          : 0;
+        return ahora - resolucion < LIMITE_MS;
+      });
     }
-    return { mensajes: filtradas }
-  })
+    return { mensajes: filtradas };
+  });
 ```
 
 El historial completo permanece en Supabase. La purga local solo afecta al array
@@ -1586,13 +1618,15 @@ en memoria de Zustand — reduce la presión de RAM en DRPs de larga duración.
 ```typescript
 purgeMensaje: (mensajeId) =>
   set((state) => {
-    const mensaje = state.mensajes.find(m => m.id === mensajeId)
-    const eraNoLeido = mensaje && mensaje.estado === 'Emitida_Pendiente'
+    const mensaje = state.mensajes.find((m) => m.id === mensajeId);
+    const eraNoLeido = mensaje && mensaje.estado === "Emitida_Pendiente";
     return {
-      mensajes:    state.mensajes.filter(m => m.id !== mensajeId),
-      unreadCount: eraNoLeido ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
-    }
-  })
+      mensajes: state.mensajes.filter((m) => m.id !== mensajeId),
+      unreadCount: eraNoLeido
+        ? Math.max(0, state.unreadCount - 1)
+        : state.unreadCount,
+    };
+  });
 ```
 
 **Llamada en el cierre del modal `isReadOnly`:**
@@ -1600,11 +1634,13 @@ purgeMensaje: (mensajeId) =>
 ```typescript
 // En flujos_transicion, handler onClose del modal:
 const handleCloseReadOnly = () => {
-  useBandejasStore.getState().purgeMensaje(mensaje.id)
+  useBandejasStore.getState().purgeMensaje(mensaje.id);
   // La persistencia en DB se lanza en fire-and-forget:
-  marcarLeida(mensaje.id).catch(() => {/* fallo silencioso — purga ya aplicada */})
-  closeModal()
-}
+  marcarLeida(mensaje.id).catch(() => {
+    /* fallo silencioso — purga ya aplicada */
+  });
+  closeModal();
+};
 ```
 
 ### Dependencias: `useRealtime`, `useInventario` (para DRP)
@@ -1619,24 +1655,24 @@ const handleCloseReadOnly = () => {
 
 ```typescript
 interface RealtimeChannelConfig {
-  channelName: string
-  table:       string
-  schema?:     string            // default: 'public'
-  event?:      'INSERT' | 'UPDATE' | 'DELETE' | '*'
-  filter?:     string            // ej: 'drp_id=eq.abc123'
+  channelName: string;
+  table: string;
+  schema?: string; // default: 'public'
+  event?: "INSERT" | "UPDATE" | "DELETE" | "*";
+  filter?: string; // ej: 'drp_id=eq.abc123'
 }
 
 interface UseRealtime {
-  isConnected:  boolean
-  mode:         'normal' | 'degraded'  // Gap C1 — degraded = polling fallback activo
+  isConnected: boolean;
+  mode: "normal" | "degraded"; // Gap C1 — degraded = polling fallback activo
   subscribe(
-    config:    RealtimeChannelConfig,
-    callback:  (payload: RealtimePayload) => void
-  ): () => void                  // retorna función de cleanup
-  reconnect(): void
+    config: RealtimeChannelConfig,
+    callback: (payload: RealtimePayload) => void,
+  ): () => void; // retorna función de cleanup
+  reconnect(): void;
 }
 
-function useRealtime(): UseRealtime
+function useRealtime(): UseRealtime;
 ```
 
 ### Comportamiento
@@ -1645,11 +1681,13 @@ function useRealtime(): UseRealtime
 
 ```typescript
 const unsubscribe = useRealtime().subscribe(
-  { channelName: 'drp-estado', table: 'drp', filter: 'id=eq.xxx' },
-  (payload) => { /* actualizar store */ }
-)
+  { channelName: "drp-estado", table: "drp", filter: "id=eq.xxx" },
+  (payload) => {
+    /* actualizar store */
+  },
+);
 // cleanup:
-useEffect(() => unsubscribe, [])
+useEffect(() => unsubscribe, []);
 ```
 
 **Reconexión automática:**
@@ -1708,18 +1746,106 @@ INDICADOR EN UI:
 
 ```typescript
 // Implementación interna del polling de canales críticos en degraded_mode
-const POLLING_INTERVAL_MS = 30_000
+const POLLING_INTERVAL_MS = 30_000;
 
 useEffect(() => {
-  if (mode !== 'degraded') return
+  if (mode !== "degraded") return;
   const timer = setInterval(() => {
-    criticalChannels.forEach(ch => ch.poll())
-  }, POLLING_INTERVAL_MS)
-  return () => clearInterval(timer)
-}, [mode])
+    criticalChannels.forEach((ch) => ch.poll());
+  }, POLLING_INTERVAL_MS);
+  return () => clearInterval(timer);
+}, [mode]);
 ```
 
-### Stores: `useGlobalStore` (isOnline, realtimeMode)
+### Stores: `useGlobalStore` (isOnline, realtimeMode, config)
+
+**`useGlobalStore`** es el store singleton que mantiene el estado global del sistema:
+estado de red, modo Realtime y los valores de `system_config` leídos desde Supabase.
+Es de uso exclusivo interno de otros hooks — **no instanciar directamente en componentes**.
+
+```typescript
+// src/stores/useGlobalStore.ts
+interface SystemConfig {
+  realtime_kill_switch: boolean; // true → forzar degraded_mode en todos los clientes
+  cola_offline_procesamiento: boolean; // false → suspender procesamiento de cola (acumular)
+  marquesina: { texto: string; velocidad: number };
+  box_timeout_minutos: { valor: number };
+  periodo_vacaciones_abierto: {
+    activo: boolean;
+    fecha_inicio: string | null;
+    fecha_fin: string | null;
+  };
+  // … otras claves de system_config según er_y_seeds.md §3
+}
+
+interface GlobalStore {
+  isOnline: boolean; // conectividad de red
+  realtimeMode: "normal" | "degraded";
+  config: SystemConfig; // valores de system_config — actualizados en boot y via Realtime
+}
+
+// Boot: leer system_config al montar la app
+async function bootGlobalStore() {
+  const { data } = await supabase.from("system_config").select("clave, valor");
+
+  const configMap = Object.fromEntries(
+    (data ?? []).map(({ clave, valor }) => [clave, valor]),
+  );
+  useGlobalStore.setState({
+    config: {
+      realtime_kill_switch: configMap.realtime_kill_switch?.enabled ?? false,
+      cola_offline_procesamiento:
+        configMap.cola_offline_procesamiento?.enabled ?? true,
+      marquesina: configMap.marquesina ?? { texto: "", velocidad: 50 },
+      box_timeout_minutos: configMap.box_timeout_minutos ?? { valor: 45 },
+      periodo_vacaciones_abierto: configMap.periodo_vacaciones_abierto ?? {
+        activo: false,
+        fecha_inicio: null,
+        fecha_fin: null,
+      },
+    },
+  });
+}
+
+// Suscripción Realtime — propagar cambios de system_config sin reload
+// Se registra al montar la app (en el mismo useEffect que bootGlobalStore)
+supabase
+  .channel("system_config_changes")
+  .on(
+    "postgres_changes",
+    { event: "UPDATE", schema: "public", table: "system_config" },
+    (payload) => {
+      const { clave, valor } = payload.new as { clave: string; valor: unknown };
+      useGlobalStore.setState((prev) => ({
+        config: { ...prev.config, [clave]: valor }, // merge granular por clave
+      }));
+
+      // Kill switch Realtime: si se activa en caliente, forzar degraded_mode
+      if (
+        clave === "realtime_kill_switch" &&
+        (valor as { enabled: boolean }).enabled
+      ) {
+        useGlobalStore.setState({ realtimeMode: "degraded" });
+        // useRealtime detectará el cambio en el próximo render y suspenderá canales no críticos
+      }
+    },
+  )
+  .subscribe();
+```
+
+**Integración con `useRealtime` — kill switch de Realtime:**
+
+```typescript
+// En useRealtime (hooks.md §8) — guard al evaluar el modo
+// Ejecutar al montar y cada vez que config cambie
+useEffect(() => {
+  const { realtime_kill_switch } = useGlobalStore.getState().config;
+  if (realtime_kill_switch) {
+    // Forzar degraded_mode independientemente del estado del WebSocket
+    setMode("degraded");
+  }
+}, [useGlobalStore.getState().config.realtime_kill_switch]);
+```
 
 ### Nota: Solo para uso interno de otros hooks. No instanciar en componentes
 
@@ -1733,14 +1859,14 @@ useEffect(() => {
 
 ```typescript
 interface Mutation {
-  id:                UUID                   // crypto.randomUUID()
-  tipo:              string                 // 'doc2_create' | 'doc1_asistencia' | etc.
-  payload:           unknown
-  timestamp:         ISOString
-  intentos:          number
-  estado:            'pendiente' | 'enviando' | 'fallido'
-  errorMsg?:         string
-  parentMutationId?: UUID
+  id: UUID; // crypto.randomUUID()
+  tipo: string; // 'doc2_create' | 'doc1_asistencia' | etc.
+  payload: unknown;
+  timestamp: ISOString;
+  intentos: number;
+  estado: "pendiente" | "enviando" | "fallido";
+  errorMsg?: string;
+  parentMutationId?: UUID;
   // Si está definido: esta mutación depende de que la mutación padre se haya
   // procesado con éxito. Si el padre falla, esta mutación se marca como 'fallido'
   // automáticamente sin intentar el envío.
@@ -1749,22 +1875,25 @@ interface Mutation {
 
 interface UseOfflineQueue {
   // Estado
-  isOnline:            boolean
-  pendingCount:        number
-  failedCount:         number
-  hasFailed:           boolean
-  hasCriticalPending:  boolean   // true si pendingCount > 0 y !isOnline en el momento del checkout
+  isOnline: boolean;
+  pendingCount: number;
+  failedCount: number;
+  hasFailed: boolean;
+  hasCriticalPending: boolean; // true si pendingCount > 0 y !isOnline en el momento del checkout
 
   // Acciones
-  enqueue(tipo: string, payload: unknown, parentMutationId?: UUID): UUID
+  enqueue(tipo: string, payload: unknown, parentMutationId?: UUID): UUID;
   // Si parentMutationId está definido, esta mutación no se enviará si el padre falla.
-  procesarCola(): Promise<void>        // llamado automáticamente al reconectar
-  reintentarFallidos(): Promise<void>
-  descartarFallido(mutationId: UUID): void
-  asumirAutoriaYReenviar(mutationId: UUID, nuevoAutor: ID_nombre): Promise<void>
+  procesarCola(): Promise<void>; // llamado automáticamente al reconectar
+  reintentarFallidos(): Promise<void>;
+  descartarFallido(mutationId: UUID): void;
+  asumirAutoriaYReenviar(
+    mutationId: UUID,
+    nuevoAutor: ID_nombre,
+  ): Promise<void>;
   // Sobrescribe payload.ID_nombre_registrador con nuevoAutor y reencola la mutación.
   // Solo disponible en mutaciones fallidas con payload que contenga ID_nombre_registrador.
-  clearJwtAfterSync(): void
+  clearJwtAfterSync(): void;
   // Llamado internamente cuando pendingCount === 0 tras retención post-checkout.
   // Ejecuta: useBackgroundSyncStore.liberarJwt() + useAuthStore.clearJwt()
   // Nunca afecta la sesión activa de otro usuario.
@@ -1786,6 +1915,19 @@ interface UseOfflineQueue {
 **`procesarCola`** (FIFO, estrictamente secuencial y dependiente)
 
 ```
+0. GUARD DE KILL SWITCH (evaluar síncronamente antes de hacer nada):
+   const colaHabilitada = useGlobalStore.getState().config.cola_offline_procesamiento
+   Si colaHabilitada === false:
+     → ABORTAR procesarCola completamente — no tocar IndexedDB, no enviar nada
+     → Las mutaciones se quedan en cola, estado 'pendiente', intactas
+     → Loguear: console.warn('[useOfflineQueue] Procesamiento suspendido por cola_offline_procesamiento=false')
+     → RETURN (la cola se procesará automáticamente cuando el kill switch vuelva a true
+               porque la suscripción Realtime de useGlobalStore actualizará el store
+               y el próximo evento online/reconnect disparará procesarCola de nuevo)
+
+   Nota: enqueue() NO está bloqueado por este kill switch — los usuarios siguen
+   acumulando operaciones offline. Solo se suspende la sincronización con el backend.
+
 1. Lee mutaciones en orden timestamp ASC de IndexedDB
 2. Para cada mutación en estado 'pendiente':
 
@@ -1906,14 +2048,14 @@ Supabase**. Limpia el store local síncronamente y encola una mutación especial
 // En useDocumentosStore.descartarBorrador()
 if (!useOfflineQueue.getState().isOnline) {
   // 1. Limpiar en memoria inmediatamente (optimista)
-  useDocumentosStore.getState().eliminarBorrador(draftId)
+  useDocumentosStore.getState().eliminarBorrador(draftId);
   // 2. Encolar para que el SW lo purgue al reconectar
-  useOfflineQueue.getState().enqueue('purge_drafts', {
+  useOfflineQueue.getState().enqueue("purge_drafts", {
     draftId,
     tipo_documento,
     timestamp_descarte: ahora(),
-  })
-  return
+  });
+  return;
 }
 // Si online → DELETE directo a Supabase
 ```
@@ -1932,51 +2074,56 @@ también dispara `procesarCola()` al detectar que la app vuelve al primer plano:
 
 ```typescript
 useEffect(() => {
-  const onOnline       = () => { setIsOnline(true);  procesarCola() }
-  const onOffline      = () => { setIsOnline(false) }
-  const onVisible      = () => {
-    if (document.visibilityState === 'visible' && isOnline) {
-      procesarCola()  // drenar cola al volver del fondo aunque el SW no lo hiciera
+  const onOnline = () => {
+    setIsOnline(true);
+    procesarCola();
+  };
+  const onOffline = () => {
+    setIsOnline(false);
+  };
+  const onVisible = () => {
+    if (document.visibilityState === "visible" && isOnline) {
+      procesarCola(); // drenar cola al volver del fondo aunque el SW no lo hiciera
     }
-  }
+  };
 
-  window.addEventListener('online',  onOnline)
-  window.addEventListener('offline', onOffline)
-  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener("online", onOnline);
+  window.addEventListener("offline", onOffline);
+  document.addEventListener("visibilitychange", onVisible);
 
   return () => {
-    window.removeEventListener('online',  onOnline)
-    window.removeEventListener('offline', onOffline)
-    document.removeEventListener('visibilitychange', onVisible)
-  }
-}, [isOnline])
+    window.removeEventListener("online", onOnline);
+    window.removeEventListener("offline", onOffline);
+    document.removeEventListener("visibilitychange", onVisible);
+  };
+}, [isOnline]);
 ```
 
 **Operaciones aptas para cola offline:**
 
-| Tipo | Descripción |
-| --- | --- |
-| `doc1_asistencia` | Añadir asistencia a Doc-1 del DRP |
-| `doc2_create` | Nuevo informe asistencial |
-| `doc3_create` | Nuevo informe clínico |
-| `doc4_create` | Alta voluntaria |
-| `doc5_create` | Descargo de responsabilidad |
-| `doc11_create` | Aviso urgente |
-| `doc6_metadata` | Metadata del gasto (stock descontado localmente por optimismo; RPC reconcilia al reconectar) |
-| `doc7_create` | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `inoperativo_critico`. **Si `gravedad = 'Grave'` y se encola offline: modal rojo de balizamiento físico obligatorio antes de continuar (ver §3 setCondicionTecnica CASO B — Directiva de Balizamiento Físico).** |
-| `purge_drafts` | Borrado de borrador realizado offline. El SW ejecuta el DELETE al reconectar. Idempotente: si el draft ya no existe en Supabase, el error 404 se trata como éxito. |
+| Tipo              | Descripción                                                                                                                                                                                                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `doc1_asistencia` | Añadir asistencia a Doc-1 del DRP                                                                                                                                                                                                                                                                                                            |
+| `doc2_create`     | Nuevo informe asistencial                                                                                                                                                                                                                                                                                                                    |
+| `doc3_create`     | Nuevo informe clínico                                                                                                                                                                                                                                                                                                                        |
+| `doc4_create`     | Alta voluntaria                                                                                                                                                                                                                                                                                                                              |
+| `doc5_create`     | Descargo de responsabilidad                                                                                                                                                                                                                                                                                                                  |
+| `doc11_create`    | Aviso urgente                                                                                                                                                                                                                                                                                                                                |
+| `doc6_metadata`   | Metadata del gasto (stock descontado localmente por optimismo; RPC reconcilia al reconectar)                                                                                                                                                                                                                                                 |
+| `doc7_create`     | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `inoperativo_critico`. **Si `gravedad = 'Grave'` y se encola offline: modal rojo de balizamiento físico obligatorio antes de continuar (ver §3 setCondicionTecnica CASO B — Directiva de Balizamiento Físico).** |
+| `purge_drafts`    | Borrado de borrador realizado offline. El SW ejecuta el DELETE al reconectar. Idempotente: si el draft ya no existe en Supabase, el error 404 se trata como éxito.                                                                                                                                                                           |
 
 **Operaciones NO aptas para cola:**
 
-| Tipo | Motivo |
-| --- | --- |
-| Doc-6 RPC (stock) | Transacción atómica Supabase |
-| **Doc-10 completo** | Guard atómico `stock_real >= p_cantidad` debe evaluarse en tiempo real — riesgo de stock negativo si se encola |
-| Doc-10 confirmación | Transacción atómica Supabase |
-| `resolverDescuadre` | RPC contable (merma / recuperación) requiere transacción atómica |
-| Login / check-in | Validación JWT en tiempo real |
-| Tokens emergencia | Requiere reautenticación |
-| Cambios de estado DRP | Sincronización inmediata multi-terminal |
+| Tipo                  | Motivo                                                                                                         |
+| --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Doc-6 RPC (stock)     | Transacción atómica Supabase                                                                                   |
+| **Doc-10 completo**   | Guard atómico `stock_real >= p_cantidad` debe evaluarse en tiempo real — riesgo de stock negativo si se encola |
+| Doc-10 confirmación   | Transacción atómica Supabase                                                                                   |
+| `resolverDescuadre`   | RPC contable (merma / recuperación) requiere transacción atómica                                               |
+| Login / check-in      | Validación JWT en tiempo real                                                                                  |
+| Tokens emergencia     | Requiere reautenticación                                                                                       |
+| Cambios de estado DRP | Sincronización inmediata multi-terminal                                                                        |
 
 Ver `logic.md §17.3` para la justificación completa.
 
@@ -1984,12 +2131,12 @@ Ver `logic.md §17.3` para la justificación completa.
 
 **Estructura general de la base IndexedDB `u24_offline`:**
 
-| Object Store | Clave primaria | Descripción |
-|---|---|---|
-| `mutation_queue` | `id` (UUID) | Cola de mutaciones pendientes (todos los tipos) |
-| `document_drafts` | `id` (UUID) | Borradores de documentos en curso |
-| `doc1_metadata` | `drp_id` (UUID) | Metadata del DRP para Doc-1 (un registro por DRP) |
-| `doc1_asistencias` | `id` (UUID asistencia) | Asistencias individuales del Doc-1 (append-only) |
+| Object Store       | Clave primaria         | Descripción                                       |
+| ------------------ | ---------------------- | ------------------------------------------------- |
+| `mutation_queue`   | `id` (UUID)            | Cola de mutaciones pendientes (todos los tipos)   |
+| `document_drafts`  | `id` (UUID)            | Borradores de documentos en curso                 |
+| `doc1_metadata`    | `drp_id` (UUID)        | Metadata del DRP para Doc-1 (un registro por DRP) |
+| `doc1_asistencias` | `id` (UUID asistencia) | Asistencias individuales del Doc-1 (append-only)  |
 
 ### Estructura Normalizada de Doc-1 en IndexedDB
 
@@ -2043,10 +2190,11 @@ Object store: doc1_asistencias
 
 ```typescript
 // Obtener Doc-1 completo para un DRP (renderizado o exportación PDF)
-const metadata    = await db.get('doc1_metadata', drpId)
-const asistencias = await db.getAll('doc1_asistencias',
-  IDBKeyRange.only(drpId),   // usando índice secundario drp_id
-)
+const metadata = await db.get("doc1_metadata", drpId);
+const asistencias = await db.getAll(
+  "doc1_asistencias",
+  IDBKeyRange.only(drpId), // usando índice secundario drp_id
+);
 // asistencias ordena por timestamp_local ASC para presentación cronológica
 ```
 
@@ -2069,19 +2217,19 @@ const asistencias = await db.getAll('doc1_asistencias',
 
 ```typescript
 interface Coords {
-  lat:       number
-  lng:       number
-  accuracy?: number              // metros (solo GPS real)
-  fuente:    'gps' | 'historial_vehiculo' | 'ultimo_evento' | 'ip' | 'ninguna'
+  lat: number;
+  lng: number;
+  accuracy?: number; // metros (solo GPS real)
+  fuente: "gps" | "historial_vehiculo" | "ultimo_evento" | "ip" | "ninguna";
 }
 
 interface UseGPS {
   // Estado
-  ultimasCoordsConocidas: Coords | null
-  isDisponible:           boolean
+  ultimasCoordsConocidas: Coords | null;
+  isDisponible: boolean;
 
   // Acción principal
-  capturar(vehiculoId?: ID_vehiculo): Promise<Coords | null>
+  capturar(vehiculoId?: ID_vehiculo): Promise<Coords | null>;
 }
 ```
 
@@ -2140,23 +2288,23 @@ Solo el paso 5 genera mensaje visible en UI.
 > Implementa el modelo de profundidad máxima 1 documentado en `mapeo_visual_ui.md §7`.
 
 ```typescript
-type HomeView  = string | null         // nombre de la vista in-place activa
-type ModalView = string | null         // nombre del modal activo
+type HomeView = string | null; // nombre de la vista in-place activa
+type ModalView = string | null; // nombre del modal activo
 
 interface UseNavigation {
   // Estado
-  activeView:     HomeView             // null = visual_info_home
-  activeModal:    ModalView            // null = sin modal
-  canGoBack:      boolean              // true si activeView !== null
-  accordionActivo: string | null       // núcleo de black_column expandido
+  activeView: HomeView; // null = visual_info_home
+  activeModal: ModalView; // null = sin modal
+  canGoBack: boolean; // true si activeView !== null
+  accordionActivo: string | null; // núcleo de black_column expandido
 
   // Acciones
-  navigate(view: string): void         // abre vista in-place, cierra modal si hay
-  openModal(modal: string): void       // abre modal sobre vista actual
-  closeModal(): void                   // cierra modal
-  goBack(): void                       // cierra in-place o modal → visual_info_home
-  goHome(): void                       // fuerza visual_info_home, colapsa acordeón
-  toggleAccordion(nucleo: string): void // expande/colapsa sin cambiar home_area
+  navigate(view: string): void; // abre vista in-place, cierra modal si hay
+  openModal(modal: string): void; // abre modal sobre vista actual
+  closeModal(): void; // cierra modal
+  goBack(): void; // cierra in-place o modal → visual_info_home
+  goHome(): void; // fuerza visual_info_home, colapsa acordeón
+  toggleAccordion(nucleo: string): void; // expande/colapsa sin cambiar home_area
 }
 ```
 
@@ -2218,27 +2366,35 @@ No modifica activeView ni activeModal
 
 ```typescript
 type TipoDocumento =
-  | 'doc2' | 'doc3' | 'doc4' | 'doc5'
-  | 'doc6' | 'doc9' | 'doc10' | 'doc11'
-  | 'doc12' | 'doc13' | 'doc_checklist360'
+  | "doc2"
+  | "doc3"
+  | "doc4"
+  | "doc5"
+  | "doc6"
+  | "doc9"
+  | "doc10"
+  | "doc11"
+  | "doc12"
+  | "doc13"
+  | "doc_checklist360";
 
 interface UseDocumento<T> {
   // Estado
-  draft:        T | null              // borrador en IndexedDB
-  estado:       EstadoDocumento
-  isGuardando:  boolean
-  isEnviando:   boolean
-  errorMsg:     string | null
+  draft: T | null; // borrador en IndexedDB
+  estado: EstadoDocumento;
+  isGuardando: boolean;
+  isEnviando: boolean;
+  errorMsg: string | null;
 
   // Acciones
-  inicializar(prefill?: Partial<T>): void
-  guardarBorrador(data: Partial<T>): void
-  enviar(data: T): Promise<void>
-  anular(): Promise<void>             // solo en estado Borrador_En_Curso
-  descartar(): void                   // limpia borrador de IndexedDB sin enviar
+  inicializar(prefill?: Partial<T>): void;
+  guardarBorrador(data: Partial<T>): void;
+  enviar(data: T): Promise<void>;
+  anular(): Promise<void>; // solo en estado Borrador_En_Curso
+  descartar(): void; // limpia borrador de IndexedDB sin enviar
 }
 
-function useDocumento<T>(tipo: TipoDocumento, id?: UUID): UseDocumento<T>
+function useDocumento<T>(tipo: TipoDocumento, id?: UUID): UseDocumento<T>;
 ```
 
 ### Comportamiento
@@ -2313,14 +2469,14 @@ Solo disponible en estado 'Borrador_En_Curso'.
 ```typescript
 interface UseIdleTimeout {
   // Estado (Zustand + persist en localStorage)
-  isActivo:                 boolean    // true si el monitoreo está en marcha
-  isIdle:                   boolean    // true si el timeout ya expiró
-  ultimoEventoInteraccion:  number     // Date.now() del último evento DOM (ms epoch)
+  isActivo: boolean; // true si el monitoreo está en marcha
+  isIdle: boolean; // true si el timeout ya expiró
+  ultimoEventoInteraccion: number; // Date.now() del último evento DOM (ms epoch)
 
   // Acciones (llamadas por useTerminalAuth, no por componentes)
-  iniciar(): void     // activa monitoreo al entrar en estado_1 con rol invitado
-  detener(): void     // desactiva (al elevar rol o destuir cookie)
-  registrarInteraccion(): void   // actualiza ultimoEventoInteraccion = Date.now()
+  iniciar(): void; // activa monitoreo al entrar en estado_1 con rol invitado
+  detener(): void; // desactiva (al elevar rol o destuir cookie)
+  registrarInteraccion(): void; // actualiza ultimoEventoInteraccion = Date.now()
 }
 ```
 
@@ -2346,50 +2502,55 @@ useTerminalAuth llama a detener() cuando:
 **Listeners DOM — actualizar timestamp de interacción**
 
 ```typescript
-const IDLE_MS = 20 * 60 * 1000   // 20 minutos en ms
+const IDLE_MS = 20 * 60 * 1000; // 20 minutos en ms
 
 useEffect(() => {
-  if (!isActivo) return
+  if (!isActivo) return;
 
-  const eventos = ['click', 'keydown', 'touchstart', 'mousemove', 'scroll']
-  const onInteraccion = () => registrarInteraccion()   // → Date.now()
+  const eventos = ["click", "keydown", "touchstart", "mousemove", "scroll"];
+  const onInteraccion = () => registrarInteraccion(); // → Date.now()
 
-  eventos.forEach(e => window.addEventListener(e, onInteraccion, { passive: true }))
+  eventos.forEach((e) =>
+    window.addEventListener(e, onInteraccion, { passive: true }),
+  );
 
   return () => {
-    eventos.forEach(e => window.removeEventListener(e, onInteraccion))
-  }
-}, [isActivo])
+    eventos.forEach((e) => window.removeEventListener(e, onInteraccion));
+  };
+}, [isActivo]);
 ```
 
 **Listeners de visibilidad — detección de vuelta tras letargo**
 
 ```typescript
 useEffect(() => {
-  if (!isActivo) return
+  if (!isActivo) return;
 
   const verificarIdleAlVolverVisible = () => {
     // Se ejecuta al pasar de hidden → visible o al recibir focus
-    const delta = Date.now() - ultimoEventoInteraccion
+    const delta = Date.now() - ultimoEventoInteraccion;
     if (delta >= IDLE_MS) {
       // La tablet estuvo dormida más de 20 minutos — forzar estado_0 inmediatamente
-      isIdle = true
-      useTerminalStore.getState().forzarEstado0()
-      useAuthStore.getState().clearJwt()
+      isIdle = true;
+      useTerminalStore.getState().forzarEstado0();
+      useAuthStore.getState().clearJwt();
     }
     // Si delta < IDLE_MS: la sesión sigue válida — no hacer nada
-  }
+  };
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') verificarIdleAlVolverVisible()
-  })
-  window.addEventListener('focus', verificarIdleAlVolverVisible)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") verificarIdleAlVolverVisible();
+  });
+  window.addEventListener("focus", verificarIdleAlVolverVisible);
 
   return () => {
-    document.removeEventListener('visibilitychange', verificarIdleAlVolverVisible)
-    window.removeEventListener('focus', verificarIdleAlVolverVisible)
-  }
-}, [isActivo, ultimoEventoInteraccion])
+    document.removeEventListener(
+      "visibilitychange",
+      verificarIdleAlVolverVisible,
+    );
+    window.removeEventListener("focus", verificarIdleAlVolverVisible);
+  };
+}, [isActivo, ultimoEventoInteraccion]);
 ```
 
 **Por qué funciona correctamente tras el sueño del SO:**
@@ -2459,8 +2620,8 @@ Al recargar la página con isActivo=true:
 ```typescript
 async function compressImage(
   file: File | Blob,
-  options?: { maxPx?: number; quality?: number }
-): Promise<Blob>
+  options?: { maxPx?: number; quality?: number },
+): Promise<Blob>;
 // Opciones por defecto: maxPx = 1200, quality = 0.70, formato = WebP
 ```
 
@@ -2470,20 +2631,20 @@ async function compressImage(
 // utils/imageCompressor.ts
 export async function compressImage(
   file: File | Blob,
-  { maxPx = 1200, quality = 0.70 } = {}
+  { maxPx = 1200, quality = 0.7 } = {},
 ): Promise<Blob> {
-  const bitmap = await createImageBitmap(file)
+  const bitmap = await createImageBitmap(file);
 
-  const scale = Math.min(1, maxPx / Math.max(bitmap.width, bitmap.height))
-  const w = Math.round(bitmap.width  * scale)
-  const h = Math.round(bitmap.height * scale)
+  const scale = Math.min(1, maxPx / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
 
-  const canvas = new OffscreenCanvas(w, h)
-  const ctx    = canvas.getContext('2d')!
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close()
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
 
-  return canvas.convertToBlob({ type: 'image/webp', quality })
+  return canvas.convertToBlob({ type: "image/webp", quality });
 }
 ```
 
@@ -2506,27 +2667,27 @@ export async function compressImage(
 
 ```typescript
 interface Mutation {
-  id:          UUID
-  tipo:        string
-  payload:     unknown
-  timestamp:   ISOString
-  intentos:    number
-  estado:      'fallido'
-  errorMsg:    string
+  id: UUID;
+  tipo: string;
+  payload: unknown;
+  timestamp: ISOString;
+  intentos: number;
+  estado: "fallido";
+  errorMsg: string;
 }
 
 interface UseBandejaConflictos {
   // Estado
-  deadLetters:   Mutation[]    // mutaciones fallidas de IndexedDB
-  isLoading:     boolean
+  deadLetters: Mutation[]; // mutaciones fallidas de IndexedDB
+  isLoading: boolean;
 
   // Carga las mutaciones fallidas desde IndexedDB
-  cargar(): Promise<void>
+  cargar(): Promise<void>;
 
   // Acciones por mutación
-  reintentar(mutationId: UUID): Promise<void>
-  descartar(mutationId: UUID): Promise<void>
-  asumirAutoria(mutationId: UUID, nuevoAutor: ID_nombre): Promise<void>
+  reintentar(mutationId: UUID): Promise<void>;
+  descartar(mutationId: UUID): Promise<void>;
+  asumirAutoria(mutationId: UUID, nuevoAutor: ID_nombre): Promise<void>;
 }
 ```
 
@@ -2534,16 +2695,16 @@ interface UseBandejaConflictos {
 
 **Columnas de la vista:**
 
-| Columna | Contenido |
-|---|---|
-| `Tipo` | Código de operación (`doc1_asistencia`, `doc6_metadata`, etc.) |
-| `Timestamp` | Fecha y hora del intento original (offline) |
-| `Autor` | `payload.ID_nombre_registrador` si existe |
-| `Error` | `errorMsg` del último intento fallido |
-| `Intentos` | Número de reintentos realizados |
-| `Acciones` | `[Reintentar]` `[Descartar]` `[Asumir Autoría]`* |
+| Columna     | Contenido                                                      |
+| ----------- | -------------------------------------------------------------- |
+| `Tipo`      | Código de operación (`doc1_asistencia`, `doc6_metadata`, etc.) |
+| `Timestamp` | Fecha y hora del intento original (offline)                    |
+| `Autor`     | `payload.ID_nombre_registrador` si existe                      |
+| `Error`     | `errorMsg` del último intento fallido                          |
+| `Intentos`  | Número de reintentos realizados                                |
+| `Acciones`  | `[Reintentar]` `[Descartar]` `[Asumir Autoría]`\*              |
 
-*`[Asumir Autoría]` solo aparece si `payload.ID_nombre_registrador` existe (documentos autoriales).
+\*`[Asumir Autoría]` solo aparece si `payload.ID_nombre_registrador` existe (documentos autoriales).
 
 **RBAC:** `coordinación` y `logística` ven todas las Dead Letters del terminal.
 La acción `[Asumir Autoría]` requiere que el nuevo autor tenga sesión activa en el terminal.
@@ -2554,10 +2715,10 @@ La acción `[Asumir Autoría]` requiere que el nuevo autor tenga sesión activa 
 ```typescript
 interface UseLocationListener {
   // Estado
-  isEscuchando:       boolean    // true si el canal Realtime está suscrito
-  ultimoPingAt:       ISOString | null   // timestamp del último ping procesado
-  throttleActivo:     boolean    // true si un nuevo ping sería ignorado ahora mismo
-  segundosThrottle:   number     // segundos hasta que el throttle se levante (0 si libre)
+  isEscuchando: boolean; // true si el canal Realtime está suscrito
+  ultimoPingAt: ISOString | null; // timestamp del último ping procesado
+  throttleActivo: boolean; // true si un nuevo ping sería ignorado ahora mismo
+  segundosThrottle: number; // segundos hasta que el throttle se levante (0 si libre)
 }
 ```
 
@@ -2645,20 +2806,20 @@ onPongError(payload):
 
 ```typescript
 // El coordinador no ha recibido respuesta alguna en 5 s
-fallbackTimer = setTimeout(() => ejecutarFallbackRPC(vehiculoId), 5000)
+fallbackTimer = setTimeout(() => ejecutarFallbackRPC(vehiculoId), 5000);
 ```
 
 **`ejecutarFallbackRPC`** (compartida por ambos caminos):
 
 ```typescript
 async function ejecutarFallbackRPC(vehiculoId: string) {
-  const { data } = await supabase.rpc('get_ultima_ubicacion_vehiculo', {
-    p_id_vehiculo: vehiculoId
-  })
+  const { data } = await supabase.rpc("get_ultima_ubicacion_vehiculo", {
+    p_id_vehiculo: vehiculoId,
+  });
   // La RPC hace UNION ALL gps_historial + doc8_eventos ordenado por timestamp DESC LIMIT 1
   // Garantiza la posición más reciente independientemente de su fuente
   // Ver logic.md §29.3 para el SQL completo
-  mostrarUbicacionOffline(data)   // muestra badge "Ubicación offline" en el visor
+  mostrarUbicacionOffline(data); // muestra badge "Ubicación offline" en el visor
 }
 ```
 
@@ -2685,20 +2846,20 @@ async function ejecutarFallbackRPC(vehiculoId: string) {
 ```typescript
 interface UseBackgroundSyncStore {
   // Estado reactivo en memoria (solo para la UI del banner — NUNCA expuesto a otros componentes)
-  frozenUserId:   ID_nombre | null  // ID_nombre del propietario del JWT congelado
-  hasFrozenJwt:   boolean           // true si hay JWT congelado pendiente de vaciado
+  frozenUserId: ID_nombre | null; // ID_nombre del propietario del JWT congelado
+  hasFrozenJwt: boolean; // true si hay JWT congelado pendiente de vaciado
   // Nota: frozenJwt NO existe como campo Zustand — vive exclusivamente en IndexedDB.
   // El Main Thread no lo lee; solo el Service Worker accede a él directamente.
 
   // Escritura — llamado exclusivamente por useCheckin.checkout() en CASO RETENCIÓN
-  congelarJwt(jwt: string, userId: ID_nombre): Promise<void>
+  congelarJwt(jwt: string, userId: ID_nombre): Promise<void>;
 
   // Lectura — consumida exclusivamente por el Service Worker
   // (método async porque IndexedDB es asíncrono)
-  getFrozenJwt(): Promise<string | null>
+  getFrozenJwt(): Promise<string | null>;
 
   // Limpieza — llamada exclusivamente por useOfflineQueue.clearJwtAfterSync()
-  liberarJwt(): Promise<void>
+  liberarJwt(): Promise<void>;
 }
 ```
 
@@ -2781,13 +2942,13 @@ self.addEventListener('sync', async (event) => {
 
 ### Garantías de aislamiento
 
-| Propiedad | Garantía |
-|---|---|
-| Inicio de sesión de Usuario B | No modifica ni lee `bgs_tokens` — opera con su propia sesión en `useAuthStore` |
-| Logout de Usuario B | No elimina la entrada `frozen_jwt` de IndexedDB — el SW puede seguir vaciando la cola de Usuario A |
-| Expiración de sesión de Usuario B | No afecta al JWT congelado en IndexedDB |
-| TTL del JWT congelado | TTL natural del token (`shift_start + 36h`). Si expira antes de vaciarse la cola, las mutaciones fallan con 401 y se marcan `fallido` |
-| Acceso desde SW | Directo a IndexedDB — sin pasar por postMessage ni por el store de UI activa |
+| Propiedad                         | Garantía                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Inicio de sesión de Usuario B     | No modifica ni lee `bgs_tokens` — opera con su propia sesión en `useAuthStore`                                                        |
+| Logout de Usuario B               | No elimina la entrada `frozen_jwt` de IndexedDB — el SW puede seguir vaciando la cola de Usuario A                                    |
+| Expiración de sesión de Usuario B | No afecta al JWT congelado en IndexedDB                                                                                               |
+| TTL del JWT congelado             | TTL natural del token (`shift_start + 36h`). Si expira antes de vaciarse la cola, las mutaciones fallan con 401 y se marcan `fallido` |
+| Acceso desde SW                   | Directo a IndexedDB — sin pasar por postMessage ni por el store de UI activa                                                          |
 
 ### Stores: `useBackgroundSyncStore` (Zustand en memoria, sin persist — la persistencia real está en IndexedDB)
 
@@ -2807,50 +2968,55 @@ self.addEventListener('sync', async (event) => {
 
 ```typescript
 interface SessionEntry {
-  accessToken:  string       // JWT de acceso actual
-  refreshToken: string       // token de refresco de Supabase Auth
-  expiresAt:    number       // Unix epoch ms — cuando expira el accessToken
+  accessToken: string; // JWT de acceso actual
+  refreshToken: string; // token de refresco de Supabase Auth
+  expiresAt: number; // Unix epoch ms — cuando expira el accessToken
 }
 
 interface UseAuthStore {
   // Mapa de sesiones activas: { ID_nombre → SessionEntry }
-  sessionMap:  Record<ID_nombre, SessionEntry>
+  sessionMap: Record<ID_nombre, SessionEntry>;
 
   // Rol activo del usuario "principal" de la sesión actual del terminal
   // (usado solo para navegación y permisos de UI — no para mutaciones)
-  rolActivo: string | null
+  rolActivo: string | null;
 
-  addJwt(id: ID_nombre, accessToken: string, refreshToken: string, expiresAt: number): void
+  addJwt(
+    id: ID_nombre,
+    accessToken: string,
+    refreshToken: string,
+    expiresAt: number,
+  ): void;
   // getJwtFor es async: rota silenciosamente si el token expira en < 5 min
-  getJwtFor(id: ID_nombre): Promise<string | null>
-  removeJwt(id: ID_nombre): void
-  clearJwt(): void
+  getJwtFor(id: ID_nombre): Promise<string | null>;
+  removeJwt(id: ID_nombre): void;
+  clearJwt(): void;
 }
 ```
 
 **Rotación Silenciosa — implementación de `getJwtFor`:**
 
 ```typescript
-const REFRESH_MARGIN_MS = 5 * 60 * 1000   // 5 minutos en ms
+const REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutos en ms
 
 async function getJwtFor(id: ID_nombre): Promise<string | null> {
-  const entry = useAuthStore.getState().sessionMap[id]
-  if (!entry) return null
+  const entry = useAuthStore.getState().sessionMap[id];
+  if (!entry) return null;
 
-  const ahoraMs = Date.now()
+  const ahoraMs = Date.now();
   if (entry.expiresAt - ahoraMs > REFRESH_MARGIN_MS) {
     // Token válido con margen suficiente — devolverlo sin rota
-    return entry.accessToken
+    return entry.accessToken;
   }
 
   // Token a menos de 5 minutos de expirar → refrescar silenciosamente
   const { data, error } = await supabase.auth.refreshSession({
     refresh_token: entry.refreshToken,
-  })
+  });
   if (error || !data.session) {
     // Refresco fallido — devolver el token antiguo (puede fallar en el servidor con 401)
-    console.warn(`[useAuthStore] refresh fallido para ${id}:`, error?.message)
-    return entry.accessToken
+    console.warn(`[useAuthStore] refresh fallido para ${id}:`, error?.message);
+    return entry.accessToken;
   }
 
   // Actualizar el mapa con el nuevo par de tokens
@@ -2858,9 +3024,9 @@ async function getJwtFor(id: ID_nombre): Promise<string | null> {
     id,
     data.session.access_token,
     data.session.refresh_token,
-    data.session.expires_at! * 1000   // Supabase devuelve epoch en segundos
-  )
-  return data.session.access_token
+    data.session.expires_at! * 1000, // Supabase devuelve epoch en segundos
+  );
+  return data.session.access_token;
 }
 ```
 
@@ -2873,43 +3039,43 @@ async function getJwtFor(id: ID_nombre): Promise<string | null> {
 // Variable de contexto del ejecutor activo para la petición en curso.
 // JS es single-threaded: el valor se establece justo antes de que Supabase
 // invoque el fetch interceptor, y se limpia en el finally del wrapper.
-let _ejecutorIdActual: string | null = null
+let _ejecutorIdActual: string | null = null;
 
 // Custom fetch: intercepta TODAS las peticiones del cliente singleton
 const customFetch: typeof fetch = async (url, options = {}) => {
-  const ejecutorId = _ejecutorIdActual
+  const ejecutorId = _ejecutorIdActual;
   if (ejecutorId) {
     // getJwtFor es async: rota silenciosamente el token si está próximo a expirar
-    const jwt = await useAuthStore.getState().getJwtFor(ejecutorId)
-    if (!jwt) throw new Error(`jwt_no_disponible: ${ejecutorId}`)
+    const jwt = await useAuthStore.getState().getJwtFor(ejecutorId);
+    if (!jwt) throw new Error(`jwt_no_disponible: ${ejecutorId}`);
     options.headers = {
       ...options.headers,
       Authorization: `Bearer ${jwt}`,
-    }
+    };
   }
-  return fetch(url, options)   // delega al fetch nativo del navegador
-}
+  return fetch(url, options); // delega al fetch nativo del navegador
+};
 
 // Singleton: único cliente para toda la aplicación
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global: { fetch: customFetch },
   auth: {
-    autoRefreshToken: false,  // tokens gestionados por useAuthStore
-    persistSession:   false,  // no sobreescribir sesión entre pestañas
+    autoRefreshToken: false, // tokens gestionados por useAuthStore
+    persistSession: false, // no sobreescribir sesión entre pestañas
   },
-})
+});
 
 // Wrapper para mutaciones: establece el contexto del ejecutor, ejecuta fn(),
 // y limpia el contexto en el finally (incluso si fn() lanza error).
 export async function conEjecutor<T>(
   ejecutorId: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
-  _ejecutorIdActual = ejecutorId
+  _ejecutorIdActual = ejecutorId;
   try {
-    return await fn()
+    return await fn();
   } finally {
-    _ejecutorIdActual = null
+    _ejecutorIdActual = null;
   }
 }
 ```
@@ -2918,11 +3084,17 @@ export async function conEjecutor<T>(
 
 ```typescript
 const { mutate } = useMutation({
-  mutationFn: ({ ejecutorId, data }: { ejecutorId: ID_nombre; data: unknown }) =>
+  mutationFn: ({
+    ejecutorId,
+    data,
+  }: {
+    ejecutorId: ID_nombre;
+    data: unknown;
+  }) =>
     conEjecutor(ejecutorId, () =>
-      supabase.from('tabla').insert(data).throwOnError()
-    )
-})
+      supabase.from("tabla").insert(data).throwOnError(),
+    ),
+});
 ```
 
 **Uso en la cola offline (useOfflineQueue.procesarCola):**
@@ -2932,8 +3104,8 @@ const { mutate } = useMutation({
 // Al drenar, conEjecutor inyecta el JWT congelado (recuperado del payload)
 // mediante useAuthStore.addJwt(ejecutorId, mutation.payload.jwt) antes de llamar.
 await conEjecutor(mutation.payload.ejecutorId, () =>
-  supabase.rpc(mutation.tipo, mutation.payload.data)
-)
+  supabase.rpc(mutation.tipo, mutation.payload.data),
+);
 ```
 
 **Por qué es seguro en JS single-threaded:**
@@ -2954,14 +3126,126 @@ de UUID de petición (ver `logic.md §34.6`).
 
 ### Reglas de uso
 
-| Regla | Descripción |
+| Regla                    | Descripción                                                                                                                                                            |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SELECT (lectura)         | `supabase.from(...)` sin `conEjecutor` — sin RLS de escritura                                                                                                          |
+| INSERT / UPDATE / DELETE | `conEjecutor(ejecutorId, () => supabase.from(...).op(...))`                                                                                                            |
+| Edge Functions           | `conEjecutor(ejecutorId, () => supabase.functions.invoke(...))`                                                                                                        |
+| Cola offline             | JWT congelado en payload; reconstruido con `addJwt` temporal antes de drenar                                                                                           |
+| Rotación silenciosa      | `getJwtFor()` es async; si el token expira en < 5 min rota automáticamente y devuelve el nuevo JWT antes de la petición. El caller no necesita saber que hubo rotación |
+| Expiración total         | Si `refreshSession` falla también, `getJwtFor()` devuelve el token antiguo; el servidor responderá 401 y la capa de error forzará re-login                             |
+
+### 18.2 Refresco silencioso proactivo — `onAuthStateChange` (C-13)
+
+El cliente Supabase tiene `autoRefreshToken: false` porque los tokens se gestionan por
+usuario activo en `useAuthStore`. Sin embargo, el SDK emite `TOKEN_REFRESHED` cuando
+`refreshSession()` se invoca manualmente (desde `getJwtFor()` §18.1 o desde el timer
+proactivo). Una suscripción centralizada actualiza el store en cada rotación.
+
+**Timer proactivo de refresco (50 min sobre TTL de 60 min):**
+
+```typescript
+// lib/useJwtRefreshScheduler.ts
+// Llamado desde useCheckin al registrar una sesión activa por ID_nombre.
+
+const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000  // refrescar 10 min antes de expirar
+
+export function scheduleJwtRefresh(
+  idNombre: string,
+  expiresAtEpochSec: number
+): () => void {
+  const msUntilRefresh = Math.max(
+    expiresAtEpochSec * 1000 - Date.now() - REFRESH_BEFORE_EXPIRY_MS,
+    0
+  )
+  const timerId = setTimeout(async () => {
+    const entry = useAuthStore.getState().sessionMap[idNombre]
+    if (!entry) return  // usuario ya hizo logout antes del timer
+    try {
+      await supabase.auth.refreshSession({ refresh_token: entry.refreshToken })
+      // El SDK emitirá TOKEN_REFRESHED → listener de onAuthStateChange actualiza el store
+    } catch {
+      console.warn(`[jwt-scheduler] Refresco proactivo fallido para ${idNombre}`)
+      // Fallback: getJwtFor() con margen de 5 min se activará en la próxima petición
+    }
+  }, msUntilRefresh)
+  return () => clearTimeout(timerId)  // cleanup — cancelar si hay logout antes del timer
+}
+```
+
+**Suscripción a `onAuthStateChange`:**
+
+La suscripción se registra una única vez en la inicialización del módulo
+`supabaseClient.ts` y persiste durante toda la vida de la aplicación:
+
+```typescript
+// lib/supabaseClient.ts — añadido justo tras createClient(...)
+
+supabase.auth.onAuthStateChange((event, session) => {
+
+  if (event === 'TOKEN_REFRESHED' && session) {
+    const idNombre = session.user.user_metadata?.id_nombre as string | undefined
+    if (!idNombre) return
+
+    // Actualizar sessionMap con los nuevos tokens
+    useAuthStore.getState().addJwt(
+      idNombre,
+      session.access_token,
+      session.refresh_token ?? '',
+      session.expires_at ?? 0,
+    )
+
+    // Actualizar claims snapshot — pueden haber cambiado tras rpc_cambiar_rol
+    const newClaims = (session.user.app_metadata?.app_claims ?? {}) as AppClaims
+    useAuthStore.getState().updateClaims(idNombre, newClaims)
+
+    // Reprogramar el siguiente refresco proactivo
+    if (session.expires_at) {
+      scheduleJwtRefresh(idNombre, session.expires_at)
+    }
+
+    console.debug(`[auth] TOKEN_REFRESHED para ${idNombre} — store actualizado`)
+  }
+
+  if (event === 'SIGNED_OUT') {
+    // El SDK emite SIGNED_OUT en algunas condiciones de red excepcionales.
+    // flujo_checkout ya llama removeJwt() explícitamente — esto es un guard de emergencia.
+    const idNombre = session?.user?.user_metadata?.id_nombre as string | undefined
+    if (idNombre && useAuthStore.getState().sessionMap[idNombre]) {
+      useAuthStore.getState().removeJwt(idNombre)
+    }
+  }
+})
+```
+
+**Nuevo método `updateClaims` en `useAuthStore`:**
+
+```typescript
+// Actualiza el snapshot de claims de un usuario sin afectar sus tokens.
+updateClaims: (idNombre: string, claims: AppClaims) =>
+  set((state) => ({
+    sessionMap: {
+      ...state.sessionMap,
+      [idNombre]: {
+        ...state.sessionMap[idNombre],
+        claims,
+      },
+    },
+  })),
+```
+
+**Eventos de `onAuthStateChange` relevantes para U24:**
+
+| Evento | Acción |
 |---|---|
-| SELECT (lectura) | `supabase.from(...)` sin `conEjecutor` — sin RLS de escritura |
-| INSERT / UPDATE / DELETE | `conEjecutor(ejecutorId, () => supabase.from(...).op(...))` |
-| Edge Functions | `conEjecutor(ejecutorId, () => supabase.functions.invoke(...))` |
-| Cola offline | JWT congelado en payload; reconstruido con `addJwt` temporal antes de drenar |
-| Rotación silenciosa | `getJwtFor()` es async; si el token expira en < 5 min rota automáticamente y devuelve el nuevo JWT antes de la petición. El caller no necesita saber que hubo rotación |
-| Expiración total | Si `refreshSession` falla también, `getJwtFor()` devuelve el token antiguo; el servidor responderá 401 y la capa de error forzará re-login |
+| `TOKEN_REFRESHED` | Actualizar tokens + claims en `sessionMap`; reprogramar timer |
+| `SIGNED_OUT` | `removeJwt(idNombre)` si no se hizo ya en `flujo_checkout` |
+| `INITIAL_SESSION`, `SIGNED_IN` | Ignorar — el flujo de checkin gestiona estos casos explícitamente |
+
+> **Nota de persistencia:** `persistSession: false` impide que el SDK escriba la sesión
+> en su propio storage. `useAuthStore` (IndexedDB vía idb-keyval) es la única fuente
+> de verdad de sesión. `onAuthStateChange` actúa exclusivamente como bus de eventos
+> de rotación de tokens, no como fuente de verdad.
 
 ### Stores: `useAuthStore` (Zustand + persist en IndexedDB — ver §15 Persistencia Asíncrona)
 
@@ -3033,8 +3317,8 @@ useLocationListener
   Condición: ID_vehiculo asignado ∧ checkin_on ∧ estadoOperativo ≠ 'desactivado'
 ```
 
-*`useModuloPSA` y `useModuloFiliacion` no están especificados en detalle aquí —
-siguen el mismo patrón que `useDocumento` sobre `useModulosStore`.*
+_`useModuloPSA` y `useModuloFiliacion` no están especificados en detalle aquí —
+siguen el mismo patrón que `useDocumento` sobre `useModulosStore`._
 
 ---
 
@@ -3042,15 +3326,15 @@ siguen el mismo patrón que `useDocumento` sobre `useModulosStore`.*
 
 ### TanStack Query vs Zustand
 
-| Dato | Gestión | Motivo |
-|---|---|---|
-| Estado de turno activo (checkin, vehiculo, DRP) | Zustand + localStorage | Sobrevive recargas; dispositivos compartidos de flota |
-| Stock de inventario (fuente de verdad) | TanStack Query + Supabase Realtime | Sincronizado con BBDD; invalidado tras cada RPC |
-| Stock optimista local Doc-6 (`stock_real_local`) | Zustand (sin persist) | Revertible; no persiste en localStorage para evitar estado huérfano |
-| Formularios en progreso | Zustand + IndexedDB | Offline-first, borradores persistentes |
-| Mensajes de bandeja | Zustand + Supabase Realtime | Actualización en tiempo real sin polling |
-| Estado global (marquesina, tablón, vacaciones) | Zustand + Supabase Realtime | Broadcast a todos los terminales |
-| Timer de inactividad (`useIdleTimeout`) | Zustand + localStorage | Sobrevive recarga; tiempo restante recuperable |
+| Dato                                             | Gestión                            | Motivo                                                              |
+| ------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------- |
+| Estado de turno activo (checkin, vehiculo, DRP)  | Zustand + localStorage             | Sobrevive recargas; dispositivos compartidos de flota               |
+| Stock de inventario (fuente de verdad)           | TanStack Query + Supabase Realtime | Sincronizado con BBDD; invalidado tras cada RPC                     |
+| Stock optimista local Doc-6 (`stock_real_local`) | Zustand (sin persist)              | Revertible; no persiste en localStorage para evitar estado huérfano |
+| Formularios en progreso                          | Zustand + IndexedDB                | Offline-first, borradores persistentes                              |
+| Mensajes de bandeja                              | Zustand + Supabase Realtime        | Actualización en tiempo real sin polling                            |
+| Estado global (marquesina, tablón, vacaciones)   | Zustand + Supabase Realtime        | Broadcast a todos los terminales                                    |
+| Timer de inactividad (`useIdleTimeout`)          | Zustand + localStorage             | Sobrevive recarga; tiempo restante recuperable                      |
 
 ### Convención de persistencia
 
@@ -3100,26 +3384,26 @@ caídas de la conexión WebSocket.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: true,    // se dispara al recuperar el foco de la ventana
-                                     // (incluye wake-up de tablet por SO)
-      refetchOnReconnect:   true,    // se dispara al recuperar conexión de red
-                                     // (el SW notifica al cliente cuando vuelve online)
-      staleTime: 30_000,             // datos considerados frescos durante 30 s
-                                     // evita re-fetches redundantes si Realtime ya actualizó
+      refetchOnWindowFocus: true, // se dispara al recuperar el foco de la ventana
+      // (incluye wake-up de tablet por SO)
+      refetchOnReconnect: true, // se dispara al recuperar conexión de red
+      // (el SW notifica al cliente cuando vuelve online)
+      staleTime: 30_000, // datos considerados frescos durante 30 s
+      // evita re-fetches redundantes si Realtime ya actualizó
     },
   },
-})
+});
 ```
 
 **Alcance del re-fetch:**
 
-| Query | `refetchOnWindowFocus` | `refetchOnReconnect` | Justificación |
-|---|---|---|---|
-| `bandejas/*` (todas las instancias activas) | ✅ | ✅ | Las tablets en montaje se apagan/despiertan frecuentemente; los WebSockets no persisten durante el letargo del SO |
-| `inventario/*` (stock) | ✅ | ✅ | Un turno de reposición puede haberse ejecutado mientras el terminal estaba dormido |
-| `drp/*` | ✅ | ✅ | Cambios de estado DRP durante desconexión |
-| `vehiculos/*` | ❌ | ✅ | Realtime es suficiente en activo; solo reconciliar en reconexión |
-| Datos de turno activo (`checkin`, `doc8`) | ❌ | ❌ | Gestionados por Zustand + localStorage — el GET HTTP no es la fuente de verdad |
+| Query                                       | `refetchOnWindowFocus` | `refetchOnReconnect` | Justificación                                                                                                     |
+| ------------------------------------------- | ---------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `bandejas/*` (todas las instancias activas) | ✅                     | ✅                   | Las tablets en montaje se apagan/despiertan frecuentemente; los WebSockets no persisten durante el letargo del SO |
+| `inventario/*` (stock)                      | ✅                     | ✅                   | Un turno de reposición puede haberse ejecutado mientras el terminal estaba dormido                                |
+| `drp/*`                                     | ✅                     | ✅                   | Cambios de estado DRP durante desconexión                                                                         |
+| `vehiculos/*`                               | ❌                     | ✅                   | Realtime es suficiente en activo; solo reconciliar en reconexión                                                  |
+| Datos de turno activo (`checkin`, `doc8`)   | ❌                     | ❌                   | Gestionados por Zustand + localStorage — el GET HTTP no es la fuente de verdad                                    |
 
 **Mecanismo de reconciliación al despertar:**
 
@@ -3157,19 +3441,21 @@ function usePrecacheShiftTokens(deviceId: string): void {
   useEffect(() => {
     const channel = supabase
       .channel(`terminal:${deviceId}:precache`)
-      .on('broadcast', { event: 'shift_tokens_ready' }, ({ payload }) => {
+      .on("broadcast", { event: "shift_tokens_ready" }, ({ payload }) => {
         // payload: Array<{ user_id: string, signed_payload: string }>
         for (const { user_id, signed_payload } of payload) {
           localStorage.setItem(
             `u24_offline_session_next:${user_id}`,
-            signed_payload
-          )
+            signed_payload,
+          );
         }
       })
-      .subscribe()
+      .subscribe();
 
-    return () => { supabase.removeChannel(channel) }
-  }, [deviceId])
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [deviceId]);
 }
 ```
 
@@ -3177,7 +3463,7 @@ function usePrecacheShiftTokens(deviceId: string): void {
 
 ```typescript
 // Tras confirmar sesión online con éxito:
-localStorage.removeItem(`u24_offline_session_next:${ID_nombre}`)
+localStorage.removeItem(`u24_offline_session_next:${ID_nombre}`);
 ```
 
 Ver `logic.md §25.6` para la especificación completa del payload y el flujo de
@@ -3193,88 +3479,101 @@ computacionalmente costosa y congela la UI en dispositivos de flota de gama baja
 
 ```typescript
 // pdf.worker.ts — Web Worker dedicado
-import pdfMake from 'pdfmake/build/pdfmake'
-import pdfFonts from 'pdfmake/build/vfs_fonts'
-pdfMake.vfs = pdfFonts.pdfMake.vfs
+import pdfMake from "pdfmake/build/pdfmake";
+import pdfFonts from "pdfmake/build/vfs_fonts";
+pdfMake.vfs = pdfFonts.pdfMake.vfs;
 
-self.onmessage = async (event: MessageEvent<{ docDefinition: object; filename: string }>) => {
-  const { docDefinition } = event.data
+self.onmessage = async (
+  event: MessageEvent<{ docDefinition: object; filename: string }>,
+) => {
+  const { docDefinition } = event.data;
   pdfMake.createPdf(docDefinition).getBlob((blob) => {
-    self.postMessage({ blob, filename: event.data.filename }, [blob])
-  })
-}
+    self.postMessage({ blob, filename: event.data.filename }, [blob]);
+  });
+};
 ```
 
 ```typescript
 // usePdfGenerator — hook de llamada al worker con fallback servidor
 function usePdfGenerator() {
-  const workerRef       = useRef<Worker | null>(null)
-  const workerFailedRef = useRef<boolean>(false)
+  const workerRef = useRef<Worker | null>(null);
+  const workerFailedRef = useRef<boolean>(false);
 
   useEffect(() => {
     try {
       workerRef.current = new Worker(
-        new URL('./workers/pdf.worker.ts', import.meta.url),
-        { type: 'module' }
-      )
+        new URL("./workers/pdf.worker.ts", import.meta.url),
+        { type: "module" },
+      );
       // Capturar errores de inicialización (ej. CSP bloqueando new Worker)
       workerRef.current.onerror = () => {
-        workerFailedRef.current = true
-        workerRef.current = null
-      }
+        workerFailedRef.current = true;
+        workerRef.current = null;
+      };
     } catch {
       // new Worker() lanzó sincrónicamente (CSP strict-dynamic, etc.)
-      workerFailedRef.current = true
+      workerFailedRef.current = true;
     }
-    return () => workerRef.current?.terminate()
-  }, [])
+    return () => workerRef.current?.terminate();
+  }, []);
 
   const generarPdfEnServidor = useCallback(
-    async (docDefinition: object, filename: string): Promise<{ signed_url: string }> => {
+    async (
+      docDefinition: object,
+      filename: string,
+    ): Promise<{ signed_url: string }> => {
       // Fallback: enviar docDefinition al backend para generación server-side
       // Edge Function `generar_pdf_server` devuelve un enlace firmado (~5 min TTL)
-      const { data, error } = await supabase.functions.invoke('generar_pdf_server', {
-        body: { docDefinition, filename },
-      })
-      if (error) throw new Error(`pdf_server_error: ${error.message}`)
-      return data as { signed_url: string }
+      const { data, error } = await supabase.functions.invoke(
+        "generar_pdf_server",
+        {
+          body: { docDefinition, filename },
+        },
+      );
+      if (error) throw new Error(`pdf_server_error: ${error.message}`);
+      return data as { signed_url: string };
     },
-    []
-  )
+    [],
+  );
 
   const generarPdf = useCallback(
-    (docDefinition: object, filename: string): Promise<Blob | { signed_url: string }> => {
-
+    (
+      docDefinition: object,
+      filename: string,
+    ): Promise<Blob | { signed_url: string }> => {
       // RUTA A — Web Worker disponible (caso nominal)
       if (workerRef.current && !workerFailedRef.current) {
         return new Promise((resolve, reject) => {
-          workerRef.current!.onmessage = (e) => resolve(e.data.blob as Blob)
-          workerRef.current!.onerror   = async () => {
+          workerRef.current!.onmessage = (e) => resolve(e.data.blob as Blob);
+          workerRef.current!.onerror = async () => {
             // El worker falló en tiempo de ejecución → marcar como fallido y usar fallback
-            workerFailedRef.current = true
-            workerRef.current = null
-            try { resolve(await generarPdfEnServidor(docDefinition, filename)) }
-            catch (err) { reject(err) }
-          }
-          workerRef.current!.postMessage({ docDefinition, filename })
-        })
+            workerFailedRef.current = true;
+            workerRef.current = null;
+            try {
+              resolve(await generarPdfEnServidor(docDefinition, filename));
+            } catch (err) {
+              reject(err);
+            }
+          };
+          workerRef.current!.postMessage({ docDefinition, filename });
+        });
       }
 
       // RUTA B — Worker no disponible (CSP bloqueó la inicialización)
-      return generarPdfEnServidor(docDefinition, filename)
+      return generarPdfEnServidor(docDefinition, filename);
     },
-    [generarPdfEnServidor]
-  )
+    [generarPdfEnServidor],
+  );
 
-  return { generarPdf, workerDisponible: !workerFailedRef.current }
+  return { generarPdf, workerDisponible: !workerFailedRef.current };
 }
 ```
 
 **Rutas de generación:**
 
-| Ruta | Condición | Resultado | Uso en UI |
-|---|---|---|---|
-| A — Web Worker | Worker inicializado sin errores | `Blob` | `URL.createObjectURL(blob)` → `<a download>` |
+| Ruta                                   | Condición                                   | Resultado        | Uso en UI                                                    |
+| -------------------------------------- | ------------------------------------------- | ---------------- | ------------------------------------------------------------ |
+| A — Web Worker                         | Worker inicializado sin errores             | `Blob`           | `URL.createObjectURL(blob)` → `<a download>`                 |
 | B — Edge Function `generar_pdf_server` | Worker bloqueado por CSP o fallo en runtime | `{ signed_url }` | `window.open(signed_url)` o `<a href={signed_url} download>` |
 
 **Edge Function `generar_pdf_server`:**
@@ -3304,42 +3603,138 @@ hilo principal, evita el bloqueo del Main Thread en stores con payload grande
 que el resto del sistema offline-first.
 
 ```typescript
-import { get, set, del } from 'idb-keyval'
+import { get, set, del } from "idb-keyval";
 
 // Adaptador idb-keyval para Zustand persist middleware
 const idbStorage = {
   getItem: (name: string) => get(name),
   setItem: (name: string, value: string) => set(name, value),
   removeItem: (name: string) => del(name),
-}
+};
 
 // Ejemplo: useAuthStore con persist asíncrono
 export const useAuthStore = create(
   persist(
-    (set, get) => ({ /* ...state... */ }),
+    (set, get) => ({
+      /* ...state... */
+    }),
     {
-      name:    'u24_auth',
+      name: "u24_auth",
       storage: createJSONStorage(() => idbStorage),
-    }
-  )
-)
+    },
+  ),
+);
 ```
 
 **Política de persistencia por store:**
 
-| Store | Motor de persistencia | Motivo |
-|---|---|---|
-| `useAuthStore` | IndexedDB (idb-keyval) | sessionMap con tokens — no en localStorage |
-| `useTerminalStore` | IndexedDB (idb-keyval) | Estado de turno — sobrevive recargas |
-| `useIdleTimeout` | IndexedDB (idb-keyval) | `ultimoEventoInteraccion` epoch |
-| `useInventarioStore` (`stock_real_local`) | **Sin persist** (en memoria) | Revertible; no persistir estado huérfano |
-| `useBandejasStore` | **Sin persist** | Rehidratado desde Supabase al reconectar |
-| `useBackgroundSyncStore` | **Sin persist** (JWT en IndexedDB directamente) | Ver §17 |
+| Store                                     | Motor de persistencia                           | Motivo                                     |
+| ----------------------------------------- | ----------------------------------------------- | ------------------------------------------ |
+| `useAuthStore`                            | IndexedDB (idb-keyval)                          | sessionMap con tokens — no en localStorage |
+| `useTerminalStore`                        | IndexedDB (idb-keyval)                          | Estado de turno — sobrevive recargas       |
+| `useIdleTimeout`                          | IndexedDB (idb-keyval)                          | `ultimoEventoInteraccion` epoch            |
+| `useInventarioStore` (`stock_real_local`) | **Sin persist** (en memoria)                    | Revertible; no persistir estado huérfano   |
+| `useBandejasStore`                        | **Sin persist**                                 | Rehidratado desde Supabase al reconectar   |
+| `useBackgroundSyncStore`                  | **Sin persist** (JWT en IndexedDB directamente) | Ver §17                                    |
 
 **Nota de migración:** cualquier store que antes usara `{ storage: createJSONStorage(() => localStorage) }`
 debe migrar al adaptador idb-keyval. `localStorage` queda reservado únicamente para
 la clave HMAC diaria de modo degradado y para el token precargado de turno siguiente
 (`u24_offline_session`, `u24_offline_session_next:{id}`).
+
+### Gestión de `QuotaExceededError` — política de purga de IndexedDB (C-12)
+
+Las escrituras en IndexedDB pueden fallar con `QuotaExceededError` en dispositivos
+móviles con almacenamiento limitado (especialmente tras DRPs de larga duración que
+acumulan imágenes adjuntas de Doc-7 en la cola offline). El adaptador idb-keyval
+debe interceptar este error y aplicar una purga ordenada antes de reintentar.
+
+**Orden estricto de purga — de menos a más crítico:**
+
+| Prioridad | Clave IndexedDB | Datos | Impacto del borrado |
+|---|---|---|---|
+| 1ª (purgar primero) | `global_cache` | Marquesina, tablón de anuncios | Rehidratado desde Supabase al reconectar |
+| 2ª | `bandejas_cache` | Mensajes de bandeja en caché | Rehidratado desde Supabase al reconectar |
+| 3ª (solo si urgente) | Imágenes Doc-7 en `offline_queue` | Adjuntos binarios (Blob WebP) | ⚠️ Pérdida de imágenes de avería pendientes; se notifica al usuario |
+
+> ⚠️ **Regla absoluta:** las mutaciones clínicas de la cola offline (`offline_queue`)
+> **nunca se purgan**, independientemente de la presión de almacenamiento. La cola
+> contiene operaciones médicas críticas (Doc-8, Doc-2..5, prescripciones, fármacos)
+> que no pueden perderse. Solo los adjuntos binarios (imágenes) de un Doc-7 pueden
+> purgarse en situación extrema — el Doc-7 en sí (texto + metadatos) se conserva.
+
+```typescript
+// lib/idbStorageWithQuotaGuard.ts
+import { get, set, del } from 'idb-keyval'
+
+const PURGE_ORDER: string[] = [
+  'global_cache',    // 1º — marquesina y tablón (rehidratables desde Supabase)
+  'bandejas_cache',  // 2º — mensajes de bandeja (rehidratables desde Supabase)
+]
+
+async function purgeDoc7Images(): Promise<void> {
+  // Purga SOLO los Blobs de imágenes de la offline_queue;
+  // las mutaciones (texto/metadatos de Doc-7 y todo el resto) NO se tocan.
+  const queue = await get('offline_queue') as Array<{
+    tipo: string; payload: Record<string, unknown>
+  }> | undefined
+  if (!queue) return
+  const purgada = queue.map((entry) => {
+    if (entry.tipo === 'doc7_create' && entry.payload?.imagenes) {
+      return { ...entry, payload: { ...entry.payload, imagenes: [] } }
+    }
+    return entry
+  })
+  await set('offline_queue', purgada)
+  console.warn('[idb] Imágenes Doc-7 purgadas por QuotaExceededError')
+}
+
+export const idbStorageWithQuotaGuard = {
+  getItem: (name: string) => get(name),
+  setItem: async (name: string, value: string): Promise<void> => {
+    let intento = 0
+    while (true) {
+      try {
+        await set(name, value)
+        return
+      } catch (err: unknown) {
+        const esQuota =
+          err instanceof DOMException && err.name === 'QuotaExceededError'
+        if (!esQuota) throw err  // error no relacionado con cuota — relanzar
+        if (intento < PURGE_ORDER.length) {
+          // Purgar la siguiente clave en el orden definido y reintentar
+          console.warn(`[idb] QuotaExceededError — purgando '${PURGE_ORDER[intento]}'`)
+          await del(PURGE_ORDER[intento])
+        } else if (intento === PURGE_ORDER.length) {
+          // Último recurso: purgar imágenes de Doc-7 (¡nunca las mutaciones clínicas!)
+          await purgeDoc7Images()
+        } else {
+          // Almacenamiento agotado incluso tras todas las purgas — lanzar para que UI informe
+          throw err
+        }
+        intento++
+      }
+    }
+  },
+  removeItem: (name: string) => del(name),
+}
+```
+
+**Integración:** sustituir el `idbStorage` base por `idbStorageWithQuotaGuard` en todos
+los stores con persist (ver tabla de persistencia arriba):
+
+```typescript
+storage: createJSONStorage(() => idbStorageWithQuotaGuard),
+```
+
+**UX cuando la purga extrema no es suficiente:**
+```
+Toast de error crítico:
+"Almacenamiento del dispositivo lleno. Libera espacio para continuar operando.
+ Los datos de turno actuales no han podido guardarse localmente."
+```
+Adicionalmente, si el empleado tiene sesión activa, se inserta un aviso en `doc11_avisos`
+(`tipo_aviso = 'storage_critico'`, `destinatario_rol = 'coordinacion'`).
 
 ---
 
@@ -3347,10 +3742,10 @@ la clave HMAC diaria de modo degradado y para el token precargado de turno sigui
 
 **Responsabilidades:**
 
-| Capa | Gestiona | Ejemplos |
-|---|---|---|
+| Capa               | Gestiona                                | Ejemplos                                                                       |
+| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------ |
 | **TanStack Query** | Datos de negocio sincronizados con BBDD | Inventario (stock real), Doc-1 (asistencias leídas), listas de DRP, dotaciones |
-| **Zustand** | Estado de UI y hardware | JWT, estado de turno, GPS, idle timeout, bandejas en tiempo real |
+| **Zustand**        | Estado de UI y hardware                 | JWT, estado de turno, GPS, idle timeout, bandejas en tiempo real               |
 
 **Integración Realtime → TanStack Query:**
 
@@ -3360,23 +3755,28 @@ la caché de TanStack Query, que notifica a todos los componentes suscritos:
 
 ```typescript
 // useInventario — handler Realtime actualiza TanStack Query, no Zustand
-supabase.channel(`inventario:${locationId}`)
-  .on('postgres_changes', { event: 'UPDATE', table: 'stock_items' }, (payload) => {
-    const { item_id, stock_real: server_value } = payload.new
+supabase
+  .channel(`inventario:${locationId}`)
+  .on(
+    "postgres_changes",
+    { event: "UPDATE", table: "stock_items" },
+    (payload) => {
+      const { item_id, stock_real: server_value } = payload.new;
 
-    queryClient.setQueryData(
-      ['stock_items', locationId],
-      (prev: StockItem[] | undefined) =>
-        prev?.map(item =>
-          item.item_id === item_id
-            ? { ...item, stock_real: server_value }
-            : item
-        ) ?? []
-    )
-    // Reconciliación del delta optimista en Zustand (si sync_pending activo):
-    // useInventarioStore.reconciliarDelta(item_id, server_value)  ← solo el delta local
-  })
-  .subscribe()
+      queryClient.setQueryData(
+        ["stock_items", locationId],
+        (prev: StockItem[] | undefined) =>
+          prev?.map((item) =>
+            item.item_id === item_id
+              ? { ...item, stock_real: server_value }
+              : item,
+          ) ?? [],
+      );
+      // Reconciliación del delta optimista en Zustand (si sync_pending activo):
+      // useInventarioStore.reconciliarDelta(item_id, server_value)  ← solo el delta local
+    },
+  )
+  .subscribe();
 ```
 
 **Zustand mantiene únicamente** el `stock_real_local` (delta optimista) y la bandera
@@ -3394,14 +3794,16 @@ de la caché LRU de IndexedDB/localStorage bajo presión de almacenamiento del S
 useEffect(() => {
   if (navigator.storage?.persist) {
     navigator.storage.persist().then((granted) => {
-      useTerminalStore.getState().setStoragePersisted(granted)
+      useTerminalStore.getState().setStoragePersisted(granted);
       if (!granted) {
-        console.warn('[U24] storage.persist() denegado — almacenamiento offline vulnerable a evicción')
+        console.warn(
+          "[U24] storage.persist() denegado — almacenamiento offline vulnerable a evicción",
+        );
         // Notificar a roles de supervisión con banner crítico (ver abajo)
       }
-    })
+    });
   }
-}, [])
+}, []);
 ```
 
 **Banner de alerta crítico si `granted === false`:**
@@ -3443,24 +3845,24 @@ entre el reloj local y el servidor:
 ```typescript
 // useTimeSync — cálculo único al arrancar online
 async function sincronizarReloj(): Promise<void> {
-  const t0 = Date.now()
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/`, { method: 'HEAD' })
-  const t1 = Date.now()
+  const t0 = Date.now();
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/`, { method: "HEAD" });
+  const t1 = Date.now();
 
-  const serverDateStr = response.headers.get('Date')
-  if (!serverDateStr) return
+  const serverDateStr = response.headers.get("Date");
+  if (!serverDateStr) return;
 
-  const serverMs    = new Date(serverDateStr).getTime()
-  const latencyMs   = (t1 - t0) / 2      // estimación de latencia de red
-  const localMs     = t0 + latencyMs
-  const offsetMs    = serverMs - localMs
+  const serverMs = new Date(serverDateStr).getTime();
+  const latencyMs = (t1 - t0) / 2; // estimación de latencia de red
+  const localMs = t0 + latencyMs;
+  const offsetMs = serverMs - localMs;
 
-  useTerminalStore.getState().setTimeOffset(offsetMs)
+  useTerminalStore.getState().setTimeOffset(offsetMs);
 }
 
 // Función helper para captura de timestamps corregidos
 export function ahora(): number {
-  return Date.now() + (useTerminalStore.getState().timeOffset ?? 0)
+  return Date.now() + (useTerminalStore.getState().timeOffset ?? 0);
 }
 ```
 
@@ -3471,3 +3873,313 @@ export function ahora(): number {
 - `time_offset` se persiste en `useTerminalStore` (IndexedDB) y se recalcula al
   recuperar conectividad.
 - Si la app está offline desde el arranque, `time_offset = 0` hasta que haya red.
+
+---
+
+## 21. usePushNotifications — Web Push API para Doc-11 críticos (U-06)
+
+> Envía notificaciones push al dispositivo cuando la PWA está en segundo plano o cerrada
+> y se inserta un aviso crítico en `doc11_avisos`. Requiere permiso explícito del usuario
+> y, en iOS, instalación previa en la pantalla de inicio.
+
+### 21.1 Limitaciones de plataforma (CRÍTICO para tablets de ambulancia)
+
+#### iOS / iPadOS
+
+| Requisito | Detalle |
+|---|---|
+| iOS mínimo | **iOS 16.4** (marzo 2023) — versiones anteriores no soportan Web Push |
+| Instalación Home Screen | **OBLIGATORIO** — push completamente inaccesible en Safari sin instalar la PWA en pantalla de inicio. Una visita normal a la URL nunca recibirá push |
+| Prompt de permiso | Requiere **gesto de usuario explícito** — el diálogo de permiso no puede lanzarse desde `useEffect` |
+| Delivery | Vía **APNs** (Apple Push Notification Service) cuando la app está en background |
+| Throttling | Apple puede limitar frecuencia de notificaciones en background — no garantizado para frecuencias < 1 min |
+| Permiso revocado | El usuario debe ir a **Ajustes → Safari → Notificaciones** para rehabilitarlo — no hay re-prompt en-app |
+
+> ⚠️ **Consecuencia operativa:** los tablets de ambulancia **deben** tener U24 instalada
+> en la pantalla de inicio para que las alertas críticas lleguen cuando el personal no
+> tiene la app en primer plano. El proceso de alta de hardware (`runbooks.md`) debe
+> incluir este paso obligatorio.
+
+#### Android / Chrome
+
+| Requisito | Detalle |
+|---|---|
+| Chrome mínimo | Chrome 42+ — soporte completo desde 2015 |
+| Home Screen | Recomendada, pero **no obligatoria** para recibir push |
+| Delivery | Vía FCM (Firebase Cloud Messaging bridge) — fiable y sin throttling |
+
+#### Escritorio (coordinación / gerencia)
+
+Funciona en todos los navegadores modernos sin instalación — el permiso es suficiente.
+
+### 21.2 Avisos de `doc11_avisos` que activan push
+
+Solo los avisos de alta criticidad operativa generan una notificación push. El push
+es un complemento del sistema de bandejas in-app, nunca su sustituto.
+
+| `tipo_aviso` | `destinatario_rol` | Título push | Cuerpo push |
+|---|---|---|---|
+| `terminal_sin_galleta` | `coordinacion` | "⚠️ Terminal sin galleta activa" | "Un terminal ha quedado inaccesible. Acción requerida." |
+| `inoperativo_critico` | `coordinacion`, `responsable_flota` | "🚨 Vehículo inoperativo crítico" | "Un vehículo requiere intervención inmediata." |
+| `rotura_stock` | `logistica`, `responsable_logistica` | "📦 Rotura de stock" | "Material agotado en inventario. Revisar logística." |
+| `storage_critico` | `coordinacion` | "💾 Almacenamiento lleno" | "Un terminal tiene el almacenamiento lleno. Datos offline en riesgo." |
+
+### 21.3 Arquitectura del canal push
+
+```
+[INSERT en doc11_avisos — tipo_aviso IN conjunto_crítico]
+        ↓
+[Database Webhook de Supabase → ef_enviar_push_critico]
+        ↓
+[Edge Function: lee push_subscriptions WHERE rol = aviso.destinatario_rol]
+        ↓
+[Envío VAPID-signed Web Push a cada endpoint de suscripción]
+        ↓
+[Service Worker del dispositivo: PushEvent → showNotification()]
+```
+
+**Por qué Database Webhook y no Supabase Realtime:**
+El canal Realtime requiere que la PWA esté activa con el WebSocket abierto. Para notificar
+cuando la app está cerrada o en background, el servidor debe enviar el push directamente
+al endpoint del navegador vía el protocolo Web Push. El Webhook dispara la Edge Function
+en el servidor, independientemente del estado del cliente.
+
+### 21.4 Tabla `push_subscriptions`
+
+```sql
+-- supabase/migrations/20260519_create_push_subscriptions.sql
+CREATE TABLE push_subscriptions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id_nombre   TEXT NOT NULL REFERENCES fichas_empleados(id_nombre) ON DELETE CASCADE,
+  id_terminal TEXT NOT NULL,
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      TEXT NOT NULL,       -- clave pública del cliente (cifrado)
+  auth        TEXT NOT NULL,       -- secreto del cliente (cifrado)
+  user_agent  TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ
+);
+
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Solo el propio usuario puede ver/gestionar sus suscripciones; gerencia/coordinación pueden leerlas
+CREATE POLICY "propietario_o_admin" ON push_subscriptions
+  FOR ALL
+  USING (
+    id_nombre = (auth.jwt() ->> 'id_nombre')
+    OR claim('can_manage_rbac')
+  );
+```
+
+### 21.5 Hook `usePushNotifications`
+
+```typescript
+// hooks/usePushNotifications.ts
+const CRITICAL_TIPOS = [
+  'terminal_sin_galleta',
+  'inoperativo_critico',
+  'rotura_stock',
+  'storage_critico',
+] as const
+
+// Roles que reciben push crítico
+const ROLES_PUSH = ['coordinacion', 'gerencia', 'responsable_flota', 'responsable_logistica', 'logistica']
+
+function isEligibleForPush(): boolean {
+  const { rolActivo, idNombre } = useAuthStore.getState()
+  return !!idNombre && ROLES_PUSH.includes(rolActivo ?? '')
+}
+
+export function usePushNotifications() {
+  const [permiso, setPermiso]   = useState<NotificationPermission>('default')
+  const [suscrito, setSuscrito] = useState(false)
+
+  useEffect(() => {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return
+    setPermiso(Notification.permission)
+    if (Notification.permission === 'granted') verificarSuscripcion()
+  }, [])
+
+  // Llamar SOLO desde un handler de clic del usuario — nunca en useEffect
+  async function solicitarPermiso(): Promise<void> {
+    if (!isEligibleForPush()) return
+    const result = await Notification.requestPermission()
+    setPermiso(result)
+    if (result === 'granted') await suscribir()
+  }
+
+  async function suscribir(): Promise<void> {
+    const registration = await navigator.serviceWorker.ready
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,       // obligatorio — push silencioso prohibido por todos los navegadores
+      applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
+    })
+    const { endpoint, keys } = subscription.toJSON() as {
+      endpoint: string
+      keys: { p256dh: string; auth: string }
+    }
+    await supabase.functions.invoke('ef-guardar-push-subscription', {
+      body: {
+        endpoint,
+        p256dh:      keys.p256dh,
+        auth:        keys.auth,
+        id_terminal: useTerminalStore.getState().idTerminal,
+        user_agent:  navigator.userAgent,
+      },
+    })
+    setSuscrito(true)
+  }
+
+  async function verificarSuscripcion(): Promise<void> {
+    const registration = await navigator.serviceWorker.ready
+    const existing = await registration.pushManager.getSubscription()
+    setSuscrito(!!existing)
+  }
+
+  return { permiso, suscrito, solicitarPermiso }
+}
+```
+
+### 21.6 Service Worker — handler de PushEvent
+
+```typescript
+// sw.ts — añadir junto al resto de handlers del SW
+self.addEventListener('push', (event: PushEvent) => {
+  const data = event.data?.json() as {
+    tipo:   string
+    titulo: string
+    cuerpo: string
+    url?:   string
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.titulo, {
+      body:     data.cuerpo,
+      icon:     '/icons/icon-192.png',
+      badge:    '/icons/badge-72.png',
+      tag:      data.tipo,      // colapsa notificaciones del mismo tipo
+      renotify: true,           // vibrar aunque ya haya una con el mismo tag
+      data:     { url: data.url ?? '/avisos' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close()
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then((clientList) => {
+      const url = (event.notification.data as { url: string }).url
+      const existente = clientList.find((c) => c.url.includes(url) && 'focus' in c)
+      if (existente) return existente.focus()
+      return clients.openWindow(url)
+    })
+  )
+})
+```
+
+### 21.7 Edge Function `ef_enviar_push_critico`
+
+Disparada por Database Webhook de Supabase en INSERT a `doc11_avisos`.
+
+```typescript
+// supabase/functions/ef-enviar-push-critico/index.ts
+import webpush from 'npm:web-push@3'
+
+const CRITICAL_TIPOS = ['terminal_sin_galleta', 'inoperativo_critico', 'rotura_stock', 'storage_critico']
+
+const PUSH_TEXTOS: Record<string, { titulo: string; cuerpo: string }> = {
+  terminal_sin_galleta: { titulo: '⚠️ Terminal sin galleta activa',  cuerpo: 'Un terminal ha quedado inaccesible. Acción requerida.' },
+  inoperativo_critico:  { titulo: '🚨 Vehículo inoperativo crítico', cuerpo: 'Un vehículo requiere intervención inmediata.' },
+  rotura_stock:         { titulo: '📦 Rotura de stock',              cuerpo: 'Material agotado en inventario. Revisar logística.' },
+  storage_critico:      { titulo: '💾 Almacenamiento lleno',         cuerpo: 'Un terminal tiene el almacenamiento lleno. Datos offline en riesgo.' },
+}
+
+Deno.serve(async (req) => {
+  const { record: aviso } = await req.json()   // payload del webhook { type, record, old_record }
+
+  if (!CRITICAL_TIPOS.includes(aviso.tipo_aviso)) return new Response('skip', { status: 200 })
+
+  webpush.setVapidDetails(
+    'mailto:tecnico@u24.internal',
+    Deno.env.get('VAPID_PUBLIC_KEY')!,
+    Deno.env.get('VAPID_PRIVATE_KEY')!,
+  )
+
+  // Obtener IDs de los empleados con el rol destinatario
+  const { data: idsNombre } = await supabaseAdmin
+    .rpc('get_ids_por_rol', { p_rol: aviso.destinatario_rol })
+
+  if (!idsNombre?.length) return new Response('no_recipients', { status: 200 })
+
+  // Obtener suscripciones activas de esos empleados
+  const { data: suscripciones } = await supabaseAdmin
+    .from('push_subscriptions')
+    .select('endpoint, p256dh, auth')
+    .in('id_nombre', idsNombre.map((r: { id_nombre: string }) => r.id_nombre))
+
+  const texto = PUSH_TEXTOS[aviso.tipo_aviso]
+  const payload = JSON.stringify({
+    tipo:   aviso.tipo_aviso,
+    titulo: texto.titulo,
+    cuerpo: texto.cuerpo,
+    url:    '/avisos',
+  })
+
+  await Promise.allSettled(
+    (suscripciones ?? []).map((sub) =>
+      webpush
+        .sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload,
+        )
+        .catch(async (err) => {
+          // Limpiar suscripciones expiradas (410 Gone = browser revoked)
+          if (err.statusCode === 410) {
+            await supabaseAdmin.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+          }
+        })
+    )
+  )
+
+  return new Response('ok', { status: 200 })
+})
+```
+
+### 21.8 UX del prompt de permiso
+
+```
+Cuándo mostrar:
+  ✅ Tras el primer login exitoso de la sesión (no en la pantalla de login)
+  ✅ Solo roles: coordinacion, gerencia, responsable_flota, responsable_logistica, logistica
+  ✅ Solo si 'Notification' in window && 'serviceWorker' in navigator
+  ✅ Solo si Notification.permission === 'default'
+     (si ya es 'denied', no molestar — el usuario debe ir a Ajustes)
+
+Formato: chip discreto en el footer del header — igual al banner de instalación PWA (ADR-003):
+  "🔔 Activar alertas críticas en segundo plano  [Activar]  [Ahora no]"
+
+Aviso adicional en iOS (detectar con navigator.userAgent):
+  "En iOS, las alertas solo funcionan si U24 está instalada en tu pantalla de inicio.
+   ¿Ya está instalada?"
+   [Sí, tengo la app instalada] → continúa al Notification.requestPermission()
+   [Instalar primero]           → muestra el banner de instalación PWA (ADR-003 §A)
+```
+
+### 21.9 Variables de entorno y setup de claves VAPID
+
+```bash
+# Generar par de claves VAPID (una sola vez, guardar en Supabase Vault)
+npx web-push generate-vapid-keys
+# VAPID_PUBLIC_KEY=BK...   ← también en VITE_VAPID_PUBLIC_KEY (seguro exponer al cliente)
+# VAPID_PRIVATE_KEY=...    ← SOLO en Supabase Vault / Edge Function env (nunca en cliente)
+```
+
+| Variable | Ámbito | Notas |
+|---|---|---|
+| `VITE_VAPID_PUBLIC_KEY` | Cliente (Vite build) | La clave pública puede exponerse — es parte del protocolo |
+| `VAPID_PUBLIC_KEY` | Edge Function env | Misma clave pública en el servidor |
+| `VAPID_PRIVATE_KEY` | Edge Function env (Vault) | **Nunca en el cliente ni en repositorio** |
+
+### Stores: `useTerminalStore` (idTerminal), `useAuthStore` (rolActivo, idNombre)
+
+### Dependencias: Service Worker, `ef_enviar_push_critico`, `ef_guardar_push_subscription`

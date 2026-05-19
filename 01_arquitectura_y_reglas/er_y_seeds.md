@@ -81,6 +81,9 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | `checkout_forzado` | Checkout administrativo de Doc-8 forzado por coordinacion/gerencia via `forzar_checkout_administrativo` |
 | `alta_empleado` | Nuevo empleado dado de alta via `ef_alta_empleado` (Gap F3) |
 | `baja_empleado` | Empleado dado de baja via `ef_baja_empleado` — JWT + galletas revocados, cuadrante futuro eliminado (Gap F3) |
+| `baja_vehiculo` | Vehículo dado de baja via `rpc_baja_vehiculo` — `condicion_tecnica = 'dado_de_baja'` (C-05) |
+| `desbloqueo_aprobado` | Solicitud de desbloqueo de terminal aprobada via `rpc_aprobar_desbloqueo` (C-06) |
+| `desbloqueo_rechazado` | Solicitud de desbloqueo de terminal rechazada via `rpc_rechazar_desbloqueo` (C-06) |
 
 ### Dominio: Vehículos y turnos ✓
 
@@ -100,8 +103,8 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | `inventario_vehiculo` | `(matricula, id_item, subgrupo)` | Stock actual por vehículo y subgrupo. `stock_real`, `ultima_actualizacion`. Modificable solo por RPC atómica. |
 | `inventario_base` | `(location_id, id_item)` | Stock del almacén central. `stock_real`. Modificable solo por RPC atómica. |
 | `inventario_en_transito` | `id_transito` (UUID) | Material en tránsito entre locations (origen → destino). `id_transferencia` (FK `doc10_transferencias`), `id_item`, `cantidad`, `estado` ('en_transito'/'confirmado'/'cancelado'), `timestamp_envio`, `timestamp_confirmacion`. No modifica `inventario_vehiculo` ni `inventario_base` hasta confirmación. |
-| `descuadres_inventario` | `id_descuadre` (UUID) | Registro de discrepancias de stock generadas por Doc-10. `id_doc10` (FK), `id_item`, `cantidad_diferencia` (INT — enviado − recibido), `location_origen`, `location_destino`, `estado` ('Pendiente_Revision'/'Resuelto'/'Archivado'), `id_nombre_resolutor` (nullable), `timestamp_generacion`, `timestamp_resolucion` (nullable), `mutation_uuid` (idempotencia ON CONFLICT DO NOTHING), `entidad_imputable_tipo` ('vehiculo'/'drp'/'persona'/'sin_imputar' — obligatorio en Resolver_Manual), `entidad_imputable_id` (text nullable — matricula / id_drp / id_nombre). RLS UPDATE: `can_edit_inventory`. |
-| `auditoria_inventario` | `id_auditoria` (UUID) | Log inmutable de movimientos de inventario. `tipo_movimiento` (deduccion/entrada/transferencia/ajuste/merma/recuperacion_descuadre/merma_definitiva_residual), `id_item`, `cantidad_delta`, `location_origen`, `location_destino`, `id_nombre_operador`, `rpc_ejecutada`, `motivo` (text nullable), `entidad_imputable_tipo` (nullable — mismo discriminador que descuadres), `entidad_imputable_id` (text nullable), `created_at`. RLS UPDATE/DELETE: `USING (FALSE)`. |
+| `descuadres_inventario` | `id_descuadre` (UUID) | Registro de discrepancias de stock generadas por Doc-10. `id_doc10` (FK), `id_item`, `cantidad_diferencia` (INT — enviado − recibido), `location_origen`, `location_destino`, `estado` ('Pendiente_Revision'/'Resuelto'/'Archivado'), `id_nombre_resolutor` (nullable), `timestamp_generacion`, `timestamp_resolucion` (nullable), `mutation_uuid` (UUID — idempotencia de cola offline; UNIQUE constraint `uq_descuadre_mutation_uuid`), `entidad_imputable_tipo` (tipo enum `entidad_imputable` — **NOT NULL DEFAULT 'sin_imputar'**; se actualiza al resolver manualmente), `entidad_imputable_id` (text nullable — matricula / id_drp / id_nombre). RLS UPDATE: `can_edit_inventory`. |
+| `auditoria_inventario` | `id_auditoria` (UUID) | Log inmutable de movimientos de inventario. `tipo_movimiento` (tipo enum `tipo_movimiento_inventario` — ver §6.2), `id_item`, `cantidad_delta`, `location_origen`, `location_destino`, `id_nombre_operador`, `rpc_ejecutada`, `motivo` (text nullable), `entidad_imputable_tipo` (tipo enum `entidad_imputable`, **nullable** — no todos los movimientos tienen entidad imputable), `entidad_imputable_id` (text nullable), `created_at`. RLS UPDATE/DELETE: `USING (FALSE)`. |
 | `locations` | `location_id` (UUID) | Almacenes y bases operativas. `nombre`, `tipo` (base/almacen/punto_drp). |
 
 ### Dominio: Documentos operativos ✓
@@ -134,9 +137,10 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | Tabla | PK | Descripción |
 |---|---|---|
 | `psa_sesiones` | `id_sesion` (UUID) | Sesiones del módulo PSA. `timestamp_apertura`, `timestamp_cierre`. FK `matricula`. |
-| `psa_pacientes` | `id_paciente` (UUID) | Pacientes en PSA. FK `id_sesion`. Datos clínicos básicos. |
+| `psa_pacientes` | `id_paciente` (UUID) | Pacientes en PSA. FK `id_sesion`. `estado` ('en_espera'/'en_atencion'/'alta'/'exitus'/'cancelado_por_drp'). Datos clínicos básicos en campos JSONB. El estado `cancelado_por_drp` lo asigna `cancelar_drp` — no es editable por el usuario. |
 | `filiacion_sesiones` | `id_sesion` (UUID) | Sesiones del módulo de filiación. Análogo a `psa_sesiones`. |
-| `filiacion_pacientes` | `id_paciente` (UUID) | Pacientes en filiación. `timestamp_admision`, `timestamp_inicio_consulta`, `timestamp_fin_consulta`. FK `id_sesion`. |
+| `filiacion_pacientes` | `id_paciente` (UUID) | Pacientes en filiación. `estado` ('en_espera'/'en_consulta'/'alta'/'exitus'/'cancelado_por_drp'). `timestamp_admision`, `timestamp_inicio_consulta`, `timestamp_fin_consulta` (nullable — NULL mientras no se inicia/termina la consulta; se cierra con NOW() si el DRP se cancela estando en consulta). FK `id_sesion`. El estado `cancelado_por_drp` lo asigna `cancelar_drp` — no es editable por el usuario. |
+| `filiacion_eventos` | `id_evento` (UUID) | Registro de eventos del módulo de filiación (alertas del watchdog, cambios de estado relevantes). Columnas: `filiacion_id` (UUID FK `filiacion_sesiones`), `paciente_id` (UUID FK `filiacion_pacientes`), `tipo_evento` (TEXT — valores conocidos: `'box_timeout_alert'`, `'paciente_admitido'`, `'paciente_atendido'`, `'paciente_liberado'`), `id_nombre_actor` (TEXT — actor humano o `'system_watchdog'` para eventos automáticos), `timestamp_evento` (TIMESTAMPTZ DEFAULT NOW()), `detalle` (TEXT nullable). Append-only: RLS UPDATE/DELETE `USING (FALSE)`. Solo escribible via service role (cron watchdog). UNIQUE(`filiacion_id`, `paciente_id`, `tipo_evento`) para idempotencia del upsert del watchdog. |
 
 ### Dominio: Comunicación ✓
 
@@ -154,6 +158,12 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | `cuadrante_grupos` | `id` (UUID) | Agrupaciones de empleados para aplicar patrones en masa. `nombre` (text), `created_at`. |
 | `cuadrante_grupo_miembros` | `(grupo_id, id_nombre)` | Pertenencia de empleados a grupos. `grupo_id` (FK cuadrante_grupos), `id_nombre` (FK fichas_empleados). |
 | `doc_solicitudes_vacaciones` | `id` (UUID) | Doc-12: solicitudes de vacaciones. `id_nombre` (FK fichas_empleados), `periodo_anual` (text — año aplicable), `fecha_inicio` (date), `fecha_fin` (date), `preferencia_seleccion` ('opcion_1'/'opcion_2'/'opcion_3'), `observaciones` (text nullable), `resolucion_rrhh` (text nullable — nota de resolución), `id_nombre_resolutor` (text nullable, FK fichas_empleados), `estado` ('Borrador'/'Pendiente_Aprobacion'/'Aprobada'/'Denegada'), `created_at`, `timestamp_resolucion` (nullable). Visible al empleado solo cuando `sistema_config['periodo_vacaciones_abierto'].activo = true`. |
+
+### Dominio: Cumplimiento RGPD
+
+| Tabla | PK | Descripción |
+|---|---|---|
+| `solicitudes_rgpd` | `id` (UUID) | Registro de solicitudes de borrado por derecho al olvido (RGPD Art. 17). `tipo_solicitud` (TEXT: `'borrado_clinico'` — purga PII de un documento clínico; `'borrado_empleado'` — anonimización de fichas_empleados), `identificador` (TEXT — `id_doc` UUID para borrado clínico; `id_nombre` para borrado de empleado), `estado` (TEXT: `'pendiente'`/`'procesada'`/`'denegada'`), `motivo` (TEXT — justificación legal de la solicitud), `solicitado_por` (TEXT FK `fichas_empleados.id_nombre`), `timestamp_solicitud` (TIMESTAMPTZ DEFAULT NOW()), `timestamp_procesado` (TIMESTAMPTZ nullable), `procesado_por` (TEXT nullable FK `fichas_empleados.id_nombre`), `notas_procesamiento` (TEXT nullable — resultado y observaciones del procesado). RLS SELECT/INSERT/UPDATE: `can_manage_rbac`. RLS DELETE: `USING (FALSE)` — el registro es inmutable por auditoría. |
 
 ### Dominio: Configuración del sistema (Gap F5)
 
@@ -217,4 +227,104 @@ supabase/
 | `galletas_terminales` | RLS UPDATE/DELETE `USING (FALSE)` | Revocar = insertar nueva + marcar antigua |
 | `cuadrante_turnos` | UNIQUE(`id_nombre`, `fecha`) | Un empleado tiene un único turno por día |
 | `descuadres_inventario` | UNIQUE(`location_id`, `id_item`) WHERE `estado = 'Pendiente_Revision'` | Un descuadre activo por ítem/location |
+| `descuadres_inventario` | UNIQUE(`mutation_uuid`) — `uq_descuadre_mutation_uuid` | Idempotencia de cola offline: ON CONFLICT (mutation_uuid) DO NOTHING (ver §6.3) |
 | `system_config` | RLS INSERT `USING (FALSE)` para non-gerencia | Solo gerencia puede crear o editar claves |
+| `filiacion_eventos` | UNIQUE(`filiacion_id`, `paciente_id`, `tipo_evento`) | Idempotencia del watchdog: `upsert` con `ignoreDuplicates: true` nunca genera duplicados de alerta |
+| `filiacion_eventos` | RLS UPDATE/DELETE `USING (FALSE)` | Append-only — cada evento es un registro inmutable de lo que ocurrió |
+| Tablas offline-queueables (doc2/3/4/5/7) | PK UUID generada en cliente | Ver §6.3 — la PK actúa como clave de idempotencia; ON CONFLICT (pk) DO NOTHING en el INSERT de la cola. |
+
+---
+
+## 6. Tipos enumerados PostgreSQL
+
+> Todos los enums se declaran en `supabase/migrations/0001_init.sql` antes de las tablas que los usan.
+> Cambiar el nombre de un enum o eliminar un valor requiere migración con renombrado previo.
+
+### 6.1 Enum `entidad_imputable`
+
+```sql
+CREATE TYPE entidad_imputable AS ENUM (
+  'sin_imputar',   -- estado inicial — imputación pendiente de revisión por logística
+  'vehiculo',      -- el material era de un vehículo específico (entidad_imputable_id = matricula)
+  'drp',           -- el material pertenecía a un DRP activo (entidad_imputable_id = id_drp)
+  'persona'        -- el material se imputa a un empleado (entidad_imputable_id = id_nombre)
+);
+```
+
+**Uso:**
+
+| Tabla | Columna | NOT NULL | Default | Notas |
+|---|---|---|---|---|
+| `descuadres_inventario` | `entidad_imputable_tipo` | ✅ NOT NULL | `'sin_imputar'` | Se actualiza al resolver manualmente vía la UI de logística |
+| `auditoria_inventario` | `entidad_imputable_tipo` | ❌ nullable | — | Solo se rellena en movimientos con imputación definida (mermas, recuperaciones) |
+
+---
+
+### 6.2 Enum `tipo_movimiento_inventario`
+
+```sql
+CREATE TYPE tipo_movimiento_inventario AS ENUM (
+  'deduccion',                 -- Doc-6: deducción de material consumido en vehículo
+  'entrada',                   -- Doc-9: entrada de material al almacén central
+  'transferencia',             -- Doc-10: transferencia de material entre locations
+  'redireccion_forzosa',       -- Doc-10: redirección al almacén base cuando el destino no está disponible
+  'ajuste',                    -- rpc_ajuste_manual_stock: corrección manual de stock por logística
+  'merma',                     -- descuadre resuelto como pérdida confirmada (material no recuperable)
+  'recuperacion_descuadre',    -- descuadre resuelto con recuperación total o parcial del material
+  'merma_definitiva_residual'  -- parte residual de un descuadre cerrado con recuperación parcial
+);
+```
+
+**Tabla evento → valor (única fuente de verdad para el campo `tipo_movimiento`):**
+
+| Evento de negocio | Valor del enum | RPC / Documento origen |
+|---|---|---|
+| TES deduce material de su vehículo | `deduccion` | RPC de Doc-6 |
+| Logística recibe material en almacén | `entrada` | RPC de Doc-9 |
+| Transferencia entre locations completada | `transferencia` | RPC de Doc-10 confirmación |
+| Transferencia redirigida al almacén base | `redireccion_forzosa` | `redirigir_doc10_a_base` |
+| Logística corrige stock manualmente | `ajuste` | `rpc_ajuste_manual_stock` |
+| Descuadre resuelto: todo perdido | `merma` | RPC de resolución de descuadre |
+| Descuadre resuelto: material recuperado | `recuperacion_descuadre` | RPC de resolución de descuadre |
+| Descuadre resuelto: parte perdida, parte recuperada | `merma_definitiva_residual` + `recuperacion_descuadre` | RPC de resolución — genera dos filas |
+
+---
+
+### 6.3 Patrón de idempotencia de cola offline
+
+La cola offline (`useOfflineQueue`) puede reintentar cualquier mutación si la respuesta
+del servidor no llega al cliente (conexión caída tras éxito del servidor). Para que el
+reintento sea seguro, todas las operaciones offline-queueables deben ser idempotentes.
+
+Existen dos mecanismos según el tipo de operación:
+
+**A — Tablas con PK generada en cliente (doc2, doc3, doc4, doc5, doc7):**
+
+```typescript
+// El cliente genera el UUID antes de encolar
+const id_doc = crypto.randomUUID()
+queue.push({ type: 'INSERT', table: 'doc2_informes_svb', payload: { id_doc, ... } })
+
+// La RPC o el INSERT usa ON CONFLICT
+INSERT INTO doc2_informes_svb (...) VALUES (...)
+ON CONFLICT (id_doc) DO NOTHING;
+-- Si ya existe (reintento): no-op. El dato está en DB.
+```
+
+**B — Operaciones que modifican filas existentes (`forzar_gasto_con_descuadre`):**
+
+La PK del descuadre es generada por el servidor → no sirve como clave de idempotencia desde el cliente. Se usa `mutation_uuid` (UUID generado en cliente antes de encolar):
+
+```sql
+-- Constraint en descuadres_inventario
+ALTER TABLE descuadres_inventario
+  ADD CONSTRAINT uq_descuadre_mutation_uuid UNIQUE (mutation_uuid);
+
+-- El INSERT en la RPC
+INSERT INTO descuadres_inventario (..., mutation_uuid) VALUES (..., p_mutation_uuid)
+ON CONFLICT (mutation_uuid) DO NOTHING;
+```
+
+El cliente debe comprobar si `mutation_uuid` ya existe en `descuadres_inventario` antes de
+rellamar la RPC — si existe, la operación ya fue procesada; saltar directo a DELETE de IndexedDB
+sin ejecutar el UPDATE de stock de nuevo (ver `hooks.md §9 procesarCola — RAMA ESPECIAL`).

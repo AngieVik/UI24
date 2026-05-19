@@ -163,3 +163,250 @@ Adicionalmente, el sistema opera en contextos de alta presión donde la legibili
 - Los terminales de ambulancias instalados vía alta de hardware nunca ven el banner (ya están en modo standalone).
 - Las rutas offline-capable están definidas explícitamente — el equipo de frontend sabe sin ambigüedad qué puede y no puede encolarse.
 - WCAG 2.1 AA es el target de diseño; los componentes base del sistema de diseño deben documentar sus ratios de contraste.
+
+---
+
+## ADR-004 — Recuperación de contraseña: flujo gestionado exclusivamente por RRHH (C-09)
+
+**Estado:** Aceptado
+**Fecha:** 2026-05-19
+
+### Contexto
+
+Durante la auditoría de Fase 8 se identificó como G-01 la ausencia de un flujo
+self-service de recuperación de contraseña. En los sistemas convencionales el
+usuario recibe un enlace de reset al email o un código SMS. U24 no puede ofrecer
+ninguna de estas dos vías:
+
+1. **Email ficticio:** Todos los usuarios tienen dirección `id_nombre@u24.internal`.
+   Este dominio no es enrutable externamente — no existe ningún servidor de correo
+   que lo reciba. Supabase Auth acepta estos emails para crear la cuenta, pero
+   nunca puede enviarles un mensaje de reset. Configurar Supabase `resetPasswordForEmail`
+   simplemente no hace nada recuperable para el usuario.
+
+2. **Sin canal SMS configurado:** U24 no integra Twilio ni ningún proveedor de SMS.
+   Añadirlo requeriría recopilar y almacenar números de teléfono de los empleados,
+   lo que introduce un nuevo vector de PII y complejidad operativa desproporcionada
+   para un sistema de intranet cerrada.
+
+3. **Sistema de intranet cerrada:** El acceso al sistema requiere presencia física en
+   el contexto operativo. Un empleado que olvida su contraseña puede contactar con
+   RRHH en persona o por radio — el escalado humano es el canal natural.
+
+El G-02 (cambio de contraseña por el propio empleado) sí es viable y se documenta en
+`logic.md §59`. Se distingue de la recuperación (G-01) en que G-02 requiere que el
+empleado conozca su contraseña actual.
+
+### Decisión
+
+**La recuperación de contraseña cuando el empleado no la recuerda es responsabilidad
+exclusiva de RRHH o Gerencia mediante la Edge Function `ef_reset_password`.**
+
+No se implementa ningún flujo self-service de recuperación. Esto es una **decisión de
+diseño consciente** derivada de las restricciones arquitectónicas del sistema, no un
+gap a corregir.
+
+El flujo operativo de recuperación es:
+
+```
+1. Empleado contacta con RRHH (en persona, teléfono fijo, radio)
+2. RRHH verifica identidad del empleado (presencial o por código de empleado)
+3. RRHH ejecuta ef_reset_password({id_nombre, nueva_contrasena_temporal})
+4. Empleado recibe la contraseña temporal en mano (no por email)
+5. Empleado hace login con la temporal y puede cambiarla
+   (ver logic.md §59 — cambio de contraseña con actualización de sesión offline)
+```
+
+La UI del terminal debe mostrar en la pantalla de login:
+
+```
+"¿Olvidaste tu contraseña? Contacta con RRHH para restablecerla."
+```
+
+No hay botón de "Recuperar contraseña" con flujo automatizado.
+
+### Consecuencias
+
+- El flujo de recuperación depende de disponibilidad humana de RRHH — aceptable dado
+  el contexto operativo (centro de coordinación siempre tiene personal de guardia).
+- No se almacenan ni procesan números de teléfono de empleados para SMS.
+- No se configura ningún servidor SMTP ni proveedor de email externo.
+- `ef_reset_password` ya existe (Fase 6, rls_y_rpcs.md §8) — no hay desarrollo nuevo.
+- Los runbooks operativos deben incluir el procedimiento de reset presencial como
+  caso documentado (ver `runbooks.md RB-05`).
+
+---
+
+## ADR-005 — Huso horario canónico: `Europe/Madrid` + UTC en base de datos (C-15)
+
+**Estado:** Aceptado
+**Fecha:** 2026-05-19
+
+### Contexto
+
+El sistema U24 opera exclusivamente en España peninsular (zona horaria `Europe/Madrid`,
+UTC+1 invierno / UTC+2 verano). La instancia PostgreSQL de Supabase tiene por defecto
+huso horario `UTC`. Sin una declaración explícita de timezone:
+
+1. Los operadores y el equipo de soporte que acceden a la DB directamente (Supabase
+   Studio, psql) ven timestamps en UTC, lo que causa confusión en auditorías (un evento
+   a las 01:00 UTC se registra como 01:00 cuando ocurrió a las 02:00 o 03:00 hora local
+   según si hay DST activo).
+
+2. Las funciones PostgreSQL que operan con rangos de fecha (`CURRENT_DATE`, `NOW()::date`,
+   operadores de rango temporal) producen resultados incorrectos cuando la timezone de
+   sesión difiere de la zona operativa del negocio. Esto es especialmente crítico en RPCs
+   de cuadrantes, vacaciones (Doc-12) y generación de reports diarios.
+
+3. La ausencia de un ADR explícito sobre timezone crea riesgo de que futuros desarrolladores
+   añadan comparaciones `= CURRENT_DATE` en RPCs sin ser conscientes de la discrepancia UTC.
+
+### Decisión
+
+**1. Almacenamiento: siempre `TIMESTAMPTZ` en UTC.**
+Todos los campos de timestamp en la base de datos son `TIMESTAMPTZ`. El valor almacenado
+es siempre UTC — esto no cambia con esta decisión. UTC es la única fuente de verdad en
+la DB, sin excepciones.
+
+**2. Timezone de sesión PostgreSQL: `Europe/Madrid`.**
+Se declara mediante migración de base de datos:
+
+```sql
+-- supabase/migrations/20260519_set_timezone_europe_madrid.sql
+ALTER DATABASE postgres SET timezone TO 'Europe/Madrid';
+```
+
+Esto configura `Europe/Madrid` como timezone de sesión por defecto para todas las
+conexiones nuevas al pool. Efectos:
+- `NOW()` devuelve el instante actual con offset correcto para España.
+- `CURRENT_DATE` refleja el día español, no el día UTC (relevante para cuadrantes y vacaciones).
+- `AT TIME ZONE` sin argumento explícito resuelve a `Europe/Madrid`.
+- Los timestamps se muestran con offset local en Supabase Studio.
+
+**3. Presentación en cliente: `Intl.DateTimeFormat` con `timeZone: 'Europe/Madrid'`.**
+Las RPCs no devuelven strings localizados. Devuelven `TIMESTAMPTZ` en UTC; el cliente
+formatea con la locale y timezone del usuario. Ejemplo:
+
+```typescript
+const formatter = new Intl.DateTimeFormat('es-ES', {
+  timeZone: 'Europe/Madrid',
+  dateStyle: 'short',
+  timeStyle: 'short',
+})
+formatter.format(new Date(timestampUTC))
+```
+
+**4. Payloads offline del cliente: siempre ISO 8601 UTC.**
+Los timestamps generados por dispositivos en campo se transmiten como
+`new Date().toISOString()` (UTC). Ver `logic.md §60` sobre autoridad de timestamps.
+
+**5. Tests de integración en CI: `SET timezone = 'Europe/Madrid'`.**
+Los tests que ejecutan RPCs con comparaciones de fecha deben incluir:
+
+```sql
+SET timezone = 'Europe/Madrid';
+```
+al inicio de la sesión de test, para que el entorno de CI sea consistente con producción.
+
+### Consecuencias
+
+- Supabase Studio y las consultas directas de soporte muestran timestamps en hora
+  española — operadores y soporte ven la hora local directamente sin conversión manual.
+- `CURRENT_DATE` en RPCs de cuadrantes y vacaciones refleja el día español correcto.
+- No hay impacto en los datos existentes: todos son `TIMESTAMPTZ` — el valor UTC no
+  cambia, solo cambia la presentación sin conversión explícita.
+- **DST:** en los cambios de hora de primavera/otoño, el sistema sigue siendo correcto
+  porque los datos están en UTC. `Intl.DateTimeFormat` y PostgreSQL `Europe/Madrid`
+  ambos aplican DST automáticamente.
+- La migración `20260519_set_timezone_europe_madrid.sql` debe estar entre las primeras
+  migraciones aplicadas (ver `infraestructura.md §2.4`).
+
+---
+
+## ADR-006 — Internacionalización: español único + ruta de migración a i18next (U-05)
+
+**Estado:** Aceptado
+**Fecha:** 2026-05-19
+
+### Contexto
+
+U24 es una PWA de intranet cerrada destinada íntegramente a servicios de emergencias
+médicas en España. El equipo de usuarios — TES, DUE, médicos, coordinadores, responsables
+de flota y logística, RRHH y gerencia — es 100% hispanohablante. No existe ningún requisito
+de multi-idioma en el horizonte operativo de 3-5 años del sistema.
+
+Las opciones evaluadas:
+
+| Opción | Bundle añadido | Overhead de desarrollo |
+|---|---|---|
+| Strings en español directamente en JSX/TS | 0 KB | Nulo |
+| `react-intl` (Format.js) | ~50 KB min | Mensajes-ID, ficheros de traducción |
+| `i18next` + `react-i18next` | ~70 KB min | Sistema de claves, namespaces, fallbacks |
+| `Intl` API nativa del navegador | 0 KB | Solo formatos de fecha/número, no strings de UI |
+
+El presupuesto de bundle es **3 MB total / 800 KB por ruta** (rules.md). Añadir ~70 KB de
+i18next para una funcionalidad sin demanda actual representa ~9% del presupuesto total.
+Adicionalmente, la abstracción en claves reduce la legibilidad directa del código JSX:
+`t('drp.cancelar.confirmacion')` es significativamente menos claro para un revisor que
+el string literal en español. En un sistema de misión crítica, la legibilidad inmediata
+reduce la probabilidad de introducir bugs en textos que guían decisiones operativas.
+
+### Decisión
+
+**El sistema usa español directamente en todo el código de UI.** No se introduce ninguna
+librería de i18n en esta fase.
+
+**1. Strings de UI en JSX/TSX escritos directamente en español:**
+```tsx
+// ✅ Correcto
+<Button>Cancelar DRP</Button>
+<p>No hay DRP activos en este momento.</p>
+<Toast message="Stock insuficiente para realizar este gasto." />
+```
+
+**2. Identificadores de máquina siempre en inglés:**
+El español es exclusivo para lo que el usuario ve. Variables, keys de stores Zustand,
+códigos de error de RPC, enum values de DB y nombres de funciones permanecen en inglés.
+```typescript
+// ✅ Correcto
+const errorCode = 'drp_ya_cancelado'              // identificador → inglés
+const mensajeUI = 'Este DRP ya fue cancelado.'    // string de UI → español
+
+// ❌ Incorrecto
+const errorDrpYaCancelado = 'drp_ya_cancelado'    // identificador en español
+```
+
+**3. Formatos de fecha y número mediante `Intl` API nativa:**
+No se usa librería externa para formateo — `Intl.DateTimeFormat` y `Intl.NumberFormat`
+con `locale: 'es-ES'` y `timeZone: 'Europe/Madrid'` cubren todos los casos necesarios.
+
+**4. Tabla de mensajes de error en `error_handling.md §6`:**
+El mapeo código → string español vive en `resolveRpcError()`. No hay clave i18n.
+
+**Ruta de migración si se requiere multi-idioma en el futuro:**
+
+`i18next-scanner` puede extraer automáticamente todos los strings del JSX/TSX existente:
+
+```bash
+# 1. Instalar tooling
+npm install -D i18next-scanner
+
+# 2. Escanear codebase y generar fichero de claves en español
+npx i18next-scanner 'src/**/*.{ts,tsx}' --output locales/es/translation.json
+
+# 3. Reemplazar strings por t('clave') — automatizable con jscodeshift codemods
+```
+
+Tiempo estimado de migración: 2-3 sprints según el volumen de componentes en ese momento.
+La migración es lineal y no requiere cambios arquitectónicos — solo extracción y reemplazo.
+
+### Consecuencias
+
+- **Cero overhead de bundle** por i18n — presupuesto de 800 KB protegido.
+- **Legibilidad directa** del código: los revisores leen el texto de UI sin buscar claves.
+- **Sin riesgo de clave faltante**: no hay sistema de fallback necesario ni traducciones pendientes.
+- **Deuda técnica conocida y aceptada**: si se requiere multi-idioma, la migración requiere
+  un refactor completo. Esta deuda se acepta conscientemente dado el contexto de intranet
+  monolingüe y horizonte operativo definido.
+- Los desarrolladores que añadan strings de UI deben escribirlos en español directamente
+  — no en inglés con comentario de traducción futura.

@@ -104,9 +104,10 @@ CREATE POLICY "solicitudes_select" ON solicitudes_desbloqueo
 -- INSERT: via rpc_solicitar_desbloqueo (SECURITY DEFINER, callable por anon)
 -- El terminal en estado_0 no tiene JWT → no puede INSERT directo
 
--- UPDATE: coordinacion y gerencia para aprobar/rechazar
+-- UPDATE: bloqueado para JWT directos — toda transición de estado debe pasar por
+--          rpc_aprobar_desbloqueo o rpc_rechazar_desbloqueo (SECURITY DEFINER, §26)
 CREATE POLICY "solicitudes_update" ON solicitudes_desbloqueo
-  FOR UPDATE USING (claim('can_manage_rbac'));
+  FOR UPDATE USING (FALSE);
 
 -- DELETE: prohibido (el cron cambia estado a 'expirada', nunca elimina)
 ```
@@ -298,7 +299,16 @@ CREATE POLICY "doc7_delete" ON doc7_averias FOR DELETE USING (claim('can_manage_
 CREATE POLICY "doc8_select" ON doc8_partes_trabajo
   FOR SELECT USING (claim('can_manage_fleet') OR claim('can_manage_rrhh'));
 CREATE POLICY "doc8_insert" ON doc8_partes_trabajo FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "doc8_update" ON doc8_partes_trabajo FOR UPDATE USING (auth.uid() IS NOT NULL);
+
+-- UPDATE: cualquier autenticado puede actualizar campos normales (km_fin, estado, etc.)
+-- pero NO puede fijar cerrado_por_admin_id directamente — ese campo solo lo escribe
+-- forzar_checkout_administrativo (SECURITY DEFINER, que bypasea esta policy).
+-- WITH CHECK garantiza que el valor resultante de cerrado_por_admin_id sea NULL tras
+-- cualquier UPDATE directo con JWT. La RPC lo sobreescribe sin restricción.
+CREATE POLICY "doc8_update" ON doc8_partes_trabajo
+  FOR UPDATE
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (cerrado_por_admin_id IS NULL);
 
 -- doc9 / doc10: operaciones de logística
 CREATE POLICY "doc9_select" ON doc9_entradas_almacen FOR SELECT USING (claim('can_view_inventory'));
@@ -350,12 +360,21 @@ CREATE POLICY "mochilas_update" ON mochilas_backpack FOR UPDATE USING (claim('ca
 ### 2.6 Dominio: Módulos especiales y Comunicación
 
 ```sql
--- PSA / Filiación
+-- PSA / Filiación (sesiones y pacientes)
 CREATE POLICY "psa_select" ON psa_sesiones FOR SELECT USING (claim('can_use_modules'));
 CREATE POLICY "psa_insert" ON psa_sesiones FOR INSERT WITH CHECK (claim('can_use_modules'));
 CREATE POLICY "psa_update" ON psa_sesiones FOR UPDATE USING (claim('can_use_modules'));
 CREATE POLICY "psa_delete" ON psa_sesiones FOR DELETE USING (claim('can_manage_modules'));
 -- Aplicar mismo patrón a psa_pacientes, filiacion_sesiones, filiacion_pacientes
+
+-- filiacion_eventos (append-only, solo service role puede insertar)
+-- SELECT: usuarios del módulo (can_use_modules) y gestores (can_manage_modules)
+CREATE POLICY "filiacion_ev_select" ON filiacion_eventos
+  FOR SELECT USING (claim('can_use_modules') OR claim('can_manage_modules'));
+-- INSERT: no hay policy directa para JWT — solo el watchdog cron via service role
+-- UPDATE y DELETE: prohibidos incondicionales (registro inmutable)
+CREATE POLICY "filiacion_ev_no_update" ON filiacion_eventos FOR UPDATE USING (FALSE);
+CREATE POLICY "filiacion_ev_no_delete" ON filiacion_eventos FOR DELETE USING (FALSE);
 
 -- mensajes_bandeja
 CREATE POLICY "bandeja_select" ON mensajes_bandeja FOR SELECT USING (auth.uid() IS NOT NULL);
@@ -860,7 +879,10 @@ CREATE POLICY "solo_coordinacion_gerencia_cancelar_drp"
 -- La RPC hace FOR UPDATE en el SELECT inicial — esta policy aplica.
 ```
 
-**Resumen de efectos (idempotente si el DRP ya estaba Cancelado):**
+**Guards (C-03):** `FOR UPDATE` sobre `drps` al inicio — previene race condition doble-cancelación.
+`'Cancelado'` → error `drp_ya_cancelado` (409). Cualquier otro estado no-`En_curso` → `drp_estado_invalido` (409).
+
+**Resumen de efectos:**
 
 | Tabla | Acción |
 |---|---|
@@ -868,8 +890,11 @@ CREATE POLICY "solo_coordinacion_gerencia_cancelar_drp"
 | `dotaciones_drp` | `timestamp_salida = NOW()` para filas activas |
 | `drp_personal_a_pie` | `timestamp_salida = NOW()` para filas activas |
 | `psa_sesiones` | `timestamp_cierre = NOW()` para sesiones abiertas del DRP |
+| `psa_pacientes` | `estado = 'cancelado_por_drp'` para pacientes no terminales (C-01) |
 | `filiacion_sesiones` | `timestamp_cierre = NOW()` para sesiones abiertas del DRP |
-| `mochilas_backpack` | `estado = 'disponible'`, `id_drp_activo = NULL` |
+| `filiacion_pacientes` | `estado = 'cancelado_por_drp'`; si `en_consulta`, también `timestamp_fin_consulta = NOW()` (C-01) |
+| `descuadres_inventario` | INSERT por ítem residual en mochilas BKP; `entidad_imputable_tipo = 'drp'` (C-02) |
+| `mochilas_backpack` | `estado = 'disponible'`, `id_drp_activo = NULL` (después de descuadres) |
 
 ---
 
@@ -1100,3 +1125,214 @@ Ver especificación SQL completa en `logic.md §53`.
 - `404 plantilla_no_encontrada` si `plantilla_id` no existe en `plantillas_stock`.
 
 **Retorno:** `TABLE(matricula TEXT, location_id TEXT, items_inicializados INT)` — para feedback del wizard.
+
+---
+
+## 21. Edge Cron `ef_cron_cleanup_orphans` (B-03)
+
+**Frecuencia:** Diaria, 04:00 UTC (una hora después de `ef_cron_rgpd`).
+**Service role:** obligatorio — necesita `listUsers` y `deleteUser` de la Admin API.
+**Sin claim de usuario** — llamada interna del scheduler de Supabase Cron.
+
+Ver implementación completa en `logic.md §54`.
+
+**Propósito:** Eliminar entradas en `auth.users` sin fila correspondiente en
+`fichas_empleados` (huérfanos que pueden aparecer si `ef_alta_empleado` falla
+tras crear el usuario de Auth pero antes de escribir en fichas_empleados, y el
+rollback explícito del §50.3 no llega a ejecutarse por corte de red o kill de proceso).
+
+**Invariantes de seguridad:**
+
+| Aspecto | Decisión |
+|---|---|
+| Filtro de email | Solo elimina usuarios con email `*@u24.internal` — no toca cuentas de servicio externas |
+| Paginación | 1000 usuarios por lote (`listUsers` API) |
+| Idempotente | Sin huérfanos → sin operaciones destructivas |
+| Complementario con §50.3 | El rollback explícito minimiza la tasa de aparición; este cron es la red de seguridad |
+
+---
+
+## 22. RPC `rpc_cambiar_rol` (B-05)
+
+**Tipo:** `CREATE FUNCTION ... SECURITY DEFINER LANGUAGE plpgsql`
+**Parámetros:** `p_id_nombre TEXT, p_nuevo_rol TEXT`
+**Retorno:** `VOID`
+**RBAC:** `can_manage_rrhh` — roles `rrhh`, `gerencia`.
+**Llamada via:** `supabase.rpc('rpc_cambiar_rol', { p_id_nombre, p_nuevo_rol })`
+
+Ver implementación SQL completa en `logic.md §55`.
+
+**Flujo:**
+
+| Paso | Acción |
+|---|---|
+| 1 | Valida `can_manage_rrhh` — 400 `insufficient_privilege` si no tiene claim |
+| 2 | Valida `p_nuevo_rol` contra los 10 roles operativos — 400 `rol_invalido` si no es válido |
+| 3 | Verifica que el empleado existe y `activo = true` — 400 `empleado_no_encontrado_o_inactivo` |
+| 4 | No-op si `rol_actual == p_nuevo_rol` (idempotente) |
+| 5 | `UPDATE fichas_empleados SET rol = p_nuevo_rol` |
+| 6 | `INSERT auditoria_rbac` evento `cambio_rol` con `rol_anterior`, `rol_nuevo`, `ejecutado_por` |
+
+**Nota sobre efecto inmediato en JWT:**
+El cambio de rol en `fichas_empleados` es inmediato en DB. Sin embargo, el JWT activo
+del empleado conserva los claims anteriores hasta que expire o haga refresh (TTL típico 1 hora).
+Para efecto inmediato, combinar con `ef_revocar_sesion_usuario` (§7): invalida el JWT forzando
+un nuevo login que pasará por `set_claims` y recibirá los claims del nuevo rol.
+
+---
+
+## 23. RLS tabla `solicitudes_rgpd` (B-10)
+
+**Tipo:** Table-level RLS policies.
+**Propósito:** Registro inmutable de solicitudes de borrado RGPD (Art. 17).
+
+```sql
+-- SELECT: coordinacion y gerencia (can_manage_rbac)
+CREATE POLICY "rgpd_sol_select" ON solicitudes_rgpd
+  FOR SELECT USING (claim('can_manage_rbac'));
+
+-- INSERT: coordinacion y gerencia pueden registrar solicitudes
+CREATE POLICY "rgpd_sol_insert" ON solicitudes_rgpd
+  FOR INSERT WITH CHECK (claim('can_manage_rbac'));
+
+-- UPDATE: coordinacion y gerencia para marcar procesada/denegada
+-- (la RPC rpc_procesar_borrado_rgpd hace UPDATE via SECURITY DEFINER, bypasea esta policy)
+CREATE POLICY "rgpd_sol_update" ON solicitudes_rgpd
+  FOR UPDATE USING (claim('can_manage_rbac'));
+
+-- DELETE: prohibido incondicional — el registro es trazabilidad legal
+CREATE POLICY "rgpd_sol_no_delete" ON solicitudes_rgpd
+  FOR DELETE USING (FALSE);
+```
+
+**Estados del ciclo de vida:**
+
+| Estado | Significado | Quién puede transicionar |
+|---|---|---|
+| `pendiente` | Solicitud registrada, pendiente de revisión | Estado inicial |
+| `procesada` | Purga ejecutada por `rpc_procesar_borrado_rgpd` | RPC SECURITY DEFINER |
+| `denegada` | Revisada y rechazada (con motivación en `notas_procesamiento`) | UPDATE directo por can_manage_rbac |
+
+---
+
+## 24. RPCs RGPD (B-11)
+
+### `rpc_solicitar_borrado_rgpd`
+
+**Auth:** JWT con `can_manage_rbac` — roles `coordinacion`, `gerencia`.
+**Parámetros:** `p_tipo_solicitud TEXT, p_identificador TEXT, p_motivo TEXT`
+**Retorno:** `UUID` — id de la solicitud creada.
+
+Ver implementación SQL completa en `logic.md §56.2`.
+
+**Tipos de solicitud:**
+
+| `p_tipo_solicitud` | `p_identificador` | Acción de purga |
+|---|---|---|
+| `'borrado_clinico'` | UUID del documento (doc2/doc3/doc4/doc5) | Sustracción JSONB de claves PII en `datos_paciente`; nullificación de `datos_firma` |
+| `'borrado_empleado'` | `id_nombre` del empleado | `nombre_real = 'ANONIMIZADO'`, `dni = SHA-256(dni)` |
+
+### `rpc_procesar_borrado_rgpd`
+
+**Auth:** JWT con `can_manage_rbac` — roles `coordinacion`, `gerencia`.
+**Parámetros:** `p_solicitud_id UUID, p_notas TEXT (opcional)`
+**Retorno:** `VOID`.
+
+Ver implementación SQL completa en `logic.md §56.3`.
+
+**Invariantes críticos:**
+
+| Invariante | Implementación |
+|---|---|
+| NUNCA DELETE de filas clínicas | Solo `UPDATE datos_paciente = datos_paciente - CLAVES_PII` |
+| NUNCA NULL completo del campo JSONB | El operador `-` elimina solo las claves PII; estadísticas se conservan |
+| Idempotencia clínica | Guard `datos_paciente ?| CLAVES_PII` — no-op si ya fue purgado |
+| Idempotencia empleado | Guard `nombre_real != 'ANONIMIZADO'` — no re-hashea un hash |
+| DNI no nullificado | Se reemplaza por SHA-256 hex — identificable como anónimo, no recuperable |
+| Solicitud única ejecución | Guard `estado = 'pendiente'` — lanza excepción si ya procesada |
+| Dependencia pgcrypto | `digest(dni::bytea, 'sha256')` requiere `CREATE EXTENSION IF NOT EXISTS pgcrypto` |
+
+---
+
+## 25. RPC `rpc_baja_vehiculo` (C-05)
+
+**Tipo:** `CREATE FUNCTION ... SECURITY DEFINER LANGUAGE plpgsql`
+**Parámetros:** `p_matricula TEXT, p_motivo TEXT DEFAULT NULL`
+**RBAC:** `can_manage_fleet` (roles: `responsable_flota`, `gerencia`) o `can_manage_rbac` (gerencia).
+**Llamada via:** `supabase.rpc('rpc_baja_vehiculo', { p_matricula, p_motivo })`
+
+Ver especificación SQL completa en `logic.md §57`.
+
+**Guards secuenciales (todos con FOR UPDATE sobre `vehiculos`):**
+
+| # | Condición | Error | HTTP hint |
+|---|---|---|---|
+| 1 | Sin claim `can_manage_fleet` ni `can_manage_rbac` | `insufficient_privilege` | 403 |
+| 2 | Matrícula no encontrada | `vehiculo_no_encontrado` | 404 |
+| 3 | `condicion_tecnica = 'dado_de_baja'` | `vehiculo_ya_de_baja` | 409 |
+| 4 | Fila en `dotaciones_drp` con `timestamp_salida IS NULL` (C-05) | `vehiculo_en_drp_activo` | 409 |
+| 5 | `pilot_id IS NOT NULL` en `vehiculos` | `vehiculo_con_pilot_activo` | 409 |
+
+**Efectos (si pasan todos los guards):**
+
+| Tabla | Acción |
+|---|---|
+| `vehiculos` | `condicion_tecnica = 'dado_de_baja'`, `estado_operativo = 'inactivo'` |
+| `auditoria_rbac` | INSERT con `tipo_evento = 'baja_vehiculo'`, matricula y motivo en metadata |
+
+**Flujo de desbloqueo de guards 4 y 5:**
+1. Cancelar o finalizar el DRP activo (`cancelar_drp` / flujo normal de finalización)
+2. Forzar checkout del pilot (`forzar_checkout_administrativo`)
+3. Llamar `rpc_baja_vehiculo`
+
+---
+
+## 26. RPCs `rpc_aprobar_desbloqueo` + `rpc_rechazar_desbloqueo` (C-06)
+
+**Tipo:** `CREATE FUNCTION ... SECURITY DEFINER LANGUAGE plpgsql`
+**RBAC:** `can_manage_rbac` (roles: `coordinacion`, `gerencia`) — validado como **primera instrucción** del cuerpo.
+**Llamada via:** `supabase.rpc('rpc_aprobar_desbloqueo', { p_solicitud_id })` / `supabase.rpc('rpc_rechazar_desbloqueo', { p_solicitud_id, p_motivo_rechazo })`
+
+Ver especificación SQL completa en `logic.md §58`.
+
+**RLS de `solicitudes_desbloqueo` actualizada:**
+
+```sql
+-- UPDATE bloqueado para JWT directos — el único path son las RPCs SECURITY DEFINER
+CREATE POLICY "solicitudes_update" ON solicitudes_desbloqueo
+  FOR UPDATE USING (FALSE);
+```
+
+**Guards de ambas RPCs:**
+
+| # | Condición | Error | HTTP hint |
+|---|---|---|---|
+| 1 | Sin claim `can_manage_rbac` | `insufficient_privilege` | 403 |
+| 2 | Solicitud no encontrada | `solicitud_no_encontrada` | 404 |
+| 3 | `estado != 'pendiente'` (ya aprobada, rechazada o expirada) | `solicitud_no_pendiente` | 409 |
+
+**Efectos de `rpc_aprobar_desbloqueo`:**
+
+| Tabla | Acción |
+|---|---|
+| `solicitudes_desbloqueo` | `estado = 'aprobada'`, `id_nombre_revisor = <revisor>` |
+| `pg_notify('desbloqueo_terminal', ...)` | Payload: `{tipo:'desbloqueo_aprobado', id_terminal, revisor, solicitud_id}` |
+| `auditoria_rbac` | INSERT con `tipo_evento = 'desbloqueo_aprobado'` |
+
+**Efectos de `rpc_rechazar_desbloqueo`:**
+
+| Tabla | Acción |
+|---|---|
+| `solicitudes_desbloqueo` | `estado = 'rechazada'`, `id_nombre_revisor = <revisor>` |
+| `pg_notify('desbloqueo_terminal', ...)` | Payload: `{tipo:'desbloqueo_rechazado', id_terminal, motivo_rechazo, solicitud_id}` |
+| `auditoria_rbac` | INSERT con `tipo_evento = 'desbloqueo_rechazado'` |
+
+**Flujo completo del terminal (cierra F-04):**
+```
+Terminal bloqueado → rpc_solicitar_desbloqueo → estado:'pendiente'
+                          ↓ Realtime a bandeja_entrada_coordinacion
+Coordinador revisa → rpc_aprobar_desbloqueo  → estado:'aprobado' + pg_notify
+                   → rpc_rechazar_desbloqueo → estado:'rechazado' + pg_notify
+                          ↓ Realtime al terminal
+Terminal recibe notificación → UI actualiza estado
+```

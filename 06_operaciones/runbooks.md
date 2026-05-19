@@ -240,6 +240,78 @@ Post-recuperación:
 
 ---
 
+## RB-05 — Terminal sin galleta activa (inaccessible tras baja de empleado)
+
+**Severidad:** P2 — Medio (P1 si el terminal es el único de una ambulancia en DRP activo)
+**Tiempo objetivo de respuesta inicial:** < 30 min desde detección
+
+### 1. Detección
+
+| Señal | Fuente |
+|---|---|
+| Aviso `terminal_sin_galleta` en `doc11_avisos` dirigido a coordinación | Bandeja de coordinación — aparece automáticamente tras `ef_baja_empleado` |
+| Terminal físico muestra pantalla de login y no responde a galleta permanente | Informe presencial o por radio del personal de la ambulancia |
+| Query manual: `SELECT id_terminal FROM galletas_terminales WHERE revocado_at IS NULL GROUP BY id_terminal HAVING COUNT(*) = 0` | Técnico — verificación reactiva |
+
+### 2. Mitigación inmediata / Fallback
+
+1. **Identificar el terminal afectado** desde el aviso en `doc11_avisos`:
+   - Campo `id_terminal` — fingerprint SHA-256 del dispositivo.
+   - Campo `id_nombre_baja` — empleado cuya baja generó el huérfano.
+
+2. **Determinar si hay personal operativo que necesita acceder:**
+   - Si hay un turno activo en ese vehículo: el pilot puede usar **acceso de invitado operativo**
+     (sesión temporal PIN, si el terminal lo permite) para continuar su turno.
+   - Si no hay turno activo: el terminal puede esperar hasta que se asigne una nueva galleta.
+
+3. **Reasignar la galleta:**
+   Coordinación o gerencia ejecuta `rpc_revocar_y_reemitir_galleta` para asignar el terminal
+   al nuevo empleado responsable del vehículo:
+
+   ```typescript
+   await supabase.rpc('rpc_revocar_y_reemitir_galleta', {
+     p_id_terminal:      '<SHA-256 del terminal>',
+     p_id_nombre_nuevo:  '<id_nombre del nuevo responsable>',
+     p_tipo:             'permanente'
+   })
+   ```
+
+   El nuevo empleado hará su primer login en ese terminal con sus credenciales — la galleta
+   permanente quedará vinculada a su cuenta.
+
+4. **Si el terminal está físicamente inaccesible** (en ruta, sin red):
+   - El pilot usa credenciales manuales (login con usuario + contraseña) cuando recupere red.
+   - Tras el login online, la galleta permanente se vincula automáticamente en el flujo de
+     terminal_check si el terminal no tiene galleta activa.
+
+### 3. Triage de afectación
+
+| Situación | Impacto | Acción |
+|---|---|---|
+| Terminal sin turno activo | Bajo — sin impacto operativo inmediato | Reasignar galleta en próximas horas |
+| Terminal con turno activo, pilot puede usar PIN temporal | Medio — acceso limitado a sesión temporal | Reasignar galleta antes del fin de turno |
+| Terminal en DRP activo sin alternativa de acceso | Alto-Crítico | Reasignar galleta inmediatamente; contactar pilot por radio |
+
+### 4. Protocolo de escalado
+
+```
+0-5 min  → Coordinación recibe aviso doc11 de terminal_sin_galleta
+            Verificar si el terminal tiene un turno activo
+
+5-15 min → Si turno activo: verificar que el pilot puede operar (PIN temporal o credenciales)
+            Identificar nuevo responsable del terminal
+            Ejecutar rpc_revocar_y_reemitir_galleta
+
+15-30 min → Si no se puede reasignar remotamente: escalar a técnico para intervención física
+             Registrar el incidente con id_terminal, id_nombre_baja y resolución adoptada
+```
+
+**Causa raíz habitual:** Un empleado dado de baja era el único con galleta activa en ese
+terminal. Revisar el proceso de onboarding: todos los terminales de ambulancia deben tener
+al menos dos galletas activas asignadas (pilot titular + backup).
+
+---
+
 ## Plantilla de postmortem
 
 Para cualquier incidente Nivel 1 resuelto, registrar en el issue tracker con esta estructura:

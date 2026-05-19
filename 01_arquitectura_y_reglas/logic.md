@@ -1693,6 +1693,38 @@ Al desactivar:
   → RRHH las gestiona desde bandeja_entrada_rrhh
 ```
 
+### 23.2 Comportamiento de solicitudes al cerrar el período (C-07)
+
+Cuando RRHH/Gerencia desactiva el período de vacaciones
+(`system_config → periodo_vacaciones_abierto.activo = false`),
+las solicitudes existentes en `doc_solicitudes_vacaciones` siguen reglas distintas
+según su estado:
+
+| Estado actual | Regla al cerrar el período | Mecanismo |
+|---|---|---|
+| `'Borrador'` | **Descarte** — se eliminan con DELETE. Un borrador no enviado durante el período abierto no tiene valor ni de auditoría ni operativo. Si el empleado necesita solicitar vacaciones, deberá hacerlo cuando se abra el siguiente período. | Purga automática en el mismo acto que desactiva el período (trigger o acción explícita en la EF/RPC de desactivación) |
+| `'Pendiente_Aprobacion'` | **Congelada** — el estado NO cambia. La solicitud es válida (fue enviada dentro del período) pero ya no es visible en la UI del empleado. RRHH tiene la obligación de resolverla desde su bandeja (`bandeja_entrada_rrhh`) aunque el período esté cerrado. | Manual — RRHH revisa y aprueba/deniega desde bandeja |
+| `'Aprobada'` | **Sin cambio** — resolución ya ejecutada. Las excepciones de cuadrante inyectadas permanecen activas. | Ninguna |
+| `'Denegada'` | **Sin cambio** — resolución ya ejecutada. | Ninguna |
+
+**Regla sobre la purga de `'Borrador'`:**
+
+La purga debe ejecutarse atómicamente en el mismo momento en que `periodo_vacaciones_abierto.activo` pasa a `false`. Opciones de implementación:
+
+```sql
+-- Opción A: trigger AFTER UPDATE en system_config
+-- (cuando la clave 'periodo_vacaciones_abierto' cambia y activo pasa a false)
+
+-- Opción B: sentencia explícita en la RPC / EF de desactivación del período
+DELETE FROM doc_solicitudes_vacaciones
+ WHERE estado = 'Borrador';
+-- (No hace falta filtrar por período — los borradores son siempre del período en curso)
+```
+
+> **Importante:** Solo se purgan `'Borrador'`. Las solicitudes `'Pendiente_Aprobacion'`
+> jamás se eliminan aunque el período esté cerrado — representan un compromiso del
+> empleado que RRHH debe resolver explícitamente.
+
 ---
 
 ## 24. Stock optimista local (Optimistic UI)
@@ -3396,7 +3428,7 @@ necesidad de que ese pilot ejecute el flujo de checkout estándar desde su dispo
 CREATE OR REPLACE FUNCTION forzar_checkout_administrativo(
   p_vehiculo_id      TEXT,
   p_pilot_id         TEXT,
-  p_km_fin           INT,
+  p_km_fin           INT DEFAULT NULL,   -- NULL aceptado en offboarding (ver §42.3)
   p_coordinador_id   TEXT
 )
 RETURNS JSONB AS $$
@@ -3473,6 +3505,21 @@ La distinción del cierre administrativo se hace a través del campo `cerrado_po
 (UUID, FK `fichas_empleados`): si es `NULL`, fue un cierre normal por el pilot;
 si contiene un UUID, fue un cierre forzado y ese UUID identifica al coordinador responsable.
 El evento `checkout_forzado` en `auditoria_rbac` registra la trazabilidad completa.
+
+**Decisión: `km_fin = NULL` en offboarding (C-04)**
+
+Cuando el cierre forzado se produce durante el offboarding de un empleado
+(`ef_baja_empleado §51`), el km final no está disponible operativamente.
+La tabla `doc8_partes_trabajo` permite `km_fin NULL` **únicamente cuando
+`cerrado_por_admin_id IS NOT NULL`** — esa combinación identifica inequívocamente
+un cierre administrativo sin odómetro. Los informes de gestión deben excluir
+estas filas del cálculo de km recorridos o tratar el valor como `0`.
+
+> **Migración requerida:** si `km_fin` era `NOT NULL` en la migración inicial,
+> debe añadirse la columna como nullable:
+> ```sql
+> ALTER TABLE doc8_partes_trabajo ALTER COLUMN km_fin DROP NOT NULL;
+> ```
 
 ### 42.4 RBAC
 
@@ -3853,6 +3900,7 @@ BEGIN
   END IF;
 
   -- 2. Registrar descuadre — delega regularización a logística
+  --    entidad_imputable_tipo: NOT NULL DEFAULT 'sin_imputar' — logística imputará al resolver
   INSERT INTO descuadres_inventario (
     location_id,
     item_id,
@@ -3861,6 +3909,7 @@ BEGIN
     terminal_id,
     mutation_uuid,
     stock_resultante,
+    entidad_imputable_tipo,  -- enum entidad_imputable, NOT NULL
     created_at
   ) VALUES (
     p_location_id,
@@ -3870,8 +3919,10 @@ BEGIN
     p_terminal_id,
     p_mutation_uuid,
     v_stock_nuevo,
+    'sin_imputar',           -- valor inicial; logística actualiza al resolver
     NOW()
-  );
+  )
+  ON CONFLICT (mutation_uuid) DO NOTHING;
 
   -- 3. Notificar a bandeja_entrada_logistica
   --    El INSERT en descuadres_inventario dispara trigger
@@ -3945,25 +3996,38 @@ CREATE OR REPLACE FUNCTION cancelar_drp(
 RETURNS VOID AS $$
 DECLARE
   v_estado_actual TEXT;
+  v_mochila_row   RECORD;
 BEGIN
-  -- 1. Guard: el DRP debe estar En_curso
+  -- 1. Guard (FOR UPDATE): bloquear la fila del DRP — previene race conditions
+  --    si dos coordinadores pulsan "Cancelar" simultáneamente (C-03)
   SELECT estado INTO v_estado_actual
     FROM drps WHERE id = p_drp_id FOR UPDATE;
 
+  -- Distinguir doble cancelación (idempotente) de estado genuinamente inválido (C-03)
+  IF v_estado_actual = 'Cancelado' THEN
+    RAISE EXCEPTION 'drp_ya_cancelado'
+      USING HINT   = '409',
+            DETAIL = 'El DRP ya estaba en estado Cancelado — no se realiza ninguna acción.';
+  END IF;
+
   IF v_estado_actual IS DISTINCT FROM 'En_curso' THEN
-    RAISE EXCEPTION 'drp_no_en_curso'
-      USING HINT = '409',
-            DETAIL = 'Solo pueden cancelarse DRPs en estado En_curso.';
+    RAISE EXCEPTION 'drp_estado_invalido'
+      USING HINT   = '409',
+            DETAIL = format(
+              'El DRP está en estado "%s". Solo pueden cancelarse DRPs en estado En_curso.',
+              v_estado_actual
+            );
   END IF;
 
   -- 2. Marcar el DRP como Cancelado
   UPDATE drps
      SET estado                = 'Cancelado',
          timestamp_cancelacion = NOW(),
-         cancelado_por_id      = (SELECT id_persona FROM fichas_empleados WHERE id_nombre = p_coordinador_id)
+         cancelado_por_id      = (SELECT id_persona FROM fichas_empleados
+                                   WHERE id_nombre = p_coordinador_id)
    WHERE id = p_drp_id;
 
-  -- 3. Desvincular dotaciones activas del DRP (vehículos salen del DRP; Doc-8 siguen abiertos)
+  -- 3. Desvincular dotaciones activas (vehículos salen del DRP; sus Doc-8 siguen abiertos)
   UPDATE dotaciones_drp
      SET timestamp_salida = NOW()
    WHERE id_drp = p_drp_id
@@ -3975,26 +4039,88 @@ BEGIN
    WHERE id_drp = p_drp_id
      AND timestamp_salida IS NULL;
 
-  -- 5. Cierre forzado de módulos PSA vinculados al DRP
+  -- 5. Cierre forzado de sesiones PSA del DRP
   UPDATE psa_sesiones
      SET timestamp_cierre = NOW()
    WHERE id_drp = p_drp_id
      AND timestamp_cierre IS NULL;
 
-  -- 6. Cierre forzado de módulos de filiación vinculados al DRP
+  -- 6. Cerrar pacientes PSA activos con estado 'cancelado_por_drp' (C-01)
+  --    No se toca a pacientes ya en estado terminal (alta, exitus, cancelado_por_drp)
+  UPDATE psa_pacientes
+     SET estado = 'cancelado_por_drp'
+   WHERE id_sesion IN (
+     SELECT id_sesion FROM psa_sesiones WHERE id_drp = p_drp_id
+   )
+     AND estado NOT IN ('alta', 'exitus', 'cancelado_por_drp');
+
+  -- 7. Cierre forzado de sesiones de filiación del DRP
   UPDATE filiacion_sesiones
      SET timestamp_cierre = NOW()
    WHERE id_drp = p_drp_id
      AND timestamp_cierre IS NULL;
 
-  -- 7. Revertir mochilas BKP asignadas al DRP → disponible (bypass limpio, sin snapshot de reconciliación)
+  -- 8. Cerrar pacientes de filiación activos con estado 'cancelado_por_drp' (C-01)
+  --    Si estaban en consulta, cerrar también timestamp_fin_consulta
+  UPDATE filiacion_pacientes
+     SET estado               = 'cancelado_por_drp',
+         timestamp_fin_consulta = CASE
+           WHEN estado = 'en_consulta' AND timestamp_fin_consulta IS NULL
+           THEN NOW()
+           ELSE timestamp_fin_consulta
+         END
+   WHERE id_sesion IN (
+     SELECT id_sesion FROM filiacion_sesiones WHERE id_drp = p_drp_id
+   )
+     AND estado NOT IN ('alta', 'exitus', 'cancelado_por_drp');
+
+  -- 9. Generar descuadre por stock residual en mochilas BKP del DRP (C-02)
+  --    entidad_imputable_tipo = 'drp'; entidad_imputable_id = p_drp_id::text
+  --    Se registra ANTES de revertir el estado de las mochilas (stock_real aún vigente)
+  FOR v_mochila_row IN
+    SELECT mb.id_mochila, mb.codigo, si.item_id, si.location_id, si.stock_real
+      FROM mochilas_backpack mb
+      JOIN subinventarios si ON si.location_id = mb.id_mochila::text
+     WHERE mb.id_drp_activo = p_drp_id
+       AND si.stock_real > 0
+  LOOP
+    INSERT INTO descuadres_inventario (
+      location_id,
+      item_id,
+      stock_sistema,
+      stock_real,
+      diferencia,
+      motivo,
+      entidad_imputable_tipo,
+      entidad_imputable_id,
+      mutation_uuid,
+      created_at
+    ) VALUES (
+      v_mochila_row.location_id,
+      v_mochila_row.item_id,
+      0,                                  -- stock_sistema esperado: 0 (debió consumirse o retornarse)
+      v_mochila_row.stock_real,           -- stock_real residual encontrado al cancelar
+      v_mochila_row.stock_real,           -- diferencia = todo el residual
+      format(
+        'Cancelación DRP %s — stock residual sin reconciliar en mochila %s',
+        p_drp_id, v_mochila_row.codigo
+      ),
+      'drp'::entidad_imputable,
+      p_drp_id::text,
+      gen_random_uuid(),                  -- mutation_uuid único por fila de descuadre
+      NOW()
+    )
+    ON CONFLICT (mutation_uuid) DO NOTHING;
+  END LOOP;
+
+  -- 10. Revertir mochilas BKP → disponible (después de registrar los descuadres)
   UPDATE mochilas_backpack
      SET estado        = 'disponible',
          id_drp_activo = NULL
    WHERE id_drp_activo = p_drp_id;
 
   -- Doc-1: sin acción (append-only — inmutable en su estado actual)
-  -- Doc-8: sin acción (pilots continúan sus turnos fuera del DRP; checkout normal)
+  -- Doc-8: sin acción (pilots continúan sus turnos fuera del DRP; checkout normal al terminar)
 
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -4007,9 +4133,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 | `drps` | `estado = 'Cancelado'`, `timestamp_cancelacion`, `cancelado_por_id` |
 | `dotaciones_drp` activas | `timestamp_salida = NOW()` — vehículo desvinculado del DRP |
 | `drp_personal_a_pie` activos | `timestamp_salida = NOW()` |
-| `psa_sesiones` abiertas del DRP | `timestamp_cierre = NOW()` (cierre forzado) |
-| `filiacion_sesiones` abiertas del DRP | `timestamp_cierre = NOW()` (cierre forzado) |
-| `mochilas_backpack` asignadas al DRP | `estado = 'disponible'`, `id_drp_activo = NULL` |
+| `psa_sesiones` abiertas del DRP | `timestamp_cierre = NOW()` (cierre forzado de sesión) |
+| `psa_pacientes` activos del DRP | `estado = 'cancelado_por_drp'` — solo pacientes no terminales (C-01) |
+| `filiacion_sesiones` abiertas del DRP | `timestamp_cierre = NOW()` (cierre forzado de sesión) |
+| `filiacion_pacientes` activos del DRP | `estado = 'cancelado_por_drp'`; si `en_consulta`, también `timestamp_fin_consulta = NOW()` (C-01) |
+| `descuadres_inventario` | INSERT por cada ítem con `stock_real > 0` en mochilas BKP del DRP; `entidad_imputable_tipo = 'drp'` (C-02) |
+| `mochilas_backpack` asignadas al DRP | `estado = 'disponible'`, `id_drp_activo = NULL` — **después** de generar descuadres |
 | **Doc-8** de los pilots activos | **Sin cambio** — pilots siguen su turno; checkout normal al terminar |
 | **Doc-1** del DRP | **Sin cambio** — append-only; queda congelado en estado `Activo_En_Curso` |
 | **Hard delete de `drps`** | **Prohibido** — DRPs que alcanzaron `En_curso` no se eliminan nunca |
@@ -4027,7 +4156,9 @@ coordinacion / gerencia desde nucleo_coordinacion_y_seguridad:
   2. Modal de confirmación destructiva (no reversible):
        "Esta acción:
         • Desvinculará todos los vehículos y personal del DRP.
-        • Cerrará automáticamente los módulos PSA y Filiación vinculados.
+        • Cerrará automáticamente las sesiones PSA y Filiación vinculadas.
+        • Los pacientes activos en PSA y Filiación quedarán en estado 'cancelado_por_drp'.
+        • Las mochilas BKP con stock residual generarán descuadres de inventario.
         • Los partes de trabajo (Doc-8) seguirán abiertos — los pilots
           finalizarán sus turnos de forma normal.
         • El DRP quedará en estado Cancelado (no se puede reactivar)."
@@ -4056,7 +4187,7 @@ ajustarStock(
   locationId:    string,
   itemId:        string,
   cantidadNueva: number,   // valor absoluto correcto — NO un delta
-  motivo:        string    // obligatorio, mínimo 10 caracteres
+  motivo:        string    // obligatorio: mín. 10 chars en general; mín. 30 chars si cantidadNueva === 0
 ): Promise<{ stockAnterior: number; stockNuevo: number }>
 ```
 
@@ -4084,10 +4215,15 @@ BEGIN
             DETAIL = 'El stock resultante no puede ser negativo.';
   END IF;
 
-  -- 2. Guard: motivo obligatorio (mínimo 10 caracteres)
-  IF length(trim(p_motivo)) < 10 THEN
+  -- 2. Guard: motivo obligatorio — umbral reforzado a 30 chars si cantidad_nueva = 0 (C-08)
+  IF p_cantidad_nueva = 0 AND length(trim(p_motivo)) < 30 THEN
+    RAISE EXCEPTION 'motivo_ajuste_insuficiente_rotura'
+      USING HINT   = '422',
+            DETAIL = 'Ajustar a 0 unidades (rotura de stock) requiere un motivo '
+                     'de al menos 30 caracteres.';
+  ELSIF p_cantidad_nueva > 0 AND length(trim(p_motivo)) < 10 THEN
     RAISE EXCEPTION 'motivo_ajuste_insuficiente'
-      USING HINT = '422',
+      USING HINT   = '422',
             DETAIL = 'El motivo del ajuste debe tener al menos 10 caracteres.';
   END IF;
 
@@ -4138,6 +4274,32 @@ BEGIN
     p_operador_id, 'rpc_ajuste_manual_stock', p_motivo, NOW()
   );
 
+  -- 6. Si el stock resultante es 0: emitir aviso de rotura a bandeja de logística (C-08)
+  IF p_cantidad_nueva = 0 THEN
+    INSERT INTO doc11_avisos (
+      id,
+      tipo_aviso,
+      destinatario_rol,
+      contenido,
+      id_nombre_emisor,
+      leido,
+      created_at
+    ) VALUES (
+      gen_random_uuid(),
+      'rotura_stock',
+      'logistica',
+      jsonb_build_object(
+        'location_id',  p_location_id,
+        'item_id',      p_item_id,
+        'operador_id',  p_operador_id,
+        'motivo',       p_motivo
+      ),
+      'system',    -- emisor automático — no hay un humano directo
+      false,
+      NOW()
+    );
+  END IF;
+
   RETURN QUERY SELECT v_stock_actual, p_cantidad_nueva;
 END;
 $$;
@@ -4149,7 +4311,9 @@ $$;
 |---|---|
 | RBAC | `can_edit_inventory` — logistica, responsable_logistica, gerencia |
 | Stock resultante < 0 | Bloqueado — RAISE EXCEPTION |
-| Motivo | Obligatorio, mínimo 10 caracteres |
+| Motivo (cantidad_nueva > 0) | Obligatorio, mínimo 10 caracteres |
+| Motivo (cantidad_nueva = 0) | Obligatorio, **mínimo 30 caracteres** — rotura de stock es un evento crítico (C-08) |
+| Aviso de rotura (cantidad_nueva = 0) | INSERT en `doc11_avisos` con `tipo_aviso = 'rotura_stock'` y `destinatario_rol = 'logistica'` — Realtime lo entrega a la bandeja de logística (C-08) |
 | Scope | Cualquier location: base + subinventario vehículo/mochila |
 | Auditoria | Siempre — incluso si delta = 0 |
 | Offline | No apto para cola — ajuste manual requiere confirmación atómica del valor actual |
@@ -4163,7 +4327,9 @@ logistica / gerencia desde nucleo_logistica_almacen → Inventario maestro → [
        Stock actual: [N] unidades
        Stock correcto: [input numérico — mínimo 0]
        Delta calculado: [+N / -N] (actualiza en tiempo real)
-       Motivo: [textarea, mín. 10 chars]
+       Motivo: [textarea]
+         — mín. 10 chars si stock correcto > 0
+         — mín. 30 chars si stock correcto = 0 (banner de advertencia: "⚠️ Declarar rotura de stock requiere una justificación detallada")
        [ Aplicar ajuste ] [ Cancelar ]
   3. RPC rpc_ajuste_manual_stock(locationId, itemId, cantidadNueva, motivo, operadorId)
   4. Toast: "Stock ajustado de [anterior] a [nuevo] unidades. Motivo registrado."
@@ -4234,9 +4400,9 @@ Deno.serve(async (req) => {
     throw authError
   }
 
-  // 2. Insertar ficha de empleado (transacción implícita — si falla, auth.users queda huérfano;
-  //    el cron de limpieza o un reintento manual resuelve. No se revierte auth via Admin API
-  //    para evitar condiciones de carrera en reintentos.)
+  // 2. Insertar ficha de empleado — si falla, eliminar el auth.users creado en el paso
+  //    anterior para evitar huérfanos (rollback explícito: no existe transacción distribuida
+  //    entre Admin API y Supabase DB, así que lo hacemos manualmente en el catch).
   const { error: fichaError } = await supabaseAdmin
     .from('fichas_empleados')
     .insert({
@@ -4250,7 +4416,11 @@ Deno.serve(async (req) => {
       fecha_alta: new Date().toISOString(),
       fecha_baja: null,
     })
-  if (fichaError) throw fichaError
+  if (fichaError) {
+    // Rollback: eliminar el usuario de auth.users para no dejar huérfano
+    await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
+    throw fichaError
+  }
 
   // 3. Auditar
   const callerIdNombre = await getCallerIdNombre(jwtClaims)
@@ -4278,7 +4448,8 @@ Deno.serve(async (req) => {
 | Galleta de terminal | NO se emite en el alta — vinculación posterior via flujo PIN |
 | Contraseña temporal | La impone RRHH; el empleado puede cambiarla en primer login (si la UI lo permite) |
 | `contrasena_temporal` | Mínimo de seguridad delegado al formulario de UI (≥ 8 chars) |
-| Idempotencia | Si `fichas_empleados` falla y `auth.users` ya existe, un reintento con mismo `id_nombre` devuelve 409. RRHH limpia manualmente desde la consola si es necesario |
+| Atomicidad | Si `fichas_empleados` falla tras crear el `auth.users`, la EF llama a `deleteUser` inmediatamente antes de lanzar el error. El reintento posterior arranca desde un estado limpio. |
+| Idempotencia | Si el rollback falla (error de red), `ef_cron_cleanup_orphans` (§54) detecta y elimina el huérfano al día siguiente. |
 
 ---
 
@@ -4322,6 +4493,31 @@ Deno.serve(async (req) => {
   if (fichaFetchError || !ficha) return errorResponse(404, 'empleado_no_encontrado')
   if (!ficha.activo) return errorResponse(409, 'empleado_ya_inactivo')
 
+  // Obtener caller ahora (necesario para 0.5 y auditoría)
+  const callerIdNombre = await getCallerIdNombre(jwtClaims)
+
+  // 0.5. GUARD DOC-8 — Forzar checkout si el empleado tiene un parte de trabajo activo (C-04)
+  //      km_fin = null: permitido cuando cerrado_por_admin_id IS NOT NULL (ver §42.3)
+  const { data: openDoc8 } = await supabaseAdmin
+    .from('doc8_partes_trabajo')
+    .select('id, id_vehiculo')
+    .eq('pilot_id', id_nombre)
+    .eq('estado', 'Activo')
+    .maybeSingle()
+
+  if (openDoc8) {
+    const { error: checkoutError } = await supabaseAdmin.rpc(
+      'forzar_checkout_administrativo',
+      {
+        p_vehiculo_id:    openDoc8.id_vehiculo,
+        p_pilot_id:       id_nombre,
+        p_km_fin:         null,   // offboarding: km_fin no disponible; NULL aceptado
+        p_coordinador_id: callerIdNombre,
+      }
+    )
+    if (checkoutError) return errorResponse(500, 'error_forzando_checkout_doc8')
+  }
+
   // 1. SEGURIDAD — marcar inactivo + invalidar JWT
   const { error: fichaUpdateError } = await supabaseAdmin
     .from('fichas_empleados')
@@ -4332,12 +4528,54 @@ Deno.serve(async (req) => {
   // signOut 'global' revoca todos los refresh tokens activos del empleado
   await supabaseAdmin.auth.admin.signOut(ficha.auth_user_id, 'global')
 
-  // 2. SEGURIDAD — revocar todas las galletas de terminal del empleado
+  // 2. SEGURIDAD — revocar todas las galletas de terminal del empleado (C-11)
+  // Primero: capturar los id_terminal con galletas activas ANTES de revocar
+  // (necesario para detectar terminales que quedarán huérfanos)
+  const { data: galletasActivas } = await supabaseAdmin
+    .from('galletas_terminales')
+    .select('id_terminal')
+    .eq('id_nombre', id_nombre)
+    .is('revocado_at', null)
+
   await supabaseAdmin
     .from('galletas_terminales')
     .update({ revocado_at: new Date().toISOString() })
     .eq('id_nombre', id_nombre)
     .is('revocado_at', null)
+
+  // 2.5. GUARD TERMINAL HUÉRFANO — emitir aviso crítico si algún terminal quedó sin galleta (C-11)
+  //      Ignorar registros con revocado_at IS NOT NULL — solo cuentan las galletas activas.
+  if (galletasActivas && galletasActivas.length > 0) {
+    const terminalesUnicos = [...new Set(galletasActivas.map(g => g.id_terminal))]
+
+    for (const idTerminal of terminalesUnicos) {
+      const { count } = await supabaseAdmin
+        .from('galletas_terminales')
+        .select('id_galleta', { count: 'exact', head: true })
+        .eq('id_terminal', idTerminal)
+        .is('revocado_at', null)
+
+      if (count === 0) {
+        // El terminal no tiene ningún usuario asignado — inaccessible hasta intervención manual
+        await supabaseAdmin.from('doc11_avisos').insert({
+          id:               crypto.randomUUID(),
+          tipo_aviso:       'terminal_sin_galleta',
+          destinatario_rol: 'coordinacion',
+          contenido: {
+            id_terminal:    idTerminal,
+            causa:          'baja_empleado',
+            id_nombre_baja: id_nombre,
+            mensaje:        'El terminal quedó sin galleta activa tras la baja del empleado. '
+                          + 'Requiere reasignación (rpc_revocar_y_reemitir_galleta) o intervención física. '
+                          + 'Ver runbooks.md RB-05.',
+          },
+          id_nombre_emisor: 'system',
+          leido:            false,
+          created_at:       new Date().toISOString(),
+        })
+      }
+    }
+  }
 
   // 3. OPERATIVA — eliminar asignaciones de cuadrante futuras
   //    Solo fechas estrictamente futuras; los turnos pasados/presentes quedan
@@ -4349,8 +4587,7 @@ Deno.serve(async (req) => {
     .eq('id_nombre', id_nombre)
     .gt('fecha', hoy)
 
-  // 4. Auditar
-  const callerIdNombre = await getCallerIdNombre(jwtClaims)
+  // 4. Auditar (callerIdNombre ya calculado en el paso previo a 0.5)
   await supabaseAdmin.from('auditoria_rbac').insert({
     tipo_evento: 'baja_empleado',
     id_nombre,
@@ -4369,9 +4606,11 @@ Deno.serve(async (req) => {
 
 | Acción | Efecto | Reversible |
 |---|---|---|
+| **Guard Doc-8** (paso 0.5) | Si existe un parte activo, `forzar_checkout_administrativo` cierra el Doc-8 con `km_fin = NULL` y `cerrado_por_admin_id` del gestor que ejecuta la baja. Se ejecuta **antes** de revocar el JWT. | No — queda registro en auditoria_rbac con `checkout_forzado` |
 | `fichas_empleados.activo = false` | El `set_claims` devuelve `app_claims: {}` en el próximo JWT — acceso denegado a todo | Solo por RRHH/gerencia (UPDATE manual) |
 | `signOut global` | JWT actuales invalidados inmediatamente; el access token en memoria expira según TTL | No — requiere nuevo login |
 | `galletas_terminales revocado_at` | Terminales físicos quedan sin acceso permanente — piden PIN o credenciales | Solo reemitiendo nueva galleta |
+| **Aviso terminal huérfano** (paso 2.5) | Si algún terminal queda con 0 galletas activas tras la revocación, se inserta un aviso crítico `terminal_sin_galleta` en `doc11_avisos` dirigido a coordinación. Ver `runbooks.md RB-05`. (C-11) | Resolución: coordinación reasigna galleta o intervención física |
 | `cuadrante_turnos DELETE fecha > hoy` | Turnos futuros eliminados — el coordinador debe reasignar si aplica | No (requiere reasignación manual) |
 | Datos históricos | Intactos — Doc-1, Doc-8, doc2/3, auditoria_rbac, auditoria_inventario | Inmutables por diseño |
 
@@ -4672,3 +4911,993 @@ GRANT EXECUTE ON FUNCTION rpc_alta_vehiculo TO authenticated;
 | Condición técnica inicial | `'operativo'` — asume que el vehículo llega en condiciones; responsable_flota puede cambiarla |
 | Estado operativo inicial | `'inactivo'` — no puede activarse hasta tener al menos una galleta de terminal asignada |
 | Offline | No apto — alta de vehículo requiere confirmación atómica en DB |
+
+---
+
+## 54. Limpieza de Huérfanos — Edge Cron `ef_cron_cleanup_orphans` (B-03)
+
+### 54.1 Propósito
+
+Detecta y elimina entradas en `auth.users` que no tienen fila correspondiente en
+`fichas_empleados`. Estos huérfanos pueden originarse si `ef_alta_empleado` falla
+después de crear el usuario en Auth pero antes de completar el INSERT en
+`fichas_empleados`. El rollback explícito de §50.3 cubre la mayoría de casos, pero
+un fallo de red o un kill del proceso puede producir un huérfano que no se limpia en
+el mismo request. Este cron actúa como red de seguridad diaria.
+
+### 54.2 Frecuencia
+
+Diaria, **04:00 UTC** — una hora después de `ef_cron_rgpd` para no competir por
+recursos con la purga RGPD.
+
+### 54.3 Implementación
+
+```typescript
+// supabase/functions/ef-cron-cleanup-orphans/index.ts
+
+Deno.serve(async (_req) => {
+  let page = 1
+  let deletedCount = 0
+
+  while (true) {
+    // 1. Listar usuarios de auth.users paginando de 1000 en 1000
+    const { data: authList, error: listError } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 1000,
+    })
+    if (listError) throw listError
+    if (!authList.users.length) break
+
+    // 2. Filtrar solo usuarios del dominio interno (excluir cuentas de servicio externas)
+    const internos = authList.users.filter(u => u.email?.endsWith('@u24.internal'))
+    if (!internos.length) {
+      if (authList.users.length < 1000) break
+      page++
+      continue
+    }
+
+    // 3. Consultar cuáles tienen fila en fichas_empleados
+    const authIds = internos.map(u => u.id)
+    const { data: fichas } = await supabaseAdmin
+      .from('fichas_empleados')
+      .select('auth_user_id')
+      .in('auth_user_id', authIds)
+
+    const fichaIds = new Set(fichas?.map(f => f.auth_user_id) ?? [])
+
+    // 4. Eliminar los que no tienen ficha
+    const orphans = internos.filter(u => !fichaIds.has(u.id))
+    for (const orphan of orphans) {
+      const { error: delError } = await supabaseAdmin.auth.admin.deleteUser(orphan.id)
+      if (!delError) {
+        deletedCount++
+        console.log(`Huérfano eliminado: ${orphan.email} (${orphan.id})`)
+      } else {
+        console.error(`Error eliminando huérfano ${orphan.id}:`, delError.message)
+      }
+    }
+
+    if (authList.users.length < 1000) break
+    page++
+  }
+
+  console.log(`ef_cron_cleanup_orphans completado: ${deletedCount} huérfanos eliminados`)
+  return new Response(
+    JSON.stringify({ deleted: deletedCount }),
+    { headers: { 'Content-Type': 'application/json' } }
+  )
+})
+```
+
+### 54.4 Invariantes de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| Filtro de email | Solo actúa sobre usuarios con email `*@u24.internal` — protege cuentas externas o de servicio |
+| Paginación | 1000 usuarios por lote — escala linealmente con el tamaño de la plantilla |
+| Idempotente | Si no hay huérfanos, no realiza ninguna operación destructiva |
+| Sin auditoria_rbac | Los huérfanos no tienen `id_nombre` en `fichas_empleados` — no se puede auditar en la tabla estándar. El log de consola de la EF es el registro. |
+| Complementario | El rollback en §50.3 minimiza la tasa de aparición; este cron es la red de seguridad |
+
+---
+
+## 55. Cambio de Rol — RPC `rpc_cambiar_rol` (B-05)
+
+### 55.1 Propósito
+
+Permite a RRHH o gerencia cambiar el rol de un empleado activo. El cambio tiene
+efecto inmediato en `fichas_empleados`. Sin embargo, el JWT activo del empleado
+mantiene sus claims anteriores hasta que expire o haga refresh (TTL típico: 1 hora).
+Si se necesita efecto inmediato, RRHH debe forzar el logout del empleado via
+`ef_revocar_sesion_usuario` (§7 de rls_y_rpcs.md).
+
+### 55.2 Firma
+
+```sql
+rpc_cambiar_rol(p_id_nombre TEXT, p_nuevo_rol TEXT) RETURNS VOID
+```
+
+**Auth:** JWT con `can_manage_rrhh` — roles `rrhh`, `gerencia`.
+
+### 55.3 Implementación
+
+```sql
+-- supabase/migrations/0001_init.sql (añadir junto al resto de RPCs)
+
+CREATE OR REPLACE FUNCTION rpc_cambiar_rol(
+  p_id_nombre TEXT,
+  p_nuevo_rol TEXT
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_rol_actual          TEXT;
+  v_caller_id_nombre    TEXT;
+BEGIN
+  -- 1. Validar claim
+  IF NOT claim('can_manage_rrhh') THEN
+    RAISE EXCEPTION 'insufficient_privilege';
+  END IF;
+
+  -- 2. Validar enum de roles operativos (invitado no es asignable manualmente)
+  IF p_nuevo_rol NOT IN (
+    'tes', 'due', 'medico',
+    'flota', 'responsable_flota',
+    'coordinacion',
+    'logistica', 'responsable_logistica',
+    'rrhh', 'gerencia'
+  ) THEN
+    RAISE EXCEPTION 'rol_invalido: %', p_nuevo_rol USING ERRCODE = '22023';
+  END IF;
+
+  -- 3. Verificar que el empleado existe y está activo
+  SELECT rol INTO v_rol_actual
+  FROM fichas_empleados
+  WHERE id_nombre = p_id_nombre AND activo = true;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'empleado_no_encontrado_o_inactivo' USING ERRCODE = 'P0002';
+  END IF;
+
+  -- 4. No-op si el rol ya es el destino
+  IF v_rol_actual = p_nuevo_rol THEN
+    RETURN;
+  END IF;
+
+  -- 5. Obtener id_nombre del llamador para auditoría
+  SELECT id_nombre INTO v_caller_id_nombre
+  FROM fichas_empleados
+  WHERE auth_user_id = auth.uid();
+
+  -- 6. Cambiar el rol
+  UPDATE fichas_empleados
+  SET rol = p_nuevo_rol
+  WHERE id_nombre = p_id_nombre;
+
+  -- 7. Auditar
+  INSERT INTO auditoria_rbac (tipo_evento, id_nombre, id_terminal, metadata, created_at)
+  VALUES (
+    'cambio_rol',
+    p_id_nombre,
+    NULL,
+    jsonb_build_object(
+      'rol_anterior',  v_rol_actual,
+      'rol_nuevo',     p_nuevo_rol,
+      'ejecutado_por', v_caller_id_nombre
+    ),
+    NOW()
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION rpc_cambiar_rol TO authenticated;
+```
+
+### 55.4 Reglas de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| RBAC | `can_manage_rrhh` — solo rrhh y gerencia |
+| Enum de roles | Los 10 roles operativos (excluye `invitado` — se asigna solo via cookie de emergencia) |
+| No-op | Si `rol_actual == p_nuevo_rol`, la RPC retorna sin modificar ni auditar |
+| JWT inmediato | El cambio NO invalida el JWT activo del empleado. Para efecto inmediato, combinar con `ef_revocar_sesion_usuario` |
+| Auditoría | `auditoria_rbac` evento `cambio_rol` con `rol_anterior`, `rol_nuevo` y `ejecutado_por` |
+| Error empleado inexistente | `ERRCODE P0002` → HTTP 400 desde Supabase |
+| Error rol inválido | `ERRCODE 22023` → HTTP 400 |
+
+---
+
+## 56. Borrado RGPD bajo demanda — `rpc_solicitar_borrado_rgpd` + `rpc_procesar_borrado_rgpd` (B-10, B-11)
+
+### 56.1 Propósito y marco legal
+
+El cron `ef_cron_rgpd` (§52) gestiona la purga automática por plazos de retención.
+Este módulo cubre el **derecho al olvido individual** (RGPD Art. 17): una persona
+interesada solicita la eliminación de sus datos antes de que expire el plazo automático.
+
+El proceso es deliberadamente manual en dos fases para garantizar trazabilidad:
+1. **Solicitud** (`rpc_solicitar_borrado_rgpd`): registra la solicitud y queda en estado `'pendiente'`.
+2. **Ejecución** (`rpc_procesar_borrado_rgpd`): un segundo responsable revisa y ejecuta la purga.
+
+**Regla de oro:** ningún borrado RGPD elimina filas completas de doc2/doc3. Solo elimina
+claves PII del JSONB `datos_paciente` con el operador `-`. Los datos estadísticos y
+operativos del documento se conservan íntegramente.
+
+### 56.2 `rpc_solicitar_borrado_rgpd`
+
+**Auth:** `can_manage_rbac` — roles `coordinacion`, `gerencia`.
+**Llamada via:** `supabase.rpc('rpc_solicitar_borrado_rgpd', { ... })`
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_solicitar_borrado_rgpd(
+  p_tipo_solicitud  TEXT,   -- 'borrado_clinico' | 'borrado_empleado'
+  p_identificador   TEXT,   -- id_doc (UUID) para clínico; id_nombre para empleado
+  p_motivo          TEXT    -- justificación legal — obligatorio
+) RETURNS UUID              -- id de la solicitud creada
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_solicitud_id    UUID := gen_random_uuid();
+  v_caller_id_nombre TEXT;
+BEGIN
+  -- 1. Validar claim
+  IF NOT claim('can_manage_rbac') THEN
+    RAISE EXCEPTION 'insufficient_privilege';
+  END IF;
+
+  -- 2. Validar tipo de solicitud
+  IF p_tipo_solicitud NOT IN ('borrado_clinico', 'borrado_empleado') THEN
+    RAISE EXCEPTION 'tipo_solicitud_invalido: %', p_tipo_solicitud USING ERRCODE = '22023';
+  END IF;
+
+  -- 3. Validar que el motivo no esté vacío
+  IF length(trim(p_motivo)) < 10 THEN
+    RAISE EXCEPTION 'motivo_demasiado_corto' USING ERRCODE = '22023';
+  END IF;
+
+  -- 4. Obtener id_nombre del solicitante
+  SELECT id_nombre INTO v_caller_id_nombre
+  FROM fichas_empleados
+  WHERE auth_user_id = auth.uid();
+
+  -- 5. Registrar solicitud
+  INSERT INTO solicitudes_rgpd (
+    id, tipo_solicitud, identificador, estado,
+    motivo, solicitado_por, timestamp_solicitud
+  ) VALUES (
+    v_solicitud_id, p_tipo_solicitud, p_identificador, 'pendiente',
+    p_motivo, v_caller_id_nombre, NOW()
+  );
+
+  RETURN v_solicitud_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION rpc_solicitar_borrado_rgpd TO authenticated;
+```
+
+### 56.3 `rpc_procesar_borrado_rgpd`
+
+**Auth:** `can_manage_rbac` — roles `coordinacion`, `gerencia`.
+**Llamada via:** `supabase.rpc('rpc_procesar_borrado_rgpd', { ... })`
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_procesar_borrado_rgpd(
+  p_solicitud_id    UUID,
+  p_notas           TEXT DEFAULT NULL   -- observaciones del procesador (opcional)
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_solicitud       solicitudes_rgpd%ROWTYPE;
+  v_caller_id_nombre TEXT;
+  -- Claves PII exactas — sincronizar con ef_cron_rgpd §52.2 si el esquema JSONB evoluciona
+  CLAVES_PII CONSTANT text[] := ARRAY[
+    'nombre', 'apellidos', 'dni', 'cip', 'sip',
+    'direccion', 'telefono', 'email', 'fecha_nacimiento_exacta'
+  ];
+BEGIN
+  -- 1. Validar claim
+  IF NOT claim('can_manage_rbac') THEN
+    RAISE EXCEPTION 'insufficient_privilege';
+  END IF;
+
+  -- 2. Obtener y validar la solicitud
+  SELECT * INTO v_solicitud
+  FROM solicitudes_rgpd
+  WHERE id = p_solicitud_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'solicitud_no_encontrada' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_solicitud.estado != 'pendiente' THEN
+    RAISE EXCEPTION 'solicitud_ya_procesada: estado=%', v_solicitud.estado
+      USING ERRCODE = '55000';  -- idempotencia: no procesar dos veces
+  END IF;
+
+  -- 3. Obtener id_nombre del ejecutor
+  SELECT id_nombre INTO v_caller_id_nombre
+  FROM fichas_empleados
+  WHERE auth_user_id = auth.uid();
+
+  -- 4. Ejecutar la purga según el tipo
+  IF v_solicitud.tipo_solicitud = 'borrado_clinico' THEN
+    -- ─────────────────────────────────────────────────────────────────────────
+    -- BORRADO CLÍNICO: UPDATE JSONB — NUNCA DELETE de la fila
+    -- El campo datos_paciente pierde solo las claves PII; el resto se conserva.
+    -- Se aplica al doc identificado por p_identificador en todas las tablas
+    -- clínicas relevantes (solo una tendrá el id, las demás actualizan 0 filas).
+    -- ─────────────────────────────────────────────────────────────────────────
+
+    -- doc2: informes SVB
+    UPDATE doc2_informes_svb
+       SET datos_paciente = datos_paciente - CLAVES_PII
+     WHERE id_doc = v_solicitud.identificador::uuid
+       AND datos_paciente ?| CLAVES_PII;  -- no-op si ya fue purgado
+
+    -- doc3: informes SVA
+    UPDATE doc3_informes_sva
+       SET datos_paciente = datos_paciente - CLAVES_PII
+     WHERE id_doc = v_solicitud.identificador::uuid
+       AND datos_paciente ?| CLAVES_PII;
+
+    -- doc4: consentimientos — nullificar Blob de firma (no es JSONB con claves)
+    UPDATE doc4_consentimientos
+       SET datos_firma = NULL
+     WHERE id_doc = v_solicitud.identificador::uuid
+       AND datos_firma IS NOT NULL;
+
+    -- doc5: rechazos de alta — idem
+    UPDATE doc5_rechazos_alta
+       SET datos_firma = NULL
+     WHERE id_doc = v_solicitud.identificador::uuid
+       AND datos_firma IS NOT NULL;
+
+  ELSIF v_solicitud.tipo_solicitud = 'borrado_empleado' THEN
+    -- ─────────────────────────────────────────────────────────────────────────
+    -- BORRADO EMPLEADO: seudoanonimización — NUNCA DELETE de la fila
+    -- id_nombre se conserva intacto (FK en tablas inmutables).
+    -- DNI: se reemplaza por su SHA-256 hex para mantener unicidad y auditoría
+    --      sin exponer el valor real. Requiere extensión pgcrypto.
+    -- ─────────────────────────────────────────────────────────────────────────
+    UPDATE fichas_empleados
+       SET nombre_real = 'ANONIMIZADO',
+           dni         = encode(digest(dni::bytea, 'sha256'), 'hex')
+     WHERE id_nombre = v_solicitud.identificador
+       AND nombre_real != 'ANONIMIZADO';  -- idempotente — no re-hashear un hash
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'empleado_no_encontrado: %', v_solicitud.identificador
+        USING ERRCODE = 'P0002';
+    END IF;
+  END IF;
+
+  -- 5. Marcar solicitud como procesada
+  UPDATE solicitudes_rgpd
+     SET estado              = 'procesada',
+         timestamp_procesado = NOW(),
+         procesado_por       = v_caller_id_nombre,
+         notas_procesamiento = p_notas
+   WHERE id = p_solicitud_id;
+
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION rpc_procesar_borrado_rgpd TO authenticated;
+```
+
+### 56.4 Reglas de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| Dos fases | Solicitar ≠ Ejecutar — el doble paso permite revisión y evita borrados accidentales. El mismo usuario puede hacer ambas acciones si tiene el claim. |
+| Flujo de aprobación | La UI debe mostrar solicitudes pendientes a los responsables. El procesador decide ejecutar o denegar (UPDATE `estado = 'denegada'` desde UI directamente). |
+| Borrado clínico | Solo JSONB subtraction operator `- CLAVES_PII` en `datos_paciente`. Las 4 tablas se intentan; solo la que contiene el `id_doc` actualiza filas. |
+| doc4/doc5 | No tienen `datos_paciente` JSONB sino `datos_firma` (Blob URL). Se nullifica en el borrado clínico del mismo documento. |
+| Borrado empleado | `nombre_real = 'ANONIMIZADO'` (marcador distinto del cron `'EMPLEADO_ANONIMIZADO'`). DNI → SHA-256 hex via `pgcrypto`. `id_nombre` intacto — es FK en tablas inmutables. |
+| Idempotencia | Guard `nombre_real != 'ANONIMIZADO'` evita re-hashear un hash. Guard `datos_paciente ?| CLAVES_PII` evita re-actualizar documentos ya purgados. |
+| pgcrypto | La función `digest()` requiere `CREATE EXTENSION IF NOT EXISTS pgcrypto` en la migración. Supabase Pro lo incluye por defecto. |
+| RBAC | `can_manage_rbac` — coordinacion y gerencia. RRHH no tiene este claim; si se requiere, añadir `OR claim('can_manage_rrhh')` en ambas RPCs. |
+| Trazabilidad | `solicitudes_rgpd` es inmutable (RLS DELETE = FALSE). Queda registro de quién solicitó, quién procesó, cuándo y con qué notas. |
+
+---
+
+## 57. Baja de Vehículo — RPC `rpc_baja_vehiculo` (C-05)
+
+### 57.1 Propósito
+
+Dar de baja un vehículo de la flota de forma controlada, bloqueando la operación si
+el vehículo está actualmente desplegado en un DRP activo. El vehículo queda en
+`condicion_tecnica = 'dado_de_baja'` y ya no aparece en ningún flujo operativo.
+El registro histórico (dotaciones_drp, Doc-8 pasados, auditoria_inventario) permanece intacto.
+
+### 57.2 RPC `rpc_baja_vehiculo`
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_baja_vehiculo(
+  p_matricula  TEXT,
+  p_motivo     TEXT DEFAULT NULL
+)
+RETURNS VOID AS $$
+DECLARE
+  v_condicion TEXT;
+  v_pilot_id  TEXT;
+BEGIN
+  -- 1. Verificar permisos (responsable_flota, gerencia)
+  IF NOT (claim('can_manage_fleet') OR claim('can_manage_rbac')) THEN
+    RAISE EXCEPTION 'insufficient_privilege'
+      USING HINT = '403',
+            DETAIL = 'Solo responsable_flota o gerencia pueden dar de baja vehículos.';
+  END IF;
+
+  -- 2. Bloquear la fila del vehículo (FOR UPDATE previene race conditions)
+  SELECT condicion_tecnica, pilot_id
+    INTO v_condicion, v_pilot_id
+    FROM vehiculos
+   WHERE matricula = p_matricula
+     FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'vehiculo_no_encontrado'
+      USING HINT   = '404',
+            DETAIL = format('No existe vehículo con matrícula "%s".', p_matricula);
+  END IF;
+
+  -- 3. Idempotencia: ya dado de baja
+  IF v_condicion = 'dado_de_baja' THEN
+    RAISE EXCEPTION 'vehiculo_ya_de_baja'
+      USING HINT   = '409',
+            DETAIL = 'El vehículo ya está dado de baja.';
+  END IF;
+
+  -- 4. Guard DRP activo (C-05): bloquear si está desplegado en un DRP en curso
+  IF EXISTS (
+    SELECT 1 FROM dotaciones_drp
+     WHERE matricula        = p_matricula
+       AND timestamp_salida IS NULL
+  ) THEN
+    RAISE EXCEPTION 'vehiculo_en_drp_activo'
+      USING HINT   = '409',
+            DETAIL = 'El vehículo está desplegado en un DRP activo. '
+                     'Finalizar o cancelar el DRP antes de dar de baja el vehículo.';
+  END IF;
+
+  -- 5. Guard pilot activo: no dar de baja con parte de trabajo abierto
+  IF v_pilot_id IS NOT NULL THEN
+    RAISE EXCEPTION 'vehiculo_con_pilot_activo'
+      USING HINT   = '409',
+            DETAIL = 'El vehículo tiene un parte de trabajo activo. '
+                     'Forzar el checkout (forzar_checkout_administrativo) antes de dar de baja.';
+  END IF;
+
+  -- 6. Dar de baja
+  UPDATE vehiculos
+     SET condicion_tecnica = 'dado_de_baja',
+         estado_operativo  = 'inactivo'
+   WHERE matricula = p_matricula;
+
+  -- 7. Auditoría
+  INSERT INTO auditoria_rbac (tipo_evento, id_nombre, metadata, created_at)
+  VALUES (
+    'baja_vehiculo',
+    (SELECT id_nombre FROM fichas_empleados WHERE auth_user_id = auth.uid()),
+    jsonb_build_object('matricula', p_matricula, 'motivo', p_motivo),
+    NOW()
+  );
+
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION rpc_baja_vehiculo TO authenticated;
+```
+
+### 57.3 Guards resumen
+
+| Condición | Error | HTTP hint |
+|---|---|---|
+| Sin claim `can_manage_fleet` ni `can_manage_rbac` | `insufficient_privilege` | 403 |
+| Matrícula no existe en `vehiculos` | `vehiculo_no_encontrado` | 404 |
+| `condicion_tecnica = 'dado_de_baja'` | `vehiculo_ya_de_baja` | 409 |
+| Existe fila en `dotaciones_drp` con `timestamp_salida IS NULL` | `vehiculo_en_drp_activo` | 409 |
+| `pilot_id IS NOT NULL` en `vehiculos` | `vehiculo_con_pilot_activo` | 409 |
+
+### 57.4 Flujo de desbloqueo de guards
+
+```
+vehiculo_en_drp_activo   → Coordinación cancela o finaliza el DRP primero
+vehiculo_con_pilot_activo → Coordinación ejecuta forzar_checkout_administrativo primero
+```
+
+El orden correcto para una baja de vehículo en operación es:
+1. Cancelar o finalizar el DRP (si aplica)
+2. Forzar checkout del pilot (si aplica)
+3. Ejecutar `rpc_baja_vehiculo`
+
+### 57.5 RBAC
+
+`SECURITY DEFINER`. `can_manage_fleet` (roles: `responsable_flota`, `gerencia`) o
+`can_manage_rbac` (gerencia). Ver `rls_y_rpcs.md §25`.
+
+---
+
+## 58. Resolución de Solicitudes de Desbloqueo — `rpc_aprobar_desbloqueo` + `rpc_rechazar_desbloqueo` (C-06)
+
+### 58.1 Propósito
+
+Cierra el flujo de `solicitudes_desbloqueo` (F-04): cuando un empleado solicita
+desbloquear un terminal bloqueado via `rpc_solicitar_desbloqueo` (§12 en rls_y_rpcs.md),
+la solicitud queda en `estado = 'pendiente'`. Sin estas RPCs, la solicitud podía expirar
+pero nunca aprobarse ni rechazarse de forma controlada.
+
+Ambas RPCs son `SECURITY DEFINER` y validan explícitamente el claim del invocador
+como primera instrucción del cuerpo (coordinacion o gerencia).
+
+### 58.2 Tabla objetivo — columnas relevantes de `solicitudes_desbloqueo`
+
+```
+id_solicitud          UUID         PK
+id_terminal           TEXT         FK  — SHA-256 fingerprint del terminal
+id_nombre_solicitante TEXT         FK → fichas_empleados
+motivo                TEXT
+estado                TEXT         'pendiente' | 'aprobada' | 'rechazada' | 'expirada'
+id_nombre_revisor     TEXT NULL    FK → fichas_empleados — NULL hasta resolución
+created_at            TIMESTAMPTZ
+expires_at            TIMESTAMPTZ  — TTL de la solicitud (24 h); el cron marca 'expirada'
+```
+
+### 58.3 RPC `rpc_aprobar_desbloqueo`
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_aprobar_desbloqueo(
+  p_solicitud_id UUID
+)
+RETURNS VOID AS $$
+DECLARE
+  v_estado_actual       TEXT;
+  v_id_terminal         TEXT;
+  v_revisor_id_nombre   TEXT;
+BEGIN
+  -- 1. Guard de claim — primera instrucción (C-06)
+  IF NOT claim('can_manage_rbac') THEN
+    RAISE EXCEPTION 'insufficient_privilege'
+      USING HINT   = '403',
+            DETAIL = 'Solo coordinacion o gerencia pueden aprobar solicitudes de desbloqueo.';
+  END IF;
+
+  -- 2. Bloquear y leer la solicitud (FOR UPDATE — previene doble aprobación concurrente)
+  SELECT estado, id_terminal
+    INTO v_estado_actual, v_id_terminal
+    FROM solicitudes_desbloqueo
+   WHERE id_solicitud = p_solicitud_id
+     FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'solicitud_no_encontrada'
+      USING HINT = '404';
+  END IF;
+
+  -- 3. Guard de estado — solo 'pendiente' puede aprobarse
+  IF v_estado_actual != 'pendiente' THEN
+    RAISE EXCEPTION 'solicitud_no_pendiente'
+      USING HINT   = '409',
+            DETAIL = format(
+              'La solicitud está en estado "%s" — solo las pendientes pueden aprobarse.',
+              v_estado_actual
+            );
+  END IF;
+
+  -- 4. Identificar al revisor
+  SELECT id_nombre INTO v_revisor_id_nombre
+    FROM fichas_empleados WHERE auth_user_id = auth.uid();
+
+  -- 5. Marcar como aprobada
+  UPDATE solicitudes_desbloqueo
+     SET estado            = 'aprobada',
+         id_nombre_revisor = v_revisor_id_nombre
+   WHERE id_solicitud = p_solicitud_id;
+
+  -- 6. Notificar al terminal via pg_notify (Supabase Realtime lo entrega al canal del terminal)
+  PERFORM pg_notify(
+    'desbloqueo_terminal',
+    json_build_object(
+      'tipo',         'desbloqueo_aprobado',
+      'id_terminal',  v_id_terminal,
+      'revisor',      v_revisor_id_nombre,
+      'solicitud_id', p_solicitud_id
+    )::text
+  );
+
+  -- 7. Auditoría
+  INSERT INTO auditoria_rbac (tipo_evento, id_nombre, metadata, created_at)
+  VALUES (
+    'desbloqueo_aprobado',
+    v_revisor_id_nombre,
+    jsonb_build_object(
+      'solicitud_id', p_solicitud_id,
+      'id_terminal',  v_id_terminal
+    ),
+    NOW()
+  );
+
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION rpc_aprobar_desbloqueo TO authenticated;
+```
+
+### 58.4 RPC `rpc_rechazar_desbloqueo`
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_rechazar_desbloqueo(
+  p_solicitud_id    UUID,
+  p_motivo_rechazo  TEXT DEFAULT NULL
+)
+RETURNS VOID AS $$
+DECLARE
+  v_estado_actual     TEXT;
+  v_id_terminal       TEXT;
+  v_revisor_id_nombre TEXT;
+BEGIN
+  -- 1. Guard de claim — primera instrucción (C-06)
+  IF NOT claim('can_manage_rbac') THEN
+    RAISE EXCEPTION 'insufficient_privilege'
+      USING HINT   = '403',
+            DETAIL = 'Solo coordinacion o gerencia pueden rechazar solicitudes de desbloqueo.';
+  END IF;
+
+  -- 2. Bloquear y leer la solicitud
+  SELECT estado, id_terminal
+    INTO v_estado_actual, v_id_terminal
+    FROM solicitudes_desbloqueo
+   WHERE id_solicitud = p_solicitud_id
+     FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'solicitud_no_encontrada'
+      USING HINT = '404';
+  END IF;
+
+  -- 3. Guard de estado — solo 'pendiente' puede rechazarse
+  IF v_estado_actual != 'pendiente' THEN
+    RAISE EXCEPTION 'solicitud_no_pendiente'
+      USING HINT   = '409',
+            DETAIL = format(
+              'La solicitud está en estado "%s" — solo las pendientes pueden rechazarse.',
+              v_estado_actual
+            );
+  END IF;
+
+  -- 4. Identificar al revisor
+  SELECT id_nombre INTO v_revisor_id_nombre
+    FROM fichas_empleados WHERE auth_user_id = auth.uid();
+
+  -- 5. Marcar como rechazada
+  UPDATE solicitudes_desbloqueo
+     SET estado            = 'rechazada',
+         id_nombre_revisor = v_revisor_id_nombre
+   WHERE id_solicitud = p_solicitud_id;
+
+  -- 6. Notificar al terminal (para mostrar banner "Desbloqueo denegado")
+  PERFORM pg_notify(
+    'desbloqueo_terminal',
+    json_build_object(
+      'tipo',            'desbloqueo_rechazado',
+      'id_terminal',     v_id_terminal,
+      'motivo_rechazo',  p_motivo_rechazo,
+      'solicitud_id',    p_solicitud_id
+    )::text
+  );
+
+  -- 7. Auditoría
+  INSERT INTO auditoria_rbac (tipo_evento, id_nombre, metadata, created_at)
+  VALUES (
+    'desbloqueo_rechazado',
+    v_revisor_id_nombre,
+    jsonb_build_object(
+      'solicitud_id',   p_solicitud_id,
+      'id_terminal',    v_id_terminal,
+      'motivo_rechazo', p_motivo_rechazo
+    ),
+    NOW()
+  );
+
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION rpc_rechazar_desbloqueo TO authenticated;
+```
+
+### 58.5 Reglas de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| Claim de primera línea | `claim('can_manage_rbac')` cubre `coordinacion` y `gerencia` — exactamente el scope del revisor |
+| FOR UPDATE en paso 2 | Previene que dos revisores aprueben/rechacen simultáneamente la misma solicitud |
+| Estados finales | `'aprobada'` y `'rechazada'` son terminales — el guard del paso 3 bloquea reintentos |
+| `'expirada'` | No es aprobable ni rechazable — el cron de purge ya la cerró; el guard del paso 3 la bloquea |
+| pg_notify canal | `'desbloqueo_terminal'` — el frontend filtra por `id_terminal` en el payload |
+| RLS UPDATE = USING(FALSE) | La UPDATE directa de `solicitudes_desbloqueo` queda bloqueada a usuarios JWT; el único path son estas RPCs SECURITY DEFINER |
+| Auditoría | `desbloqueo_aprobado` / `desbloqueo_rechazado` en `auditoria_rbac` — añadir al enum de `tipo_evento` |
+
+Ver `rls_y_rpcs.md §26` para el resumen de RBAC y la policy actualizada.
+
+---
+
+## 59. Cambio de Contraseña por el Empleado — `useCambiarPassword` + `ef_renovar_offline_session` (C-10)
+
+### 59.1 Propósito y contexto
+
+Cualquier empleado autenticado puede cambiar su propia contraseña online sabiendo
+la contraseña actual (no es lo mismo que recuperación — ver ADR-004 para el caso
+de contraseña olvidada). La operación involucra dos sistemas que deben mantenerse
+sincronizados:
+
+1. **Supabase Auth** — almacena el hash de la contraseña para autenticación online.
+2. **`u24_offline_session`** (localStorage) — almacena un hash PBKDF2 de la contraseña
+   calculado en el servidor durante el check-in, necesario para la verificación offline
+   en modo degradado (§25.2). **Si este hash no se actualiza tras el cambio de contraseña,
+   el próximo login offline fallará.**
+
+> ⚠️ **El gotcha crítico (C-10):** `supabase.auth.updateUser({ password })` actualiza
+> la contraseña en Supabase Auth pero **no toca `u24_offline_session`**. El cliente
+> debe obtener una nueva sesión offline firmada (con el hash de la nueva contraseña)
+> y reemplazar el valor en localStorage de forma atómica en la misma transacción de UI.
+> Si este paso se omite, el terminal quedará inaccesible en modo offline hasta el
+> próximo check-in online.
+
+### 59.2 Hook de cliente `useCambiarPassword`
+
+```typescript
+// hooks/useCambiarPassword.ts
+
+interface CambiarPasswordResult {
+  success: boolean
+  error?: 'contrasena_actual_incorrecta' | 'contrasena_nueva_invalida' | 'offline_session_error' | 'error_desconocido'
+}
+
+async function cambiarPassword(
+  contrasenaActual: string,
+  contrasenaNueva:  string
+): Promise<CambiarPasswordResult> {
+
+  // Validación de cliente (no sustituye al guard del servidor)
+  if (contrasenaNueva.length < 8) {
+    return { success: false, error: 'contrasena_nueva_invalida' }
+  }
+  if (contrasenaNueva === contrasenaActual) {
+    return { success: false, error: 'contrasena_nueva_invalida' }
+  }
+
+  // PASO 1 — Verificar contraseña actual via Supabase Auth
+  // (supabase.auth.updateUser no valida la contraseña actual — esta es la forma canónica)
+  const idNombre = useAuthStore.getState().idNombre       // ej. 'tes_demo'
+  const email    = `${idNombre}@u24.internal`
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email,
+    password: contrasenaActual,
+  })
+  if (signInError) return { success: false, error: 'contrasena_actual_incorrecta' }
+
+  // PASO 2 — Actualizar contraseña en Supabase Auth
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: contrasenaNueva,
+  })
+  if (updateError) return { success: false, error: 'error_desconocido' }
+
+  // PASO 3 — Refrescar u24_offline_session con el hash de la nueva contraseña
+  // ⚠️ CRÍTICO: si este paso falla, el login offline dejará de funcionar.
+  const deviceId = useTerminalStore.getState().idTerminal  // fingerprint SHA-256 del terminal
+  const { data: offlinePayload, error: efError } = await supabase.functions.invoke(
+    'ef-renovar-offline-session',
+    { body: { nuevaContrasena: contrasenaNueva, deviceId } }
+  )
+  if (efError || !offlinePayload?.signed_payload) {
+    // El cambio de Supabase Auth fue exitoso; el offline session no pudo actualizarse.
+    // El usuario puede seguir logando online. Se le avisa del impacto offline.
+    return { success: true, error: 'offline_session_error' }
+  }
+
+  // PASO 4 — Reemplazar u24_offline_session en localStorage (atómico desde perspectiva de UI)
+  localStorage.setItem('u24_offline_session', offlinePayload.signed_payload)
+
+  return { success: true }
+}
+```
+
+**UX en caso de `offline_session_error`:**
+```
+Toast de advertencia (no error):
+"Contraseña actualizada correctamente.
+ ⚠️ No se pudo actualizar la sesión offline. El acceso en modo sin conexión
+ puede no estar disponible hasta el próximo inicio de turno."
+```
+
+### 59.3 Edge Function `ef_renovar_offline_session`
+
+Genera un nuevo payload de sesión offline firmado con el hash de la nueva contraseña.
+La estructura y firma del payload son idénticas al generado durante el check-in (§25.2).
+
+```typescript
+// supabase/functions/ef-renovar-offline-session/index.ts
+
+Deno.serve(async (req) => {
+  // 1. Autenticación — JWT requerido (el usuario debe estar online y autenticado)
+  const jwtClaims = await verifyJWT(req)
+  if (!jwtClaims) return errorResponse(401, 'jwt_requerido')
+
+  const { nuevaContrasena, deviceId } = await req.json()
+  if (!nuevaContrasena || !deviceId) return errorResponse(422, 'parametros_requeridos')
+  if (nuevaContrasena.length < 8) return errorResponse(422, 'contrasena_invalida')
+
+  // 2. Generar salt y PBKDF2 hash de la nueva contraseña (en el servidor — nunca en cliente)
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(nuevaContrasena), 'PBKDF2', false, ['deriveBits']
+  )
+  const hashBits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 },
+    keyMaterial,
+    256
+  )
+  const passwordHash = btoa(String.fromCharCode(...new Uint8Array(hashBits)))
+  const passwordSalt = btoa(String.fromCharCode(...salt))
+
+  // 3. Construir payload (shift timing: desde ahora + 36h)
+  const shiftStart = new Date().toISOString()
+  const expiresAt  = new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString()
+
+  const payload = {
+    user_id:         jwtClaims.id_nombre,
+    role:            jwtClaims.rol,
+    claims_snapshot: jwtClaims.app_claims,
+    shift_start:     shiftStart,
+    expires_at:      expiresAt,
+    device_id:       deviceId,
+    password_hash:   passwordHash,
+    password_salt:   passwordSalt,
+  }
+
+  // 4. Firmar con clave HMAC del Vault (misma lógica que el check-in)
+  const hmacKey  = await getVaultHmacKey()   // helper — lee la clave diaria de Supabase Vault
+  const payloadB64 = btoa(JSON.stringify(payload))
+  const signature  = await computeHMAC(hmacKey, payloadB64)
+  const signedPayload = `${payloadB64}.${signature}`
+
+  return new Response(JSON.stringify({ signed_payload: signedPayload }), {
+    status: 200, headers: { 'Content-Type': 'application/json' }
+  })
+})
+```
+
+### 59.4 Impacto en otros terminales
+
+Si el empleado usa múltiples terminales (inusual en U24, pero posible):
+- `u24_offline_session` solo se actualiza en el terminal donde ejecuta el cambio.
+- Los demás terminales mantienen el hash de la contraseña anterior → login offline fallará.
+- **Solución operativa:** el empleado debe hacer un check-in online en cada terminal
+  para regenerar el `u24_offline_session` con el nuevo hash. Los check-ins online
+  siempre funcionan (Supabase Auth tiene el nuevo hash actualizado en el paso 2).
+
+### 59.5 UI — Formulario de cambio de contraseña
+
+```
+Ubicación: black_column → Ajustes → Seguridad → Cambiar contraseña
+
+Campos:
+  Contraseña actual: [password]
+  Nueva contraseña:  [password]  — mín. 8 chars
+  Confirmar nueva:   [password]  — debe coincidir
+
+Botón: [ Guardar contraseña ]
+
+Estados posibles:
+  ✅ Éxito completo → Toast: "Contraseña actualizada."
+  ⚠️ Éxito parcial (offline_session_error) → Toast de advertencia (§59.2)
+  ❌ Contraseña actual incorrecta → Error inline en el campo
+  ❌ Nueva contraseña inválida → Error inline (demasiado corta o igual a la actual)
+```
+
+### 59.6 Relación con ef_reset_password (RRHH)
+
+`ef_reset_password` (rls_y_rpcs.md §8) es para cuando RRHH resetea la contraseña de
+otro empleado. No actualiza `u24_offline_session` del empleado afectado — tras el reset,
+el empleado debe hacer el primer login online para regenerar su sesión offline.
+Ver ADR-004 para la política completa de recuperación de contraseña.
+
+---
+
+## 60. Autoridad de Timestamps — Servidor vs. Cliente (C-14)
+
+### 60.1 Principio
+
+En un sistema offline-first, las RPCs reciben payloads que fueron generados en el
+cliente horas o días antes de su sincronización. Es crítico distinguir qué timestamps
+genera el servidor y cuáles deben respetarse del payload del cliente:
+
+- **Servidor genera:** timestamps de trazabilidad técnica — registran cuándo llegó
+  el dato a la base de datos, no cuándo ocurrió el evento.
+- **Cliente aporta:** timestamps transaccionales — registran cuándo ocurrió el evento
+  real en el campo (apertura de box, cierre de sesión clínica, etc.).
+
+Usar `NOW()` para campos transaccionales en RPCs borra la evidencia de cuándo ocurrió
+el evento real y es un **bug silencioso** en sistemas offline-first.
+
+### 60.2 Tabla de autoridad por campo
+
+| Campo | Autoridad | Valor en la RPC | Motivo |
+|---|---|---|---|
+| `created_at` | Servidor | `NOW()` | Momento en que el registro llega a la DB |
+| `timestamp_sincronizacion` | Servidor | `NOW()` | Momento en que la cola offline se drena |
+| `updated_at` | Servidor | `NOW()` | Momento de la última modificación en DB |
+| `timestamp_checkin` | Servidor | `NOW()` | El checkin ocurre en la petición RPC, no offline |
+| `timestamp_checkout` | Servidor | `NOW()` | El checkout ocurre en la petición RPC, no offline |
+| `timestamp_inicio_preparacion` | Servidor | `NOW()` en transición DRP | Transición atómica en el servidor |
+| `timestamp_inicio_curso` | Servidor | `NOW()` en transición DRP | Transición atómica en el servidor |
+| `timestamp_fin_drp` | Servidor | `NOW()` en cierre DRP | Cierre atómico en el servidor |
+| `timestamp_apertura` | **Cliente** | `p_timestamp_apertura` (payload IndexedDB) | El box se abrió offline — momento real del campo |
+| `timestamp_cierre` | **Cliente** | `p_timestamp_cierre` (payload IndexedDB) | El box se cerró offline — momento real del campo |
+| `timestamp_evento` | **Cliente** | `p_timestamp_evento` (payload IndexedDB) | Evento registrado offline — momento real del campo |
+| `timestamp_apertura` (Doc-8) | **Cliente** | `p_timestamp_apertura` | La guardia empezó offline |
+| `timestamp_fin_consulta` | Servidor / CASE | `NOW()` si `en_consulta`, NULL si no | Ver §20 filiación |
+
+### 60.3 Regla de implementación en RPCs
+
+```sql
+-- ✅ CORRECTO: servidor aporta trazabilidad, cliente aporta el momento real
+INSERT INTO psa_sesiones (
+  id,
+  timestamp_apertura,           -- del cliente (evento real offline)
+  timestamp_cierre,             -- del cliente (evento real offline)
+  timestamp_sincronizacion,     -- del servidor (cuándo llegó a la DB)
+  created_at                    -- del servidor (cuándo llegó a la DB)
+) VALUES (
+  gen_random_uuid(),
+  p_timestamp_apertura,         -- parámetro de entrada desde payload IndexedDB
+  p_timestamp_cierre,           -- parámetro de entrada desde payload IndexedDB
+  NOW(),                        -- servidor
+  NOW()                         -- servidor
+);
+
+-- ❌ INCORRECTO: borra la evidencia de cuándo ocurrió el evento real
+INSERT INTO psa_sesiones (
+  timestamp_apertura,
+  timestamp_sincronizacion
+) VALUES (
+  NOW(),     -- ERROR: registra cuándo sincronizó, no cuándo abrió el box
+  NOW()
+);
+```
+
+### 60.4 Validación de rango de timestamps en el cliente
+
+Antes de encolar una mutación offline, el cliente valida que los timestamps del payload
+sean razonables para detectar errores de reloj del dispositivo:
+
+```typescript
+// Validación ejecutada en useOfflineQueue.enqueue() para campos transaccionales
+const MAX_OFFLINE_AGO_MS = 72 * 60 * 60 * 1000  // máx. 72h hacia atrás
+const MAX_FUTURE_MS       =  5 * 60 * 1000        // máx. 5 min hacia adelante
+
+function validarTimestampTransaccional(ts: string, campo: string): void {
+  const epochMs = new Date(ts).getTime()
+  const now     = Date.now()
+  if (isNaN(epochMs))
+    throw new Error(`timestamp_invalido: ${campo}`)
+  if (epochMs < now - MAX_OFFLINE_AGO_MS)
+    throw new Error(`timestamp_demasiado_antiguo: ${campo} (${ts})`)
+  if (epochMs > now + MAX_FUTURE_MS)
+    throw new Error(`timestamp_en_el_futuro: ${campo} (${ts})`)
+}
+```
+
+Mutaciones con timestamp inválido se marcan como `'fallido'` inmediatamente sin
+encolarse — no se reintentan, se notifica al usuario para revisión manual.
+
+### 60.5 Huso horario y almacenamiento
+
+Todos los timestamps se almacenan en UTC (`TIMESTAMPTZ`). La conversión a
+`Europe/Madrid` para visualización en la UI es responsabilidad del cliente
+(`Intl.DateTimeFormat` con `timeZone: 'Europe/Madrid'`). Las RPCs no devuelven
+strings localizados — siempre devuelven `TIMESTAMPTZ` en UTC. Ver ADR-005 para
+la configuración de timezone en el servidor PostgreSQL.

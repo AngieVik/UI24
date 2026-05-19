@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"D:\\\\Proyectos\\\\UI24\" -Recurse -Filter \"*.md\")",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}

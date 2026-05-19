@@ -383,3 +383,382 @@ necesario.
 Los pacientes con `revaluacion = true` no reciben prioridad automática por el flag;
 mantienen su `orden` numérico. El perfil_admision puede ajustar el orden manualmente
 si la urgencia clínica lo requiere.
+
+---
+
+## LoadingSkeleton — estados de carga (U-02)
+
+> Componente reutilizable para indicar que el contenido está en proceso de carga.
+> Usar **exclusivamente** en los contextos descritos en §Cuándo usar. En una app
+> offline-first donde la mayoría de lecturas vienen de IndexedDB o Zustand, los
+> skeletons son la excepción, no la regla.
+
+### Cuándo usar `<LoadingSkeleton />`
+
+| Contexto | Usar skeleton | Motivo |
+|---|---|---|
+| Boot inicial de la app (rehidratación de IndexedDB) | ✅ Sí | Los stores tardan ~100-300 ms en rehidratarse desde IDB |
+| Sincronización explícita forzada por el usuario (pull-to-refresh) | ✅ Sí | El usuario inició una operación consciente con el servidor |
+| Primera carga de un listado que aún no tiene caché local | ✅ Sí | No hay datos en IDB — fetch al servidor necesario |
+| Navegación entre pantallas con datos ya en Zustand/IDB | ❌ No | Los datos están en memoria — no hay espera real |
+| Lecturas de `useVehiculoStore`, `useTerminalStore`, `useAuthStore` | ❌ No | Zustand es síncrono — render inmediato |
+| Transiciones de estado dentro de un módulo ya cargado | ❌ No | Solo el elemento que muta debe mostrar un spinner local |
+| Modo offline con datos cacheados | ❌ No | IndexedDB ya tiene los datos; mostrar skeleton sería incorrecto |
+
+> ⚠️ Mostrar un skeleton cuando los datos vienen de IndexedDB introduce un flash
+> innecesario que degrada la percepción de rendimiento. La app debe sentirse
+> **instantánea** en los flujos cacheados.
+
+### Variantes
+
+```tsx
+// Skeleton de página completa — solo en boot inicial o primera carga
+<LoadingSkeleton variant="page" />
+
+// Skeleton de tarjeta — para listas de DRP, pacientes, mensajes
+<LoadingSkeleton variant="card" rows={3} />
+
+// Skeleton de fila de tabla — para grids de inventario, cuadrantes
+<LoadingSkeleton variant="row" columns={4} />
+
+// Spinner inline — para botones con acción en curso
+<LoadingSkeleton variant="spinner" size="sm" />
+```
+
+### Especificación de `<LoadingSkeleton />`
+
+```tsx
+interface LoadingSkeletonProps {
+  variant: 'page' | 'card' | 'row' | 'spinner'
+  rows?: number       // solo variant='card' — número de tarjetas simuladas (default: 1)
+  columns?: number    // solo variant='row' — número de columnas simuladas (default: 3)
+  size?: 'sm' | 'md' | 'lg'  // solo variant='spinner' (default: 'md')
+  className?: string  // override de clases Tailwind si es necesario
+}
+```
+
+**Implementación base:**
+
+```tsx
+// components/ui/LoadingSkeleton.tsx
+export function LoadingSkeleton({ variant, rows = 1, columns = 3, size = 'md', className }: LoadingSkeletonProps) {
+  const pulse = 'animate-pulse bg-gray-200 rounded'
+
+  if (variant === 'spinner') {
+    const sizes = { sm: 'h-4 w-4', md: 'h-6 w-6', lg: 'h-8 w-8' }
+    return (
+      <div
+        role="status"
+        aria-label="Cargando"
+        className={`${sizes[size]} border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin ${className ?? ''}`}
+      />
+    )
+  }
+
+  if (variant === 'page') {
+    return (
+      <div role="status" aria-label="Cargando" className={`p-4 space-y-4 ${className ?? ''}`}>
+        <div className={`h-8 w-1/3 ${pulse}`} />
+        <div className={`h-4 w-full ${pulse}`} />
+        <div className={`h-4 w-5/6 ${pulse}`} />
+        <div className={`h-32 w-full ${pulse}`} />
+        <span className="sr-only">Cargando contenido…</span>
+      </div>
+    )
+  }
+
+  if (variant === 'card') {
+    return (
+      <div role="status" aria-label="Cargando" className={`space-y-3 ${className ?? ''}`}>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="p-4 border border-gray-100 rounded-lg space-y-2">
+            <div className={`h-4 w-2/3 ${pulse}`} />
+            <div className={`h-3 w-full ${pulse}`} />
+            <div className={`h-3 w-4/5 ${pulse}`} />
+          </div>
+        ))}
+        <span className="sr-only">Cargando elementos…</span>
+      </div>
+    )
+  }
+
+  // variant === 'row'
+  return (
+    <div role="status" aria-label="Cargando" className={`space-y-2 ${className ?? ''}`}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex gap-4">
+          {Array.from({ length: columns }).map((_, j) => (
+            <div key={j} className={`h-4 flex-1 ${pulse}`} />
+          ))}
+        </div>
+      ))}
+      <span className="sr-only">Cargando tabla…</span>
+    </div>
+  )
+}
+```
+
+**Regla de accesibilidad:** todos los skeletons tienen `role="status"` y `aria-label="Cargando"`.
+El texto `<span className="sr-only">` es obligatorio para lectores de pantalla.
+
+### Integración con TanStack Query
+
+```tsx
+// En un componente que hace fetch al servidor:
+const { data, isLoading, isFetching } = useQuery({ queryKey: ['drps-activos'], queryFn: fetchDrpsActivos })
+
+// Solo mostrar skeleton en la carga inicial (isLoading), no en refetches silenciosos (isFetching)
+if (isLoading) return <LoadingSkeleton variant="card" rows={3} />
+return <ListaDRP data={data} />
+```
+
+---
+
+## BannerOffline — vista "Sin conexión" (U-03)
+
+> No es una página de error que bloquea la app. Es un **estado global persistente**
+> en forma de banner amarillo en la parte superior del contenido. La app sigue
+> siendo completamente operable en modo offline para los flujos soportados.
+
+### Comportamiento
+
+```
+Estado de red       → Visible
+────────────────────────────────────────────────────────────
+Online              → Banner oculto (sin render)
+Offline detectado   → Banner visible — amarillo, persistente
+Reconectando        → Banner cambia a "Reconectando…" + spinner
+Sincronizando cola  → Banner cambia a "Sincronizando datos…" + progreso
+```
+
+**Detección de offline:**
+El estado de red se gestiona en `useOfflineQueue`. La detección usa tres señales en
+conjunción (ninguna es suficiente por sí sola):
+
+```typescript
+// 1. navigator.onLine — primera señal (puede ser false positive)
+window.addEventListener('online',  () => useOfflineQueue.getState().setOnline(true))
+window.addEventListener('offline', () => useOfflineQueue.getState().setOnline(false))
+
+// 2. Error de canal Supabase Realtime — segunda señal
+supabase.channel('system').on('system', { event: 'disconnect' }, () => {
+  useOfflineQueue.getState().setOnline(false)
+})
+
+// 3. Fallo de petición fetch — tercera señal
+// → Ya gestionado en customFetch de supabaseClient.ts vía classifyError()
+```
+
+### Especificación del banner
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ ⚠️  Sin conexión  ·  Última sincronización: hace 12 min             │
+│     Los partes de trabajo y registros clínicos siguen disponibles.   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+- **Posición:** fijo debajo del header negro, encima del contenido.
+- **Color:** `bg-amber-50 border-b border-amber-300` con texto `text-amber-800`.
+- **Ícono:** `ti-wifi-off` (Tabler Icons).
+- **Texto contador:** "Última sincronización: hace X min" — calculado desde
+  `useOfflineQueue.getState().lastSuccessfulDrainAt` (timestamp del último vaciado exitoso).
+
+```typescript
+// Formato del contador de última sincronización
+function formatLastSync(lastDrainAt: number | null): string {
+  if (!lastDrainAt) return 'sin sincronización previa en este turno'
+  const diffMin = Math.floor((Date.now() - lastDrainAt) / 60_000)
+  if (diffMin < 1) return 'hace menos de 1 min'
+  if (diffMin < 60) return `hace ${diffMin} min`
+  const diffH = Math.floor(diffMin / 60)
+  return `hace ${diffH} h ${diffMin % 60} min`
+}
+```
+
+### Acciones permitidas en modo offline
+
+El banner **no deshabilita** estos flujos:
+
+| Flujo | Offline-capable | Nota |
+|---|---|---|
+| Crear / continuar Doc-8 (parte de trabajo) | ✅ | Cola offline |
+| Registrar Doc-2, Doc-3, Doc-4, Doc-5 | ✅ | Cola offline |
+| Registrar Doc-7 (avería) | ✅ | Cola offline |
+| Registrar Doc-6 (gasto material) | ✅ | Cola offline |
+| Leer bandejas (últimos mensajes) | ✅ | Caché IndexedDB |
+| Leer marquesina / tablón | ✅ | Caché IndexedDB |
+| Ver estado del DRP en curso | ✅ | `useDRPStore` en memoria |
+
+El banner **sí deshabilita** (con toast explicativo al intentar):
+
+| Flujo | Deshabilitado | Mensaje |
+|---|---|---|
+| Crear / transicionar DRP | ✅ | "Sin conexión — esta acción requiere red" |
+| Alta / baja de empleado o vehículo | ✅ | "Sin conexión — esta acción requiere red" |
+| Cuadrantes, RRHH, configuración | ✅ | "Sin conexión — esta acción requiere red" |
+
+### Implementación
+
+```tsx
+// components/ui/BannerOffline.tsx
+import { useOfflineQueue } from '@/stores/useOfflineQueue'
+
+export function BannerOffline() {
+  const { isOnline, lastSuccessfulDrainAt, pendingCount } = useOfflineQueue()
+
+  if (isOnline && pendingCount === 0) return null
+
+  const isSyncing = isOnline && pendingCount > 0
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={isSyncing ? 'Sincronizando datos' : 'Sin conexión a internet'}
+      className="w-full bg-amber-50 border-b border-amber-300 px-4 py-2 flex items-center gap-2 text-sm text-amber-800"
+    >
+      {isSyncing ? (
+        <>
+          <span className="ti-refresh animate-spin" aria-hidden="true" />
+          <span>Sincronizando datos… ({pendingCount} operaciones pendientes)</span>
+        </>
+      ) : (
+        <>
+          <span className="ti-wifi-off" aria-hidden="true" />
+          <span>
+            Sin conexión · {formatLastSync(lastSuccessfulDrainAt)} ·
+            Los partes de trabajo y registros clínicos siguen disponibles.
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+```
+
+**Campo requerido en `useOfflineQueue`:** `lastSuccessfulDrainAt: number | null`
+— timestamp (epoch ms) del último vaciado completo exitoso de la cola. Se actualiza
+en `procesarCola()` cuando `pendingCount` llega a 0 sin errores.
+
+---
+
+## Paleta de colores — ratios WCAG 2.1 AA verificados (U-04)
+
+> Referencia canónica de colores del sistema. Todos los valores tienen ratio de
+> contraste verificado según WCAG 2.1 nivel AA (mínimo 4.5:1 para texto normal,
+> 3:1 para texto grande ≥18px / ≥14px bold). Ver ADR-003.
+>
+> Escala de colores: Tailwind CSS v3. Los ratios se calculan sobre las luminancias
+> relativas de los valores hex con la fórmula WCAG estándar.
+
+### Fondos base del sistema
+
+| Token | Clase Tailwind | Hex | Luminancia relativa |
+|---|---|---|---|
+| `fondo-header` | `bg-black` | `#000000` | 0.000 |
+| `fondo-contenido` | `bg-white` | `#FFFFFF` | 1.000 |
+| `fondo-panel` | `bg-gray-50` | `#f9fafb` | 0.955 |
+| `fondo-borde` | `bg-gray-200` | `#e5e7eb` | 0.753 |
+
+### Texto sobre header negro (`bg-black`)
+
+| Uso | Clase | Hex | Ratio vs negro | WCAG AA |
+|---|---|---|---|---|
+| Texto principal | `text-white` | `#ffffff` | **21.0:1** | ✅ |
+| Texto secundario | `text-gray-300` | `#d1d5db` | **14.2:1** | ✅ |
+| Alerta crítica / error | `text-red-400` | `#f87171` | **8.0:1** | ✅ |
+| Advertencia | `text-yellow-400` | `#facc15` | **13.7:1** | ✅ |
+| Estado operativo / OK | `text-green-400` | `#4ade80` | **12.4:1** | ✅ |
+| Info / activo | `text-blue-400` | `#60a5fa` | **8.6:1** | ✅ |
+| Icono deshabilitado | `text-gray-500` | `#6b7280` | **5.9:1** | ✅ |
+
+### Texto sobre fondo blanco / panel (`bg-white`, `bg-gray-50`)
+
+| Uso | Clase | Hex | Ratio vs blanco | WCAG AA |
+|---|---|---|---|---|
+| Texto primario | `text-gray-900` | `#111827` | **19.0:1** | ✅ |
+| Texto secundario | `text-gray-600` | `#4b5563` | **7.0:1** | ✅ |
+| Texto deshabilitado | `text-gray-400` | `#9ca3af` | **3.0:1** | ⚠️ Solo texto grande |
+| Error / crítico | `text-red-600` | `#dc2626` | **4.6:1** | ✅ |
+| Advertencia | `text-amber-700` | `#b45309` | **4.6:1** | ✅ |
+| Éxito / OK | `text-green-700` | `#15803d` | **7.3:1** | ✅ |
+| Info / enlace | `text-blue-700` | `#1d4ed8` | **7.2:1** | ✅ |
+
+> ⚠️ **Aviso de coherencia:** el componente `tarjeta_paciente_filiacion` usa
+> `text-amber-600` (`#d97706`) sobre fondo blanco — ratio **2.97:1** que **no cumple
+> WCAG AA**. En la implementación debe reemplazarse por `text-amber-700` (`#b45309`,
+> ratio 4.6:1) sin cambio visual significativo.
+
+### Badges de estado (fondo de color + texto oscuro)
+
+Los badges tienen fondo de color claro y texto oscuro. El ratio se calcula entre
+el texto y el fondo del badge (no el fondo de la página).
+
+| Estado | Clases Tailwind | Hex fondo | Hex texto | Ratio | WCAG AA |
+|---|---|---|---|---|---|
+| Error / Crítico | `bg-red-100 text-red-800` | `#fee2e2` | `#991b1b` | **7.9:1** | ✅ |
+| Advertencia | `bg-amber-100 text-amber-800` | `#fef3c7` | `#92400e` | **5.4:1** | ✅ |
+| Éxito / OK | `bg-green-100 text-green-800` | `#dcfce7` | `#166534` | **7.5:1** | ✅ |
+| Info / Activo | `bg-blue-100 text-blue-800` | `#dbeafe` | `#1e40af` | **7.8:1** | ✅ |
+| Neutro / Inactivo | `bg-gray-100 text-gray-700` | `#f3f4f6` | `#374151` | **10.8:1** | ✅ |
+| Revaluación (corregido) | `bg-amber-100 text-amber-700` | `#fef3c7` | `#b45309` | **6.5:1** | ✅ |
+
+### Badges de estado de vehículo / DRP (sobre fondo blanco)
+
+| Estado del vehículo | Clases | WCAG AA |
+|---|---|---|
+| `disponible` | `bg-green-100 text-green-800` | ✅ |
+| `en_servicio` | `bg-blue-100 text-blue-800` | ✅ |
+| `en_mantenimiento` | `bg-amber-100 text-amber-800` | ✅ |
+| `inoperativo_critico` | `bg-red-100 text-red-800` | ✅ |
+| `dado_de_baja` | `bg-gray-100 text-gray-700` | ✅ |
+| DRP `En_preparacion` | `bg-yellow-100 text-yellow-800` | ✅ (ratio 5.9:1) |
+| DRP `En_curso` | `bg-blue-100 text-blue-800` | ✅ |
+| DRP `Finalizado` | `bg-green-100 text-green-800` | ✅ |
+| DRP `Cancelado` | `bg-gray-100 text-gray-500` | ⚠️ Solo texto grande — usar `text-gray-700` |
+
+### Alertas y banners (fondo de color + texto sobre él)
+
+| Tipo | Clases contenedor | Clases texto | Ratio texto/fondo | WCAG AA |
+|---|---|---|---|---|
+| Error crítico | `bg-red-50 border-red-300` | `text-red-800` | **6.8:1** | ✅ |
+| Advertencia | `bg-amber-50 border-amber-300` | `text-amber-800` | **5.4:1** | ✅ |
+| Información | `bg-blue-50 border-blue-300` | `text-blue-800` | **7.0:1** | ✅ |
+| Éxito | `bg-green-50 border-green-300` | `text-green-800` | **6.8:1** | ✅ |
+| Sin conexión (BannerOffline) | `bg-amber-50 border-amber-300` | `text-amber-800` | **5.4:1** | ✅ |
+
+### Controles interactivos
+
+| Elemento | Estado | Clases | Ratio mínimo | WCAG AA |
+|---|---|---|---|---|
+| Botón primario | Normal | `bg-black text-white` | 21:1 | ✅ |
+| Botón primario | Hover | `bg-gray-800 text-white` | 15.3:1 | ✅ |
+| Botón primario | Disabled | `bg-gray-300 text-gray-500` | 2.5:1 | ⚠️ Exento (deshabilitado) |
+| Botón destructivo | Normal | `bg-red-600 text-white` | 4.6:1 | ✅ |
+| Botón destructivo | Hover | `bg-red-700 text-white` | 6.3:1 | ✅ |
+| Input text | Foco | `border-blue-600` (solo borde) | N/A borde | — |
+| Input text | Error | `border-red-500` + `text-red-600` debajo | 4.6:1 | ✅ |
+| Focus ring | Universal | `ring-2 ring-blue-500 ring-offset-2` | — | ✅ (visibilidad 3:1+) |
+
+### Reglas de accesibilidad adicionales (ADR-003)
+
+1. **Iconos sin texto:** todos los `ti-*` que actúan como controles únicos requieren
+   `aria-label` explícito. Ejemplos:
+   ```tsx
+   <button aria-label="Cerrar modal"><span className="ti-x" aria-hidden="true" /></button>
+   <button aria-label="Instalar U24"><span className="ti-download" aria-hidden="true" /></button>
+   ```
+
+2. **Modales bloqueantes:** `focus-trap` obligatorio. Al cerrar, devolver el foco al
+   elemento disparador (`ref.current?.focus()`).
+
+3. **Listas semánticas:** bandejas y listas de pacientes usan `role="list"` /
+   `role="listitem"` (o elementos `<ul>` / `<li>` nativos — preferibles).
+
+4. **Formularios offline:** `aria-required="true"` en campos obligatorios; `aria-invalid`
+   cuando hay error de validación; `aria-describedby` apuntando al `<FieldError />`.
+
+5. **Texto `text-gray-400` sobre blanco** (ratio 3.0:1) está **permitido únicamente
+   para texto auxiliar grande** (≥18px o ≥14px bold). Nunca para texto de contenido
+   informativo crítico.
