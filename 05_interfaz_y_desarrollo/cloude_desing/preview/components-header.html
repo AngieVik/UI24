@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Components · Header</title>
+<link rel="stylesheet" href="_card.css">
+<style>
+  body.card { padding: 0; }
+  .wrap { display: flex; flex-direction: column; }
+  .lab { padding: 16px 22px 8px; font-family: var(--font-cmd); font-weight: 700; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); }
+  .hd .hd__logo { display: inline-flex; align-items: center; gap: 8px; }
+  .hd .hd__logo img { width: 24px; height: 24px; }
+</style>
+</head>
+<body class="card">
+  <div class="wrap">
+    <span class="lab">Estado · sin navegación abierta</span>
+    <div class="hd">
+      <span class="hd__logo">U24</span>
+      <span class="hd__ticker">Recordatorio · ITV de la flota: comprobar fechas de validez antes del 30 de marzo. Marquesina actualizada por RRHH.</span>
+      <span class="hd__actions">
+        <span class="hd__icon hd__icon--unread"><i class="ti ti-mail"></i><span class="hd__dot"></span></span>
+        <span class="hd__icon"><i class="ti ti-mail"></i></span>
+      </span>
+    </div>
+    <span class="lab">Estado · con doc abierto · botón de atrás visible</span>
+    <div class="hd">
+      <span class="hd__logo">U24</span>
+      <span class="hd__ticker">Doc-8 Parte de trabajo · turno activo · pilot M. Álvarez</span>
+      <span class="hd__actions">
+        <span class="hd__icon"><i class="ti ti-mail"></i></span>
+        <span class="hd__icon hd__icon--unread"><i class="ti ti-arrow-left"></i></span>
+      </span>
+    </div>
+  </div>
+</body></html>

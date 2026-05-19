@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Brand · PWA icons</title>
+<link rel="stylesheet" href="_card.css">
+<style>
+  .icons-row { display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap; }
+  .icons-row figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .icons-row img {
+    background: #111111;
+    border-radius: 18%;
+    box-shadow: var(--shadow-1);
+  }
+  .icons-row figcaption {
+    font-family: var(--font-cmd);
+    font-weight: var(--w-bold);
+    font-size: 11px;
+    color: var(--fg-3);
+    letter-spacing: .02em;
+  }
+</style>
+</head>
+<body class="card">
+  <div class="col" style="gap:14px">
+    <div class="cap">Iconos maskable PWA · manifest.webmanifest</div>
+    <div class="icons-row">
+      <figure><img src="../assets/icon-48.png"  width="48"  height="48"><figcaption>48</figcaption></figure>
+      <figure><img src="../assets/icon-96.png"  width="72"  height="72"><figcaption>96</figcaption></figure>
+      <figure><img src="../assets/icon-192.png" width="96"  height="96"><figcaption>192</figcaption></figure>
+      <figure><img src="../assets/icon-512.png" width="128" height="128"><figcaption>512</figcaption></figure>
+    </div>
+  </div>
+</body></html>

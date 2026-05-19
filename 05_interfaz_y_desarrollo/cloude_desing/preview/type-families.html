@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Type · Familias</title>
+<link rel="stylesheet" href="_card.css">
+<style>
+  .pair { display: grid; grid-template-columns: 110px 1fr; gap: 20px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--border-1); }
+  .pair:last-child { border-bottom: none; }
+  .pair .tag { font-family: var(--font-cmd); font-weight: var(--w-bold); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-3); }
+  .pair .sample-1 { font-family: var(--font-cmd); font-weight: var(--w-bold); font-size: 30px; color: var(--fg-1); line-height: 1; }
+  .pair .sample-2 { font-family: var(--font-body); font-weight: 500; font-size: 16px; color: var(--fg-1); line-height: 1.4; }
+  .pair .use { font-family: var(--font-cmd); font-weight: 300; font-size: 11px; color: var(--fg-3); margin-top: 4px; }
+</style>
+</head>
+<body class="card">
+  <div class="pair">
+    <span class="tag">Mando</span>
+    <div>
+      <div class="sample-1">Barlow Condensed</div>
+      <div class="use">Navegación · etiquetas · matrículas · badges · alertas</div>
+    </div>
+  </div>
+  <div class="pair">
+    <span class="tag">Cuerpo</span>
+    <div>
+      <div class="sample-2">Barlow regular — cuerpos de formulario, descripciones largas y bloques de texto de más de 2 líneas.</div>
+      <div class="use">Solo cuando el bloque supera 2 líneas</div>
+    </div>
+  </div>
+</body></html>

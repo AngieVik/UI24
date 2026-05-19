@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Brand · Logo mark</title>
+<link rel="stylesheet" href="_card.css">
+<style>
+  body.card { padding: 0; }
+  .mark-card { display: grid; grid-template-columns: 220px 1fr; gap: 0; }
+  .mark-card .dark, .mark-card .light {
+    display: flex; align-items: center; justify-content: center;
+    padding: 28px; min-height: 200px;
+  }
+  .mark-card .dark  { background: var(--u24-column); }
+  .mark-card .dark  img { width: 96px; height: 96px; }
+  .mark-card .light { background: var(--bg-panel); border-left: 1px solid var(--border-1); padding: 22px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .mark-card .light img { width: 84px; height: 84px; }
+  .mark-card .light .meta-row { display: flex; gap: 16px; }
+  .mark-card .light .meta-row .col { gap: 2px; }
+</style>
+</head>
+<body class="card">
+  <div class="mark-card">
+    <div class="dark"><img src="../assets/u24-logo-mark.svg" alt="U24 logo"></div>
+    <div class="light">
+      <img src="../assets/u24-logo-mark.svg" alt="U24 logo">
+      <div class="meta-row">
+        <div class="col">
+          <span class="cap">Color de marca</span>
+          <span class="value">#FFD60A</span>
+        </div>
+        <div class="col">
+          <span class="cap">Uso</span>
+          <span class="value">Cabecera black_column</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body></html>

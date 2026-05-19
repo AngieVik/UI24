@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Colors · Núcleo de marca</title>
+<link rel="stylesheet" href="_card.css">
+<style>
+  .swatch .chip { height: 72px; }
+  .swatch--detail .chip { border: 1px solid var(--border-1); }
+</style>
+</head>
+<body class="card">
+  <div class="col" style="gap:12px">
+    <span class="cap">Paleta núcleo · 4 colores · 1 negro · 1 amarillo · 1 rojo · 1 blanco</span>
+    <div class="row" style="gap:10px">
+      <div class="swatch">
+        <div class="chip" style="background:#111111;color:#fff">111111</div>
+        <div class="meta">
+          <div class="name">Negro único</div>
+          <div class="hex">--u24-black · header + black_column</div>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background:#FFD60A;color:#111">FFD60A</div>
+        <div class="meta">
+          <div class="name">Amarillo vivo</div>
+          <div class="hex">--u24-yellow · acción · home_area</div>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background:#DC2626;color:#fff">DC2626</div>
+        <div class="meta">
+          <div class="name">Rojo · hover</div>
+          <div class="hex">--u24-red-hover · botón amarillo, acentos activos</div>
+        </div>
+      </div>
+      <div class="swatch swatch--detail">
+        <div class="chip" style="background:#FFFFFF;color:#111">FFFFFF</div>
+        <div class="meta">
+          <div class="name">Blanco detalle</div>
+          <div class="hex">--u24-white · texto sobre negro, separadores finos</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cap" style="margin-top:14px">En contexto · roles de cada color</div>
+    <div class="row" style="gap:8px">
+      <div style="flex:1;background:#111;color:#fff;padding:10px 12px;border-radius:6px;font-family:var(--font-cmd);font-weight:700;font-size:12px;display:flex;align-items:center;gap:10px;border:1px solid #FFD60A">
+        <span style="width:8px;height:8px;background:#FFD60A;border-radius:50%"></span>
+        Header · indicador · borde modal
+      </div>
+      <div style="flex:1;background:#FFD60A;color:#111;padding:10px 12px;border-radius:6px;font-family:var(--font-cmd);font-weight:700;font-size:12px;display:flex;align-items:center;gap:8px">
+        home_area · badge activo
+      </div>
+      <div style="background:#111;color:#fff;padding:10px 12px;border-radius:6px;font-family:var(--font-cmd);font-weight:700;font-size:12px">
+        Botón · negro/blanco
+      </div>
+      <div style="background:#111;color:#DC2626;padding:10px 12px;border-radius:6px;font-family:var(--font-cmd);font-weight:700;font-size:12px">
+        Destructivo
+      </div>
+    </div>
+  </div>
+</body></html>
