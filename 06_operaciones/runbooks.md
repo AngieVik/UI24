@@ -312,6 +312,324 @@ al menos dos galletas activas asignadas (pilot titular + backup).
 
 ---
 
+## RB-06 — DR drill trimestral: restore PITR a proyecto nuevo (C-02)
+
+**Severidad:** Ejercicio planificado — no incidente  
+**Cadencia:** Trimestral (cada 3 meses)  
+**Objetivo:** Medir el RTO real de una restauración PITR y validar que los datos del nuevo proyecto son íntegros y operativos.
+
+> Este runbook se ejecuta en un **entorno totalmente aislado** (nuevo proyecto Supabase
+> creado ad hoc). Nunca se toca el proyecto de producción durante el drill.
+
+### 1. Preparación (30 min antes del drill)
+
+```
+☐ Notificar al equipo técnico: "Drill DR el [fecha] a las [hora] UTC — no se toca producción"
+☐ Obtener acceso al Supabase Dashboard con rol Owner o Admin del proyecto de producción
+☐ Tener disponible un segundo proyecto Supabase vacío (o crear uno nuevo: "u24-dr-drill-YYYYMM")
+☐ Tener a mano SUPABASE_SERVICE_ROLE_KEY del proyecto DR (diferente del de producción)
+☐ Preparar las queries de verificación de integridad (ver §4)
+☐ Cronómetro listo — medir desde la primera acción hasta la verificación final
+```
+
+### 2. Procedimiento de restore
+
+**T+0:00 — Iniciar cronómetro**
+
+```
+1. Supabase Dashboard → Proyecto de producción → Database → Backups
+2. Seleccionar "Point in Time Recovery"
+3. Elegir un timestamp objetivo:
+   - Recomendado para el drill: 1 hora antes del inicio del drill
+   - En un incidente real: el timestamp anterior al evento destructivo
+4. En "Restore to":
+   - Seleccionar el proyecto DR vacío ("u24-dr-drill-YYYYMM")
+   - O crear un proyecto nuevo si la UI lo permite desde esta pantalla
+5. Confirmar la restauración
+```
+
+**T+XX — Esperar a que complete la restauración**
+
+Supabase notificará por email cuando el restore haya terminado. Tiempo típico: 5-20 min
+según el tamaño de la DB. Registrar el tiempo exacto.
+
+**T+YY — Restauración completada — iniciar verificación**
+
+```
+☐ Anotar tiempo de restauración: ____min (T+0 → restauración completa)
+```
+
+### 3. Verificación de integridad post-restore
+
+Conectar al proyecto DR con `SUPABASE_SERVICE_ROLE_KEY` del proyecto DR y ejecutar
+las siguientes queries en Supabase Studio → SQL Editor:
+
+```sql
+-- 1. Conteo básico de tablas críticas
+SELECT 'vehiculos'          AS tabla, COUNT(*) FROM vehiculos
+UNION ALL
+SELECT 'fichas_empleados',           COUNT(*) FROM fichas_empleados
+UNION ALL
+SELECT 'galletas_terminales',        COUNT(*) FROM galletas_terminales
+UNION ALL
+SELECT 'drps',                       COUNT(*) FROM drps
+UNION ALL
+SELECT 'inventario_vehiculo',        COUNT(*) FROM inventario_vehiculo
+UNION ALL
+SELECT 'doc8_partes_trabajo',        COUNT(*) FROM doc8_partes_trabajo
+UNION ALL
+SELECT 'auditoria_rbac',             COUNT(*) FROM auditoria_rbac;
+-- Comparar con los conteos de producción del momento del backup
+
+-- 2. Verificar que no hay fichas_empleados corruptas
+SELECT COUNT(*) FROM fichas_empleados WHERE id_nombre IS NULL OR rol IS NULL;
+-- Esperado: 0
+
+-- 3. Verificar integridad referencial básica (galletas sin dueño)
+SELECT COUNT(*) FROM galletas_terminales g
+  LEFT JOIN fichas_empleados e ON g.id_nombre = e.id_nombre
+ WHERE e.id_nombre IS NULL AND g.revocado_at IS NULL;
+-- Esperado: 0
+
+-- 4. Verificar que RLS está activo en las tablas críticas
+SELECT tablename, rowsecurity
+  FROM pg_tables
+ WHERE schemaname = 'public'
+   AND tablename IN ('fichas_empleados','galletas_terminales','inventario_vehiculo')
+   AND rowsecurity = FALSE;
+-- Esperado: 0 filas (todas con RLS activo)
+```
+
+### 4. Medición del RTO real
+
+```
+T+0:00  → Inicio del restore (click en "confirmar")
+T+XX:XX → Proyecto DR disponible (restore completo)
+T+YY:YY → Queries de integridad ejecutadas y verificadas
+T+ZZ:ZZ → Decisión: proyecto DR listo para recibir tráfico (hipotético)
+
+RTO real = T+ZZ:ZZ (tiempo total desde inicio hasta sistema operativo)
+SLA objetivo: ≤ 30 min (infraestructura.md §1.1)
+```
+
+### 5. Criterios de aceptación del drill
+
+| Criterio | Esperado | Resultado |
+|---|---|---|
+| Restore completado sin error | Sin errores en Dashboard | ⬜ Pass / ⬜ Fail |
+| Conteos de tablas coinciden con backup | Diferencia < 1% (por escrituras en el intervalo) | ⬜ Pass / ⬜ Fail |
+| RLS activo en todas las tablas críticas | 0 tablas con rowsecurity=FALSE | ⬜ Pass / ⬜ Fail |
+| RTO total ≤ 30 min | Tiempo total desde T+0 hasta verificación | ⬜ Pass / ⬜ Fail |
+| FK integrity sin orphans | 0 galletas huérfanas | ⬜ Pass / ⬜ Fail |
+
+### 6. Limpieza post-drill
+
+```
+☐ Eliminar el proyecto DR (Supabase Dashboard → Project Settings → Delete project)
+   — los datos son una copia de producción: deben destruirse
+☐ Revocar cualquier credencial temporal generada para el drill
+☐ Registrar el RTO medido en el issue tracker con etiqueta "dr-drill"
+☐ Si RTO > 30 min: abrir issue con prioridad P1 — revisar plan o procedimiento
+```
+
+### 7. Registro del drill
+
+```
+Fecha:                    ________________ UTC
+Participantes:            ________________
+Proyecto DR creado:       u24-dr-drill-________________
+Timestamp objetivo PITR:  ________________ UTC
+
+Tiempos medidos:
+  Inicio restore:         ________________
+  Restore completado:     ________________  (+____min)
+  Verificación OK:        ________________  (+____min)
+  RTO total:              ________________  min
+
+SLA ≤ 30 min:  ⬜ PASS  ⬜ FAIL — acción: ________________
+Proyecto DR eliminado: ⬜ Sí
+```
+
+---
+
+## RB-07 — Solicitud de supresión RGPD (derecho al olvido) (C-08)
+
+**Severidad:** P2 — Operativo (P1 si hay riesgo legal activo)  
+**SLA:** 30 días naturales desde la recepción de la solicitud verificada  
+**Responsable:** Gerencia + técnico de guardia
+
+### 1. Recepción y registro de la solicitud
+
+```
+Canal de entrada: email a privacidad@u24.internal (o el DPO designado)
+Información requerida en la solicitud:
+  - Nombre completo
+  - ID_nombre en el sistema (si lo conoce)
+  - Descripción de los datos que solicita suprimir
+  - Email de contacto para la comunicación post-borrado
+
+Acción inmediata:
+☐ Registrar la solicitud en el issue tracker con etiqueta "rgpd-supresion"
+☐ Anotar fecha de recepción (día 0 del SLA de 30 días)
+☐ Asignar a gerencia + técnico responsable
+```
+
+### 2. Verificación de identidad (obligatoria antes de cualquier borrado)
+
+La supresión afecta a datos reales de empleados. La identidad debe verificarse antes de actuar.
+
+**Método de verificación:**
+
+```
+Opción A (empleado activo en el sistema):
+  - El solicitante responde a un email enviado desde privacidad@u24.internal
+    a su dirección corporativa registrada en fichas_empleados.email
+  - Confirmar que el id_nombre coincide con el email corporativo
+
+Opción B (ex-empleado sin email corporativo activo):
+  - Solicitar DNI / pasaporte + documento que acredite la relación laboral anterior
+  - Verificación manual por gerencia
+  - Plazo adicional: hasta 10 días adicionales para la verificación documental
+    (el SLA de 30 días sigue corriendo desde la recepción, no desde la verificación)
+```
+
+```
+☐ Verificación completada — método: ________________
+☐ Identidad confirmada: ⬜ Sí  ⬜ No — solicitud rechazada (comunicar motivo)
+☐ Fecha de verificación: ________________
+```
+
+### 3. Evaluación de alcance
+
+Antes de borrar, identificar todos los datos del solicitante en el sistema:
+
+```sql
+-- Ejecutar en Supabase Studio con service_role
+-- Reemplazar 'ID_NOMBRE_SOLICITANTE' con el id_nombre real
+
+-- 1. Datos en fichas_empleados
+SELECT id_nombre, nombre_completo, email, rol, activo, created_at
+  FROM fichas_empleados WHERE id_nombre = 'ID_NOMBRE_SOLICITANTE';
+
+-- 2. Documentos asistenciales (Doc-1/2/3/4/5) — contienen PII de pacientes, no del empleado
+--    El empleado solo aparece como id_nombre_registrador
+SELECT 'doc1_asistencias' AS tabla, COUNT(*) FROM doc1_asistencias
+  WHERE id_nombre_registrador = 'ID_NOMBRE_SOLICITANTE'
+UNION ALL
+SELECT 'doc8_partes_trabajo', COUNT(*) FROM doc8_partes_trabajo
+  WHERE id_nombre_pilot = 'ID_NOMBRE_SOLICITANTE' OR id_nombre_carry = 'ID_NOMBRE_SOLICITANTE';
+
+-- 3. Registros de auditoría RBAC
+SELECT COUNT(*) FROM auditoria_rbac WHERE id_nombre = 'ID_NOMBRE_SOLICITANTE';
+
+-- 4. Sesiones offline almacenadas (u24_offline_session — si tabla existe en DB)
+-- Nota: u24_offline_session es IndexedDB en el cliente, no en DB server
+--   → requiere revocación de galletas para invalidar acceso futuro
+SELECT COUNT(*) FROM galletas_terminales WHERE id_nombre = 'ID_NOMBRE_SOLICITANTE';
+```
+
+### 4. Ejecución de la supresión
+
+```
+☐ PASO 1 — Revocar todas las galletas activas del empleado
+```
+```sql
+UPDATE galletas_terminales
+   SET revocado_at = NOW()
+ WHERE id_nombre = 'ID_NOMBRE_SOLICITANTE'
+   AND revocado_at IS NULL;
+```
+
+```
+☐ PASO 2 — Invalidar sesión offline en todos sus terminales
+   (broadcast Realtime al canal terminal:{id_terminal}:security para cada galleta — ver rls_y_rpcs.md §8)
+   Ejecutar: ef_reset_password con invalidate_offline=true O broadcast manual desde Edge Function
+
+☐ PASO 3 — Seudonimizar fichas_empleados (no se borra — rompe FK históricas)
+```
+```sql
+UPDATE fichas_empleados
+   SET nombre_completo = 'ELIMINADO_RGPD',
+       email           = NULL,
+       telefono        = NULL,
+       dni             = NULL,
+       -- Mantener: id_nombre (FK), rol (para auditoría histórica), activo = FALSE
+       activo          = FALSE,
+       fecha_baja      = COALESCE(fecha_baja, NOW()),
+       rgpd_suprimido_at = NOW()
+ WHERE id_nombre = 'ID_NOMBRE_SOLICITANTE';
+-- NOTA: requiere añadir columna rgpd_suprimido_at TIMESTAMPTZ NULL a fichas_empleados
+--       en migración 20260519_add_rgpd_suprimido_at.sql
+```
+
+```
+☐ PASO 4 — Registrar la supresión en auditoria_rbac
+```
+```sql
+INSERT INTO auditoria_rbac (id_evento, tipo_evento, id_nombre, metadata, created_at)
+VALUES (
+  gen_random_uuid(),
+  'rgpd_supresion',
+  'ID_NOMBRE_SOLICITANTE',
+  jsonb_build_object(
+    'solicitado_por',  'ID_NOMBRE_SOLICITANTE',
+    'verificacion',    'email_corporativo',
+    'responsable',     'gerencia_demo',
+    'issue_tracker',   'ISSUE_ID'
+  ),
+  NOW()
+);
+```
+
+```
+☐ PASO 5 — Verificar que no quedan datos PII directos
+```
+```sql
+SELECT nombre_completo, email, telefono, dni
+  FROM fichas_empleados WHERE id_nombre = 'ID_NOMBRE_SOLICITANTE';
+-- Esperado: 'ELIMINADO_RGPD', NULL, NULL, NULL
+```
+
+### 5. Comunicación post-borrado al solicitante
+
+Enviar email de confirmación desde `privacidad@u24.internal` dentro del SLA de 30 días:
+
+```
+Asunto: Confirmación de supresión de datos — U24
+
+Estimado/a [Nombre del solicitante],
+
+En respuesta a su solicitud de supresión de datos personales recibida el [fecha],
+le confirmamos que los datos de carácter personal asociados a su cuenta en el
+sistema U24 han sido eliminados o seudonimizados con fecha [fecha de ejecución].
+
+Datos eliminados:
+  - Nombre completo, correo electrónico, teléfono e identificación personal
+  - Accesos al sistema revocados
+
+Datos conservados por obligación legal o interés legítimo:
+  - Registros de auditoría de seguridad (auditoria_rbac) — período legal aplicable
+  - Referencias en documentos asistenciales históricos (solo el identificador de rol,
+    no los datos personales)
+
+Si tiene alguna duda, puede contactarnos en privacidad@u24.internal.
+
+Atentamente,
+[Nombre del responsable de privacidad]
+U24 — Gestión Operativa
+```
+
+### 6. Cierre del issue
+
+```
+☐ Fecha de comunicación enviada: ________________
+☐ Días transcurridos desde la solicitud: ____  (SLA 30 días: ⬜ Cumplido ⬜ Incumplido)
+☐ Cerrar el issue en el tracker con etiqueta "rgpd-supresion-completada"
+☐ Si SLA incumplido: notificar al DPO para evaluación de riesgo de multa AEPD
+```
+
+---
+
 ## Plantilla de postmortem
 
 Para cualquier incidente Nivel 1 resuelto, registrar en el issue tracker con esta estructura:

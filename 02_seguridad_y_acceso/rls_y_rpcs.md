@@ -1463,4 +1463,144 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_purge_plantilla_lineas
   AFTER UPDATE OF archivado ON catalogo_items
   FOR EACH ROW EXECUTE FUNCTION trg_fn_purge_plantilla_lineas();
+
+---
+
+## 29. `rpc_transferir_galleta` — traspaso de terminal en cambio de turno (C-09)
+
+**Tipo:** PostgreSQL RPC `SECURITY DEFINER`  
+**Claim requerido:** `can_manage_rbac` (coordinacion, gerencia)  
+**Propósito:** permite a coordinación traspasar la galleta permanente de un terminal a un nuevo empleado durante el cambio de turno, sin revocar el acceso antes de que el receptor esté presente.
+
+### 29.1 Firma
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_transferir_galleta(
+  p_id_terminal       TEXT,    -- fingerprint SHA-256 del terminal físico
+  p_id_nombre_cedente TEXT,    -- empleado que entrega el terminal
+  p_id_nombre_receptor TEXT,   -- empleado que recibe el terminal
+  p_coordinador_id    TEXT     -- coordinador que autoriza (extraído del JWT)
+)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+```
+
+### 29.2 Validaciones previas
+
+```sql
+-- 1. Claim del coordinador
+IF NOT claim('can_manage_rbac') THEN
+  RAISE EXCEPTION 'insufficient_privilege';
+END IF;
+
+-- 2. Cedente tiene galleta permanente activa en ese terminal
+IF NOT EXISTS (
+  SELECT 1 FROM galletas_terminales
+   WHERE id_terminal = p_id_terminal
+     AND id_nombre   = p_id_nombre_cedente
+     AND tipo        = 'permanente'
+     AND revocado_at IS NULL
+) THEN
+  RAISE EXCEPTION 'galleta_no_encontrada'
+    USING DETAIL = 'El cedente no tiene galleta permanente activa en este terminal';
+END IF;
+
+-- 3. Receptor existe y está activo
+IF NOT EXISTS (
+  SELECT 1 FROM fichas_empleados
+   WHERE id_nombre = p_id_nombre_receptor AND activo = TRUE
+) THEN
+  RAISE EXCEPTION 'receptor_no_encontrado'
+    USING DETAIL = 'El receptor no existe o está dado de baja';
+END IF;
+
+-- 4. Receptor no tiene ya galleta activa en este mismo terminal
+IF EXISTS (
+  SELECT 1 FROM galletas_terminales
+   WHERE id_terminal = p_id_terminal
+     AND id_nombre   = p_id_nombre_receptor
+     AND revocado_at IS NULL
+) THEN
+  RAISE EXCEPTION 'receptor_ya_tiene_galleta'
+    USING DETAIL = 'El receptor ya tiene galleta activa en este terminal';
+END IF;
+```
+
+### 29.3 Pasos transaccionales
+
+```sql
+BEGIN;
+
+-- 1. Revocar galleta del cedente
+UPDATE galletas_terminales
+   SET revocado_at = NOW()
+ WHERE id_terminal = p_id_terminal
+   AND id_nombre   = p_id_nombre_cedente
+   AND revocado_at IS NULL;
+
+-- 2. Crear nueva galleta permanente para el receptor
+INSERT INTO galletas_terminales
+  (id_galleta, id_terminal, id_nombre, tipo, creado_por, ultima_activacion_at)
+VALUES
+  (gen_random_uuid(), p_id_terminal, p_id_nombre_receptor, 'permanente', p_coordinador_id, NOW());
+
+-- 3. Auditar revocación del cedente
+INSERT INTO auditoria_rbac (id_evento, tipo_evento, id_nombre, id_terminal, metadata, created_at)
+VALUES (
+  gen_random_uuid(), 'galleta_revocada', p_id_nombre_cedente, p_id_terminal,
+  jsonb_build_object('motivo', 'traspaso_turno', 'nuevo_titular', p_id_nombre_receptor,
+                     'autorizado_por', p_coordinador_id),
+  NOW()
+);
+
+-- 4. Auditar emisión para el receptor
+INSERT INTO auditoria_rbac (id_evento, tipo_evento, id_nombre, id_terminal, metadata, created_at)
+VALUES (
+  gen_random_uuid(), 'galleta_emitida', p_id_nombre_receptor, p_id_terminal,
+  jsonb_build_object('motivo', 'traspaso_turno', 'cedente', p_id_nombre_cedente,
+                     'autorizado_por', p_coordinador_id),
+  NOW()
+);
+
+COMMIT;
+
+-- 5. Broadcast de invalidación al terminal (fuera de la transacción — no debe bloquearla)
+PERFORM pg_notify(
+  'terminal_security',
+  json_build_object(
+    'channel',  'terminal:' || p_id_terminal || ':security',
+    'event',    'offline_session_invalidated',
+    'payload',  json_build_object(
+      'id_nombre', p_id_nombre_cedente,
+      'reason',    'traspaso_turno'
+    )
+  )::text
+);
+
+RETURN jsonb_build_object('ok', true, 'nuevo_titular', p_id_nombre_receptor);
+```
+
+### 29.4 Comportamiento del cliente al recibir `offline_session_invalidated` con `reason: 'traspaso_turno'`
+
+1. Si `useAuthStore.idNombre === payload.id_nombre` (el cedente está logueado en este terminal):
+   - `idbDel('u24_offline_session')` — borrar hash PBKDF2 local
+   - `useAuthStore.clear()`
+   - Modal informativo (no bloqueante de emergencia): *"El terminal fue traspasado a otro empleado. Tu sesión ha finalizado."*
+   - Redirigir a `estado_0`
+2. El receptor debe hacer check-in en el terminal con sus propias credenciales — la nueva galleta permanente ya está registrada en la DB.
+
+### 29.5 Llamada desde el cliente
+
+```typescript
+const { error } = await supabase.rpc('rpc_transferir_galleta', {
+  p_id_terminal:        idTerminalFisico,
+  p_id_nombre_cedente:  idNombreCedente,
+  p_id_nombre_receptor: idNombreReceptor,
+  p_coordinador_id:     useAuthStore.getState().idNombre,
+})
+if (error) handleRpcError(error)
+```
+
+**Claim requerido en el JWT del llamante:** `can_manage_rbac: true`.  
+Roles que lo tienen: `coordinacion`, `gerencia`. Ver `rbac_y_permisos.md §ROLE_CLAIMS`.
 ```

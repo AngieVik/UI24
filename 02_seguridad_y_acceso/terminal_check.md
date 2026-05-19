@@ -162,3 +162,44 @@
   * Sin requisito de ID_nombre en checkin_on para mantener estado_1.
   * Objetivo: garantizar operatividad básica del terminal ante
     caídas de internet o fallos de base de datos durante el turno.
+
+* **Traspaso de terminal en cambio de turno (C-09)**
+
+  Flujo para cuando un empleado entrega el terminal físico a otro durante
+  el cambio de turno. El traspaso lo ejecuta el coordinador; no requiere
+  que ninguno de los dos empleados esté presente en la misma pantalla.
+
+  **Precondición:** el coordinador verifica que la cola offline del cedente
+  está vacía (`pendingCount === 0`). Si hay mutaciones pendientes, aparece
+  advertencia en el panel de coordinación.
+
+  **Desde el panel de coordinación (black_column → módulo coordinación):**
+
+  ```
+  1. Seleccionar terminal a traspasar (por id_terminal o matrícula del vehículo)
+  2. Seleccionar empleado cedente (autocompletado de fichas_empleados con galleta activa)
+  3. Seleccionar empleado receptor (autocompletado de fichas_empleados activos)
+  4. Confirmar en modal: "¿Traspasar terminal a [receptor]?"
+  5. Llamada: rpc_transferir_galleta (ver rls_y_rpcs.md §29 y logic.md §63)
+  ```
+
+  **En el terminal físico del cedente (automático):**
+
+  Si el cedente tiene sesión activa en el terminal en el momento del traspaso,
+  el canal `terminal:{id_terminal}:security` emite `offline_session_invalidated`
+  con `reason: 'traspaso_turno'`:
+  - Se borra `u24_offline_session` del cedente en IndexedDB
+  - Modal informativo: *"El terminal fue traspasado. Tu sesión ha finalizado."*
+  - Terminal vuelve a `estado_0`
+
+  **En el terminal físico del receptor (manual):**
+
+  El receptor ve `estado_0` normal y hace check-in con sus propias credenciales
+  (usuario + contraseña). La nueva galleta permanente ya está registrada en DB,
+  por lo que el login completa el vínculo galleta-terminal automáticamente.
+
+  **Restricciones:**
+  - Requiere que el coordinador tenga claim `can_manage_rbac` en su JWT.
+  - Solo traspasa galletas de tipo `permanente` (no temporales — las temporales expiran solas).
+  - La operación es irreversible: si hay un error en el receptor, se debe emitir una
+    nueva galleta via `rpc_revocar_y_reemitir_galleta` (rls_y_rpcs.md §7).

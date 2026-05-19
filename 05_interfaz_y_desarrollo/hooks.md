@@ -4198,4 +4198,107 @@ npx web-push generate-vapid-keys
 
 ### Stores: `useTerminalStore` (idTerminal), `useAuthStore` (rolActivo, idNombre)
 
+---
+
+## 22. `useOfflineQueueBackup` — backup cifrado de cola al cambio de turno (C-10)
+
+> Seguro de último recurso contra pérdida física del dispositivo con mutaciones pendientes.
+> Se monta en el componente raíz cuando el empleado está en `estado_1` con sesión activa.
+
+### 22.1 Dependencias
+
+| Store / Hook | Dato consumido |
+|---|---|
+| `useOfflineQueueStore` | `queue`, `pendingCount` |
+| `useAuthStore` | `idNombre` |
+| `useTerminalStore` | `id_terminal` |
+| `useNetworkStore` | `isOnline` |
+| `sessionStorage` | `u24_queue_backup_key` (clave AES-256-GCM) |
+
+### 22.2 Disparadores
+
+| Evento | Condición | Delay |
+|---|---|---|
+| Periódico | `pendingCount > 0` AND `isOnline` | cada 5 min |
+| `online` event | `pendingCount > 0` | inmediato, antes de `procesarCola()` |
+| Checkout | siempre, si `pendingCount > 0` | síncrono (awaited) antes de limpiar sesión |
+
+### 22.3 Flujo de `runBackup()`
+
+```typescript
+async function runBackup(): Promise<void> {
+  const backupKeyB64 = sessionStorage.getItem('u24_queue_backup_key')
+  if (!backupKeyB64) return  // sin clave de sesión → backup no disponible (normal en offline puro)
+
+  const { queue }      = useOfflineQueueStore.getState()
+  const { idNombre }   = useAuthStore.getState()
+  const { id_terminal }= useTerminalStore.getState()
+  const pending        = queue.filter(m => m.estado !== 'descartado')
+
+  if (pending.length === 0) return
+
+  setState({ isBackingUp: true, backupError: null })
+
+  try {
+    // 1. Cifrar la cola (ver payloads_y_contratos.md §D.3.3)
+    const payload = await encryptQueue(pending, backupKeyB64, idNombre, id_terminal)
+
+    // 2. Subir a Storage (upsert — sobreescribe el backup anterior del mismo terminal)
+    const { error } = await supabase.storage
+      .from('offline-queue-backups')
+      .upload(
+        `${idNombre}/${id_terminal}/latest.json`,
+        JSON.stringify(payload),
+        { contentType: 'application/json', upsert: true }
+      )
+
+    if (error) throw error
+
+    setState({
+      isBackingUp:     false,
+      lastBackupAt:    nowCorrected(),
+      lastBackupCount: pending.length,
+    })
+  } catch (err) {
+    setState({ isBackingUp: false, backupError: (err as Error).message })
+    // No capturar en Sentry (puede contener info de la cola)
+    // Solo log local en desarrollo
+    if (import.meta.env.DEV) console.warn('[QueueBackup] Error:', err)
+  }
+}
+```
+
+### 22.4 Integración en `BannerOffline`
+
+Cuando `lastBackupAt` es reciente (< 10 min), el `BannerOffline` muestra:
+
+```
+⚠ Sin conexión — N operaciones pendientes — respaldadas hace Xmin
+```
+
+Cuando `backupError !== null`:
+
+```
+⚠ Sin conexión — N operaciones pendientes — ⚠ error al respaldar
+```
+
+El tooltip al pasar el cursor muestra la fecha/hora exacta del último backup exitoso.
+
+### 22.5 Inicialización — clave de sesión
+
+La clave `u24_queue_backup_key` se escribe en sessionStorage al completar el checkin online:
+
+```typescript
+// En ef_alta_sesion / login response handler
+if (response.queue_backup_key) {
+  sessionStorage.setItem('u24_queue_backup_key', response.queue_backup_key)
+}
+```
+
+Al hacer checkout o al cerrar la pestaña, sessionStorage se limpia automáticamente.
+Si no hay clave (sesión iniciada con PIN de emergencia sin `queue_backup_key`), el hook
+funciona en modo degradado: los backups se omiten sin error — no es una condición de fallo.
+
+### Stores: `useOfflineQueueStore` (queue, pendingCount), `useAuthStore` (idNombre), `useTerminalStore` (id_terminal), `useNetworkStore` (isOnline)
+
 ### Dependencias: Service Worker, `ef_enviar_push_critico`, `ef_guardar_push_subscription`

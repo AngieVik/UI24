@@ -279,7 +279,7 @@ curl -X PATCH 'https://<staging_url>/rest/v1/inventario_vehiculo?id_vehiculo=eq.
 ```
 Entorno:  Staging branch con seeds 01-06 aplicados
 Doc-8:    El seed 06_drp_activo.sql debe incluir Doc-8 abierto para cada vehículo DEMO
-          (verificar con: SELECT * FROM doc8_partes_trabajo WHERE estado = 'Borrador_En_Curso')
+          (verificar con: SELECT * FROM doc8_partes_trabajo WHERE estado = 'Abierto_En_Turno')
 Red:      Conexión 4G real o simulada (≥ 5 Mbps). Wi-Fi ≠ 4G — probar con datos móviles
           del dispositivo o throttling de DevTools: Network tab → "Fast 4G"
 ```
@@ -775,7 +775,7 @@ Criterio: Inventario visible sin error, datos coherentes con el seed de producci
 
 ```
 ☐ Verificar que 1111-DEMO no tiene Doc-8 activo (condición previa)
-   SELECT * FROM doc8_partes_trabajo WHERE id_vehiculo = '1111-DEMO' AND estado = 'Borrador_En_Curso'
+   SELECT * FROM doc8_partes_trabajo WHERE id_vehiculo = '1111-DEMO' AND estado = 'Abierto_En_Turno'
 ☐ Abrir nuevo parte de trabajo para 1111-DEMO (tes_demo como pilot)
 ☐ Introducir km_inicio = 10000
 
@@ -878,3 +878,413 @@ Rollback activado: ☐ Sí  ☐ No
 > error irrecuperable (datos corruptos, auth caído, Realtime caído en todos los clientes),
 > activar rollback según el procedimiento de CI/CD (`infraestructura.md §4`) y abrir
 > incidente P0 en el issue tracker.
+
+---
+
+## 10. Capacity planning — 100 dispositivos concurrentes (C-01)
+
+> Valida que la infraestructura Supabase Pro soporta 100 terminales simultáneos
+> con carga realista. Ejecutar una vez antes de producción y repetir tras cambios
+> de plan o de arquitectura Realtime.
+
+### 10.1 Modelo de carga por terminal
+
+Cada terminal en `estado_1` genera:
+
+| Operación | Frecuencia | Canal / endpoint |
+|---|---|---|
+| Suscripción Realtime activa | 1 canal crítico + 1 canal de bandeja | WebSocket persistente |
+| Ping GPS | 1 req / 30s | RPC `registrar_evento_fisico` |
+| Polling degraded_mode (inactivo en carga normal) | — | Solo si Realtime cae |
+| RPC esporádica (Doc-8 update, inventario) | ~1 req / 5 min | REST / RPC |
+
+Carga agregada de 100 terminales simultáneos:
+
+| Recurso | Estimación | Límite Pro |
+|---|---|---|
+| Conexiones Realtime activas | 100 | 200 (Pro) / 500 (Team) |
+| Conexiones Postgres (pool Supavisor) | ~20-40 activas simultáneas | 200 |
+| RPS REST/RPC en carga pico | ~3-4 req/s (100 GPS pings/30s) | sin límite rígido declarado |
+| Edge Function invocaciones/min | ~12-20/min en pico | sin límite rígido |
+
+### 10.2 Herramienta de simulación — k6
+
+```bash
+# Instalar k6
+brew install k6  # macOS; o descargar binario en https://k6.io/docs/getting-started/installation/
+
+# Ejecutar el script de carga (ver §10.3)
+k6 run --vus 100 --duration 10m scripts/capacity_test.js \
+  -e SUPABASE_URL=$SUPABASE_URL \
+  -e SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
+  -e SEED_JWT=$SEED_JWT_TES_DEMO
+```
+
+### 10.3 Script de carga — `scripts/capacity_test.js`
+
+```javascript
+import http from 'k6/http'
+import ws   from 'k6/ws'
+import { sleep, check } from 'k6'
+import { Counter, Trend } from 'k6/metrics'
+
+const realtimeLatency = new Trend('realtime_delivery_ms')
+const gpsErrors       = new Counter('gps_errors')
+
+export const options = {
+  vus:      100,
+  duration: '10m',
+  thresholds: {
+    http_req_duration:     ['p(95)<300'],   // SLA RPC §2.1
+    realtime_delivery_ms:  ['p(95)<500'],   // SLA Realtime §2.1
+    http_req_failed:       ['rate<0.01'],   // < 1% error rate
+    gps_errors:            ['count<5'],     // tolerancia mínima GPS
+  },
+}
+
+const SUPABASE_URL     = __ENV.SUPABASE_URL
+const SUPABASE_ANON    = __ENV.SUPABASE_ANON_KEY
+const JWT              = __ENV.SEED_JWT
+
+export default function () {
+  // ── 1. Realtime WebSocket (simula suscripción a canal crítico) ──
+  const wsUrl = SUPABASE_URL.replace('https://', 'wss://') + '/realtime/v1/websocket'
+  ws.connect(`${wsUrl}?apikey=${SUPABASE_ANON}`, null, (socket) => {
+    const sentAt = Date.now()
+    socket.on('open', () => {
+      socket.send(JSON.stringify({
+        topic:   'realtime:global:alertas_criticas',
+        event:   'phx_join',
+        payload: {},
+        ref:     '1',
+      }))
+    })
+    socket.on('message', (msg) => {
+      const data = JSON.parse(msg)
+      if (data.event === 'phx_reply') {
+        realtimeLatency.add(Date.now() - sentAt)
+      }
+    })
+    sleep(10)  // mantener conexión 10s por VU
+    socket.close()
+  })
+
+  // ── 2. GPS ping (RPC REST) ──
+  const res = http.post(
+    `${SUPABASE_URL}/rest/v1/rpc/registrar_evento_fisico`,
+    JSON.stringify({
+      p_id_vehiculo:    '1111-DEMO',
+      p_tipo_evento:    'gps_snapshot',
+      p_km_odometro:    10000,
+      p_timestamp:      new Date().toISOString(),
+      p_mutation_uuid:  crypto.randomUUID(),
+    }),
+    { headers: { 'Authorization': `Bearer ${JWT}`, 'apikey': SUPABASE_ANON, 'Content-Type': 'application/json' } }
+  )
+  check(res, { 'GPS ping OK': r => r.status === 200 || r.status === 201 })
+  if (res.status !== 200 && res.status !== 201) gpsErrors.add(1)
+
+  sleep(30)  // simula frecuencia real de 1 ping / 30s
+}
+```
+
+### 10.4 Métricas a registrar
+
+Ejecutar el script con `--out json=results.json` y capturar:
+
+| Métrica | Umbral de PASS | Dónde medir |
+|---|---|---|
+| `http_req_duration` P95 | < 300ms | k6 output |
+| `realtime_delivery_ms` P95 | < 500ms | k6 custom metric |
+| `http_req_failed` rate | < 1% | k6 output |
+| Conexiones Postgres activas (pico) | < 80% del límite del plan | Supabase Dashboard → DB → Connections |
+| Conexiones Realtime activas (pico) | < 80% del límite del plan | Supabase Dashboard → Realtime |
+| Edge Function error rate | < 1% | Logflare |
+| Uso de CPU de la DB (pico) | < 80% | Supabase Dashboard → DB → CPU |
+
+### 10.5 Techo documentado (baseline Supabase Pro)
+
+| Recurso | Techo del plan | Techo operativo U24 (80%) | Margen actual (100 VUs) |
+|---|---|---|---|
+| Realtime conexiones | 200 | 160 | ✅ 100 → 50% de 200 |
+| Postgres connections (Supavisor) | 200 pooled | 160 | ✅ ~40 activas → 20% |
+| RPS REST (sin SLA declarado por Supabase) | > 1000 req/s | — | ✅ ~4 req/s en carga |
+| Almacenamiento DB | depende del plan | 80% del asignado | Monitorear con KPI §7 |
+
+> Si el test con 100 VUs supera el umbral del 80% en cualquier recurso, evaluar upgrade
+> a plan Team (500 conexiones Realtime, más CPU) antes de go-live.
+
+### 10.6 Registro de resultados
+
+```
+Fecha:            ________________
+Entorno:          Staging branch (seeds 01-06)
+Herramienta:      k6 v___________
+VUs simulados:    100
+Duración:         10 min
+
+http_req_duration P95:       ____ms   ⬜ PASS (<300ms)  ⬜ FAIL
+realtime_delivery_ms P95:    ____ms   ⬜ PASS (<500ms)  ⬜ FAIL
+http_req_failed rate:        ____%    ⬜ PASS (<1%)     ⬜ FAIL
+Conexiones Realtime pico:    ____     ⬜ PASS (<160)    ⬜ FAIL
+Conexiones Postgres pico:    ____     ⬜ PASS (<160)    ⬜ FAIL
+CPU DB pico:                 ____%    ⬜ PASS (<80%)    ⬜ FAIL
+
+Veredicto: ⬜ PASS — infraestructura Pro suficiente para 100 dispositivos
+           ⬜ FAIL — evaluar upgrade de plan o reducción de carga por terminal
+```
+
+---
+
+## 11. Cobertura de auditoría RBAC — verificación de trazabilidad (C-06)
+
+> Garantiza que cada operación sensible genera exactamente un registro en `auditoria_rbac`.
+> Se ejecuta en staging tras cada cambio de Edge Function o RPC sensible.
+
+### 11.1 Operaciones cubiertas
+
+| # | Operación | Tipo | Evento esperado en `auditoria_rbac` |
+|---|---|---|---|
+| 11.A | `ef_alta_empleado` | Edge Function | `alta_empleado` |
+| 11.B | `ef_baja_empleado` | Edge Function | `baja_empleado` |
+| 11.C | `rpc_alta_vehiculo` | RPC | `alta_vehiculo` |
+| 11.D | `rpc_revocar_y_reemitir_galleta` | RPC | `galleta_revocada` + `galleta_emitida` |
+| 11.E | `ef_reset_password` | Edge Function | `password_reset` |
+| 11.F | `rpc_ajuste_manual_stock` | RPC | `ajuste_stock_manual` |
+| 11.G | `cancelar_drp` | RPC | `drp_cancelado` |
+| 11.H | `ef_consumir_pin` (fallo × 3) | Edge Function | `pin_fallido` × 3 |
+| 11.I | Step-up auth exitoso | RPC / EF | `step_up_exitoso` |
+| 11.J | `ef_cron_revoke_stale_terminals` | Cron | `galleta_revocada` (por inactividad) |
+
+### 11.2 Estructura del test de cobertura
+
+Ejecutar en staging con `service_role` (para poder leer `auditoria_rbac` sin restricción RLS):
+
+```typescript
+// tests/auditoria-rbac-coverage.test.ts
+// Ejecutar con: npx vitest run tests/auditoria-rbac-coverage.test.ts
+
+import { createClient } from '@supabase/supabase-js'
+import { describe, it, expect, beforeEach } from 'vitest'
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!  // Solo en CI — nunca en cliente
+)
+
+async function countAuditEvents(tipoEvento: string, since: Date): Promise<number> {
+  const { count } = await supabaseAdmin
+    .from('auditoria_rbac')
+    .select('*', { count: 'exact', head: true })
+    .eq('tipo_evento', tipoEvento)
+    .gte('created_at', since.toISOString())
+  return count ?? 0
+}
+
+describe('auditoria_rbac — cobertura de operaciones sensibles', () => {
+
+  it('11.A — ef_alta_empleado genera evento alta_empleado', async () => {
+    const before = new Date()
+    await supabaseAdmin.functions.invoke('ef-alta-empleado', {
+      body: { /* payload mínimo de empleado demo */ }
+    })
+    const count = await countAuditEvents('alta_empleado', before)
+    expect(count).toBeGreaterThanOrEqual(1)
+  })
+
+  it('11.D — rpc_revocar_y_reemitir_galleta genera galleta_revocada + galleta_emitida', async () => {
+    const before = new Date()
+    await supabaseAdmin.rpc('rpc_revocar_y_reemitir_galleta', {
+      p_id_terminal:     'terminal-test-coverage',
+      p_id_nombre_nuevo: 'tes_demo',
+      p_tipo:            'permanente',
+    })
+    const revocadas = await countAuditEvents('galleta_revocada', before)
+    const emitidas  = await countAuditEvents('galleta_emitida',  before)
+    expect(revocadas).toBeGreaterThanOrEqual(1)
+    expect(emitidas).toBeGreaterThanOrEqual(1)
+  })
+
+  it('11.H — ef_consumir_pin con PIN incorrecto × 3 genera pin_fallido × 3', async () => {
+    const before = new Date()
+    for (let i = 0; i < 3; i++) {
+      await supabaseAdmin.functions.invoke('ef-consumir-pin', {
+        body: { pin: '000000', id_terminal: 'terminal-test-coverage' }
+      })
+    }
+    const count = await countAuditEvents('pin_fallido', before)
+    expect(count).toBe(3)
+  })
+
+  // ... resto de casos (11.B, 11.C, 11.E, 11.F, 11.G, 11.I, 11.J) — misma estructura
+})
+```
+
+### 11.3 Criterios de aceptación
+
+| Criterio | Condición de PASS |
+|---|---|
+| Todos los casos `it` pasan | `vitest run` sin fallos |
+| Ningún caso genera 0 eventos | `count >= 1` en todos |
+| Operaciones de baja/revocación generan AMBOS eventos | `rpc_revocar_y_reemitir_galleta` → 2 eventos |
+| Fallos de PIN contabilizados unitariamente | 3 intentos → 3 eventos distintos |
+
+### 11.4 Integración en CI
+
+```yaml
+# En .github/workflows/deploy.yml — job adicional post push-migrations
+audit-coverage:
+  needs: push-migrations
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Install deps
+      run: npm ci
+    - name: Run auditoria_rbac coverage tests
+      run: npx vitest run tests/auditoria-rbac-coverage.test.ts
+      env:
+        SUPABASE_URL:              ${{ secrets.SUPABASE_URL_STAGING }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_STAGING }}
+```
+
+---
+
+## 12. Smoke E2E automatizado post-deploy — Playwright (C-07)
+
+> Suite Playwright mínima que se ejecuta en CI tras `supabase db push` para confirmar
+> que el despliegue no rompió los flujos críticos. Bloquea el pipeline si falla.
+
+### 12.1 Alcance del smoke E2E
+
+| # | Escenario | Duración estimada |
+|---|---|---|
+| E2E-1 | Login con credenciales válidas → estado_1 | 15s |
+| E2E-2 | Mensaje de bandeja en tiempo real (< 5s) | 20s |
+| E2E-3 | Ciclo offline: encolar mutación → reconectar → cola vacía | 30s |
+| E2E-4 | Login con PIN de emergencia → estado_1 rol invitado | 15s |
+| E2E-5 | Doc-8: abrir + cierre administrativo | 25s |
+
+Tiempo total estimado: < 2 min. Diseñados para no dejar datos permanentes (usan sufijo `-DEMO`).
+
+### 12.2 Estructura de la suite
+
+```typescript
+// tests/e2e/smoke.spec.ts
+import { test, expect } from '@playwright/test'
+
+const APP_URL = process.env.STAGING_APP_URL!
+
+test.describe('Smoke E2E post-deploy', () => {
+
+  test('E2E-1 — Login credenciales válidas', async ({ page }) => {
+    await page.goto(APP_URL)
+    await page.fill('[data-testid="input-id-nombre"]', 'coordinacion_demo')
+    await page.fill('[data-testid="input-password"]',  process.env.SEED_TEST_PASSWORD!)
+    await page.click('[data-testid="btn-login"]')
+    await expect(page.locator('[data-testid="estado-1-home"]')).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('E2E-2 — Realtime: mensaje de bandeja llega en < 5s', async ({ page, context }) => {
+    // Terminal 1: coordinacion_demo abre bandeja
+    await page.goto(APP_URL)
+    // ... login coordinacion_demo ...
+    const page2 = await context.newPage()
+    await page2.goto(APP_URL)
+    // ... login tes_demo en page2, envía mensaje a coordinacion ...
+    const badge = page.locator('[data-testid="bandeja-badge-unread"]')
+    await expect(badge).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('E2E-3 — Cola offline: ciclo completo', async ({ page }) => {
+    await page.goto(APP_URL)
+    // ... login ...
+    // Simular offline
+    await page.context().setOffline(true)
+    await page.click('[data-testid="btn-update-km-doc8"]')
+    const bannerOffline = page.locator('[data-testid="banner-offline"]')
+    await expect(bannerOffline).toBeVisible()
+    const pendingCount = page.locator('[data-testid="offline-queue-count"]')
+    await expect(pendingCount).toHaveText('1')
+    // Restaurar conexión
+    await page.context().setOffline(false)
+    await expect(pendingCount).toHaveText('0', { timeout: 30_000 })
+    await expect(bannerOffline).not.toBeVisible({ timeout: 5_000 })
+  })
+
+  test('E2E-4 — Login con PIN de emergencia', async ({ page }) => {
+    await page.goto(APP_URL)
+    await page.fill('[data-testid="input-id-nombre"]', 'PIN')
+    await page.fill('[data-testid="input-password"]',  process.env.SEED_EMERGENCY_PIN!)
+    await page.click('[data-testid="btn-login"]')
+    await expect(page.locator('[data-testid="rol-badge"]')).toHaveText('invitado', { timeout: 10_000 })
+  })
+
+  test('E2E-5 — Doc-8: apertura y cierre administrativo', async ({ page }) => {
+    // ... login coordinacion_demo, abrir Doc-8 para 1111-DEMO, cerrar vía admin ...
+    const estado = page.locator('[data-testid="doc8-estado"]')
+    await expect(estado).toHaveText('Enviado_Cerrado_Administrativo', { timeout: 15_000 })
+  })
+})
+```
+
+### 12.3 Configuración de Playwright
+
+```typescript
+// playwright.config.ts
+import { defineConfig } from '@playwright/test'
+
+export default defineConfig({
+  testDir:     './tests/e2e',
+  timeout:     60_000,
+  retries:     1,      // 1 reintento en CI para flaky de red
+  reporter:    [['html', { outputFolder: 'playwright-report' }], ['github']],
+  use: {
+    baseURL:   process.env.STAGING_APP_URL,
+    headless:  true,
+    video:     'on-first-retry',
+    screenshot:'only-on-failure',
+  },
+})
+```
+
+### 12.4 Integración en CI (ver también `infraestructura.md §4`)
+
+```yaml
+# En .github/workflows/deploy.yml — job final post push-migrations
+smoke-e2e:
+  needs: push-migrations
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: '20' }
+    - run: npm ci
+    - run: npx playwright install --with-deps chromium
+    - name: Run smoke E2E
+      run: npx playwright test tests/e2e/smoke.spec.ts
+      env:
+        STAGING_APP_URL:    ${{ secrets.STAGING_APP_URL }}
+        SEED_TEST_PASSWORD: ${{ secrets.SEED_TEST_PASSWORD }}
+        SEED_EMERGENCY_PIN: ${{ secrets.SEED_EMERGENCY_PIN }}
+    - uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: playwright-report
+        path: playwright-report/
+```
+
+### 12.5 Convenciones de `data-testid`
+
+Los atributos `data-testid` utilizados por Playwright son los únicos `data-*` permitidos en componentes U24. Se añaden **exclusivamente** en los elementos interactivos del flujo crítico. No se usan para estilos ni lógica de negocio.
+
+| `data-testid` | Componente | Descripción |
+|---|---|---|
+| `input-id-nombre` | terminal_check | Campo usuario |
+| `input-password` | terminal_check | Campo contraseña |
+| `btn-login` | terminal_check | Botón de login |
+| `estado-1-home` | home_area | Contenedor principal estado_1 |
+| `banner-offline` | BannerOffline | Banner sin conexión |
+| `offline-queue-count` | BannerOffline | Contador de mutaciones pendientes |
+| `bandeja-badge-unread` | bandeja_entrada | Badge de mensajes no leídos |
+| `rol-badge` | black_column | Indicador del rol activo |
+| `doc8-estado` | DocOcho | Badge del estado del Doc-8 |

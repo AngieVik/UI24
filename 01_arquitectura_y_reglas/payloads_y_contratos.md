@@ -421,6 +421,134 @@ interface PayloadOfflineSessionInvalidated {
    - Modal bloqueante: *"Tu contraseña fue modificada por un administrador. Inicia sesión de nuevo para continuar."*
    - Redirigir a estado_0
 
+### D.3 Backup cifrado de la cola offline al cambio de turno (C-10)
+
+Mecanismo de seguro contra pérdida física del dispositivo con mutaciones pendientes.
+Si un terminal se daña, pierde batería de forma irrecuperable o se extravía, las
+mutaciones encoladas en su IndexedDB se perderían. El backup cifrado las preserva.
+
+#### D.3.1 Clave de cifrado de sesión
+
+Al completar el login online (checkin exitoso), el servidor genera una clave de sesión
+para backup y la retorna junto con la respuesta de checkin:
+
+```typescript
+// Parte de la respuesta de ef_alta_sesion / set_claims tras login exitoso:
+interface CheckinResponse {
+  // ... campos existentes ...
+  queue_backup_key: string   // base64url — 32 bytes aleatorios (AES-256)
+}
+```
+
+El cliente la recibe y almacena **exclusivamente en sessionStorage** (es ephemera —
+debe perderse con el cierre del navegador, que también cierra la sesión):
+
+```typescript
+sessionStorage.setItem('u24_queue_backup_key', response.queue_backup_key)
+```
+
+El servidor almacena la clave en la tabla `queue_backup_sessions` con TTL = 24h:
+
+```sql
+-- Tabla nueva: queue_backup_sessions
+CREATE TABLE queue_backup_sessions (
+  id_nombre    TEXT NOT NULL REFERENCES fichas_empleados(id_nombre),
+  id_terminal  TEXT NOT NULL,
+  backup_key   TEXT NOT NULL,   -- base64url, 32 bytes
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at   TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+  PRIMARY KEY (id_nombre, id_terminal)
+);
+-- RLS: USING (FALSE) en SELECT/UPDATE/DELETE desde JWT — solo accesible con service_role
+```
+
+#### D.3.2 Payload `QueueBackup`
+
+```typescript
+interface QueueBackupPayload {
+  version:          1
+  id_nombre:        string   // empleado que tenía la cola
+  id_terminal:      string   // fingerprint SHA-256 del terminal
+  timestamp_backup: string   // ISO-8601, nowCorrected()
+  mutations_count:  number   // número de mutaciones incluidas
+  iv:               string   // base64url — IV AES-GCM de 12 bytes (generado por crypto.subtle)
+  encrypted_queue:  string   // base64url(AES-256-GCM(JSON.stringify(OfflineMutation[])))
+}
+```
+
+#### D.3.3 Proceso de cifrado (cliente — Web Crypto API, Main Thread)
+
+```typescript
+async function encryptQueue(
+  mutations: OfflineMutation[],
+  backupKeyBase64: string,
+  idNombre: string,
+  idTerminal: string
+): Promise<QueueBackupPayload> {
+  const rawKey = Uint8Array.from(atob(backupKeyBase64), c => c.charCodeAt(0))
+  const key    = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['encrypt'])
+
+  const iv         = crypto.getRandomValues(new Uint8Array(12))
+  const plaintext  = new TextEncoder().encode(JSON.stringify(mutations))
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
+
+  return {
+    version:          1,
+    id_nombre:        idNombre,
+    id_terminal:      idTerminal,
+    timestamp_backup: nowCorrected(),
+    mutations_count:  mutations.length,
+    iv:               btoa(String.fromCharCode(...iv)),
+    encrypted_queue:  btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
+  }
+}
+```
+
+> **Sin bcrypt en Main Thread:** el cifrado AES-GCM usa `crypto.subtle` nativo — no añade
+> dependencias de terceros y no bloquea el Main Thread para backups de < 1000 mutaciones.
+> Para colas de > 1000 mutaciones (excepcional), mover la operación a un Web Worker.
+
+#### D.3.4 Destino del backup
+
+Supabase Storage — bucket privado `offline-queue-backups` con RLS:
+
+```
+Path: offline-queue-backups/{id_nombre}/{id_terminal}/{timestamp_backup}.json
+Política RLS Storage: solo service_role puede leer — el cliente solo puede hacer PUT
+```
+
+```typescript
+await supabase.storage
+  .from('offline-queue-backups')
+  .upload(
+    `${idNombre}/${idTerminal}/${Date.now()}.json`,
+    JSON.stringify(payload),
+    { contentType: 'application/json', upsert: true }
+  )
+```
+
+La política `upsert: true` sobreescribe el backup anterior del mismo terminal — solo
+se retiene el backup más reciente por terminal.
+
+#### D.3.5 Disparadores del backup
+
+| Evento | Condición | Acción |
+|---|---|---|
+| Periódico | Cada 5 min, `pendingCount > 0`, red disponible | `useOfflineQueueBackup.runBackup()` |
+| Checkout del empleado | Siempre, antes de `check_out` | Backup síncrono (awaited) antes de limpiar sesión |
+| Transición `offline → online` | `pendingCount > 0` | Backup antes de `procesarCola()` |
+
+#### D.3.6 Recuperación técnica (procedimiento manual)
+
+En caso de pérdida física del terminal con cola pendiente, el técnico puede:
+
+1. Obtener la `backup_key` de `queue_backup_sessions` con `service_role`
+2. Descargar el blob de Storage
+3. Descifrar con AES-GCM usando la `backup_key` y el `iv` del payload
+4. Importar las mutaciones manualmente (vía Supabase Studio o script de recuperación)
+
+Este procedimiento no está automatizado — requiere intervención técnica deliberada.
+
 ---
 
 **Conclusión Arquitectónica:**

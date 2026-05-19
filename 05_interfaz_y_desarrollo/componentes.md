@@ -267,7 +267,7 @@ Sólo tres iconos en este componente:
 | `fetching` | Icono `ti-loader` animando. Botón "Solicitar Ubicación" deshabilitado. Coordenadas previas visibles en opacidad reducida (`opacity-50`). |
 | `success` | Coordenadas actualizadas en verde (`text-green-600`) durante 2 s, luego vuelven al color neutro. Timestamp actualizado. |
 | `fallback` | Coordenadas del historial con opacidad reducida (`opacity-60`) + badge `Ubicación offline` en gris. Indica que el vehículo no respondió al ping y se muestra la última posición conocida desde `gps_historial`. Se alcanza por timeout (5 s) o por recepción de `pong_error` (inmediato). |
-| `posicion_desconocida` | **Sin coordenadas ni chincheta en mapa.** Texto visible: `"Posición desconocida (Vehículo en movimiento sin telemetría reciente)"` en `text-amber-600 font-medium`. Botón "Solicitar Ubicación" activo. Se alcanza cuando el fallback devuelve una coordenada de `origen = 'cambio_operativo'` con antigüedad > 10 min Y el vehículo está en `estado_operativo ∈ {ruta, alerta}`. Ver lógica en `logic.md §29.5`. |
+| `posicion_desconocida` | **Sin coordenadas ni chincheta en mapa.** Texto visible: `"Posición desconocida (Vehículo en movimiento sin telemetría reciente)"` en `text-amber-700 font-medium`. Botón "Solicitar Ubicación" activo. Se alcanza cuando el fallback devuelve una coordenada de `origen = 'cambio_operativo'` con antigüedad > 10 min Y el vehículo está en `estado_operativo ∈ {ruta, alerta}`. Ver lógica en `logic.md §29.5`. |
 
 ### Gestión de `pong_error`
 
@@ -359,13 +359,16 @@ necesario.
 | Estado del paciente | Estilo base | Variante `revaluacion = true` |
 |---|---|---|
 | `en_espera` (primera vez) | Fondo blanco / borde neutro | — |
-| `en_espera` + `revaluacion = true` | Fondo `amber-50` / borde `amber-400` | Badge `Revaluación` en `amber-600 font-semibold` |
-| `en_consulta` | Fondo `blue-50` / borde `blue-400` | Si llegó de revaluación: badge `Revaluación` en `amber-600` sobre fondo `blue-50` |
+| `en_espera` + `revaluacion = true` | Fondo `amber-50` / borde `amber-300` | Badge `Revaluación` en `amber-700 font-semibold` |
+| `en_consulta` | Fondo `green-50` / borde `green-300` | Si llegó de revaluación: badge `Revaluación` en `amber-700` sobre fondo `green-50` |
 | `archivado` | Fondo gris / opacidad reducida | — |
+
+> ❌ No usar `blue-50` / `blue-400` para `en_consulta` — azul decorativo prohibido.
+> ✅ `amber-700` (#b45309, ratio 4.6:1 sobre blanco) en lugar de `amber-600` (2.97:1 ❌ WCAG).
 
 ### Badge `Revaluación`
 
-* Texto: `"Revaluación"` en `text-xs font-semibold text-amber-600`.
+* Texto: `"Revaluación"` en `text-xs font-semibold text-amber-700`.
 * Posición: esquina superior derecha de la tarjeta, junto al badge de orden.
 * Visible en todos los contextos donde `revaluacion = true`:
   * Lista de espera (`perfil_admision` y `perfil_boxes`).
@@ -645,120 +648,336 @@ en `procesarCola()` cuando `pendingCount` llega a 0 sin errores.
 
 ## Paleta de colores — ratios WCAG 2.1 AA verificados (U-04)
 
-> Referencia canónica de colores del sistema. Todos los valores tienen ratio de
-> contraste verificado según WCAG 2.1 nivel AA (mínimo 4.5:1 para texto normal,
-> 3:1 para texto grande ≥18px / ≥14px bold). Ver ADR-003.
->
-> Escala de colores: Tailwind CSS v3. Los ratios se calculan sobre las luminancias
-> relativas de los valores hex con la fórmula WCAG estándar.
+> Referencia canónica de colores del sistema. Fuente de verdad CSS:
+> `05_interfaz_y_desarrollo/cloude_desing/colors_and_type.css`.
+> Todos los valores tienen ratio de contraste verificado según WCAG 2.1 nivel AA
+> (mínimo 4.5:1 para texto normal, 3:1 para texto grande ≥18px / ≥14px bold).
+
+### Tokens de marca — los únicos colores de marca permitidos
+
+| Token CSS | Hex | Uso |
+|---|---|---|
+| `--u24-yellow` | `#FFD60A` | Único amarillo del sistema — acento activo, logo, indicador nav, home_area |
+| `--u24-yellow-soft` | `#FFF5B8` | Tint suave para badges de advertencia / fondo informativo |
+| `--u24-black` | `#111111` | Header + black_column + todos los botones |
+| `--u24-col-hover` | `#1f1f1f` | Hover de ítems en black_column y botones |
+| `--u24-col-active` | `#2a2a2a` | Ítem activo en black_column |
+
+> ❌ **Prohibido usar:** naranja, mostaza, dorado (`#F5C518`), `amber-400` (#fbbf24),
+> `yellow-400` (#facc15), `amber-500` (#f59e0b). El único amarillo es `#FFD60A`.
+> ❌ **Azul decorativo prohibido:** el azul solo se usa en focus rings y enlaces de texto.
+> No usar `bg-blue-*`, `text-blue-*` como color de estado operativo — sustituir por neutro o verde.
+
+### Tipografía — familias y pesos
+
+| Rol | Familia | Pesos permitidos | Uso |
+|---|---|---|---|
+| UI de mando | `Barlow Condensed` (token `--font-cmd`) | 300, 500, 700, **900** | Navegación, etiquetas, IDs, matrículas, badges, ticker, alertas |
+| Cuerpos largos | `Barlow` (token `--font-body`) | 300, 500, 700 | Formularios >2 líneas, descripciones, bloques de texto |
+
+> Peso **900** (`font-black`) **exclusivo** para alertas Doc-11 y rotura de stock crítica.
+> No usar en textos ordinarios.
+
+### Casing — sentence case estricto
+
+| Tipo de texto | Regla | Ejemplo |
+|---|---|---|
+| Labels, títulos, estados | Sentence case | "En preparación", "Parte de trabajo", "Sin conexión" |
+| Acrónimos de rol/módulo | UPPERCASE siempre | `TES`, `DUE`, `VIR`, `MED`, `DRP`, `PSA`, `RBAC`, `ITV` |
+| Botones destructivos críticos | UPPERCASE | "ELIMINAR REGISTRO", "BORRAR DRP" |
+| Identificadores de máquina | Inglés, sin cambios | `id_nombre`, `timestamp_apertura`, `cancelado_por_drp` |
 
 ### Fondos base del sistema
 
-| Token | Clase Tailwind | Hex | Luminancia relativa |
+| Token | Variable CSS / Tailwind | Hex | Luminancia relativa |
 |---|---|---|---|
-| `fondo-header` | `bg-black` | `#000000` | 0.000 |
+| `fondo-header` + `fondo-black_column` | `--u24-black` / `bg-[#111111]` | `#111111` | 0.004 |
+| `fondo-home_area` | `--bg-home` = `--u24-yellow` | `#FFD60A` | 0.671 |
 | `fondo-contenido` | `bg-white` | `#FFFFFF` | 1.000 |
 | `fondo-panel` | `bg-gray-50` | `#f9fafb` | 0.955 |
-| `fondo-borde` | `bg-gray-200` | `#e5e7eb` | 0.753 |
+| `fondo-borde` | `border-gray-200` | `#e5e7eb` | 0.753 |
 
-### Texto sobre header negro (`bg-black`)
+### Texto sobre header / black_column negro (`#111111`)
 
-| Uso | Clase | Hex | Ratio vs negro | WCAG AA |
+| Uso | Token | Hex | Ratio vs `#111111` | WCAG AA |
 |---|---|---|---|---|
-| Texto principal | `text-white` | `#ffffff` | **21.0:1** | ✅ |
-| Texto secundario | `text-gray-300` | `#d1d5db` | **14.2:1** | ✅ |
-| Alerta crítica / error | `text-red-400` | `#f87171` | **8.0:1** | ✅ |
-| Advertencia | `text-yellow-400` | `#facc15` | **13.7:1** | ✅ |
-| Estado operativo / OK | `text-green-400` | `#4ade80` | **12.4:1** | ✅ |
-| Info / activo | `text-blue-400` | `#60a5fa` | **8.6:1** | ✅ |
-| Icono deshabilitado | `text-gray-500` | `#6b7280` | **5.9:1** | ✅ |
+| Texto principal / blanco | `text-white` | `#ffffff` | **19.5:1** | ✅ |
+| Texto secundario / ticker | `text-gray-300` | `#d1d5db` | **12.6:1** | ✅ |
+| Acento activo / logo / indicador | `--u24-yellow` / `text-[#FFD60A]` | `#FFD60A` | **12.8:1** | ✅ |
+| Alerta crítica | `text-red-400` | `#f87171` | **7.2:1** | ✅ |
+| Estado OK | `text-green-400` | `#4ade80` | **11.2:1** | ✅ |
+| Ícono deshabilitado | `text-gray-500` | `#6b7280` | **4.9:1** | ✅ |
 
 ### Texto sobre fondo blanco / panel (`bg-white`, `bg-gray-50`)
 
-| Uso | Clase | Hex | Ratio vs blanco | WCAG AA |
+| Uso | Token | Hex | Ratio vs blanco | WCAG AA |
 |---|---|---|---|---|
 | Texto primario | `text-gray-900` | `#111827` | **19.0:1** | ✅ |
 | Texto secundario | `text-gray-600` | `#4b5563` | **7.0:1** | ✅ |
+| Metadatos / auxiliar | `text-gray-500` | `#6b7280` | **4.5:1** | ✅ |
 | Texto deshabilitado | `text-gray-400` | `#9ca3af` | **3.0:1** | ⚠️ Solo texto grande |
 | Error / crítico | `text-red-600` | `#dc2626` | **4.6:1** | ✅ |
-| Advertencia | `text-amber-700` | `#b45309` | **4.6:1** | ✅ |
+| Advertencia AA-safe | `text-amber-700` | `#b45309` | **4.6:1** | ✅ |
 | Éxito / OK | `text-green-700` | `#15803d` | **7.3:1** | ✅ |
-| Info / enlace | `text-blue-700` | `#1d4ed8` | **7.2:1** | ✅ |
+| Enlace (solo texto, no decorativo) | `text-blue-700` | `#1d4ed8` | **7.2:1** | ✅ solo links |
 
-> ⚠️ **Aviso de coherencia:** el componente `tarjeta_paciente_filiacion` usa
-> `text-amber-600` (`#d97706`) sobre fondo blanco — ratio **2.97:1** que **no cumple
-> WCAG AA**. En la implementación debe reemplazarse por `text-amber-700` (`#b45309`,
-> ratio 4.6:1) sin cambio visual significativo.
+> ⚠️ **`text-amber-600`** (`#d97706`) sobre blanco = ratio **2.97:1** ❌ WCAG FAIL.
+> Sustituir siempre por `text-amber-700` (`#b45309`, ratio 4.6:1 ✅).
 
-### Badges de estado (fondo de color + texto oscuro)
+### Badges de estado (fondo claro + texto oscuro)
 
-Los badges tienen fondo de color claro y texto oscuro. El ratio se calcula entre
-el texto y el fondo del badge (no el fondo de la página).
+| Estado | Clases Tailwind | Ratio texto/fondo | WCAG AA |
+|---|---|---|---|
+| Error / Crítico | `bg-red-100 text-red-800` | **7.9:1** | ✅ |
+| Advertencia | `bg-amber-100 text-amber-800` | **5.4:1** | ✅ |
+| Éxito / OK | `bg-green-100 text-green-800` | **7.5:1** | ✅ |
+| Neutro / Inactivo | `bg-gray-100 text-gray-700` | **10.8:1** | ✅ |
+| Revaluación | `bg-amber-100 text-amber-700` | **6.5:1** | ✅ |
+| Alerta crítica Doc-11 | `bg-red-600 text-white font-black` | **4.6:1** | ✅ (peso 900) |
 
-| Estado | Clases Tailwind | Hex fondo | Hex texto | Ratio | WCAG AA |
-|---|---|---|---|---|---|
-| Error / Crítico | `bg-red-100 text-red-800` | `#fee2e2` | `#991b1b` | **7.9:1** | ✅ |
-| Advertencia | `bg-amber-100 text-amber-800` | `#fef3c7` | `#92400e` | **5.4:1** | ✅ |
-| Éxito / OK | `bg-green-100 text-green-800` | `#dcfce7` | `#166534` | **7.5:1** | ✅ |
-| Info / Activo | `bg-blue-100 text-blue-800` | `#dbeafe` | `#1e40af` | **7.8:1** | ✅ |
-| Neutro / Inactivo | `bg-gray-100 text-gray-700` | `#f3f4f6` | `#374151` | **10.8:1** | ✅ |
-| Revaluación (corregido) | `bg-amber-100 text-amber-700` | `#fef3c7` | `#b45309` | **6.5:1** | ✅ |
+> ❌ Eliminar variante `bg-blue-100 text-blue-800` — azul decorativo prohibido.
+> Usar `bg-gray-100 text-gray-700` (neutro) o `bg-green-100 text-green-800` (activo/OK).
 
-### Badges de estado de vehículo / DRP (sobre fondo blanco)
+### Badges de estado de vehículo / DRP
 
-| Estado del vehículo | Clases | WCAG AA |
+| Estado | Clases | WCAG AA |
 |---|---|---|
 | `disponible` | `bg-green-100 text-green-800` | ✅ |
-| `en_servicio` | `bg-blue-100 text-blue-800` | ✅ |
+| `en_servicio` | `bg-green-100 text-green-700` | ✅ (no azul) |
 | `en_mantenimiento` | `bg-amber-100 text-amber-800` | ✅ |
 | `inoperativo_critico` | `bg-red-100 text-red-800` | ✅ |
 | `dado_de_baja` | `bg-gray-100 text-gray-700` | ✅ |
-| DRP `En_preparacion` | `bg-yellow-100 text-yellow-800` | ✅ (ratio 5.9:1) |
-| DRP `En_curso` | `bg-blue-100 text-blue-800` | ✅ |
+| DRP `En_preparacion` | `bg-[#FFF5B8] text-amber-800` | ✅ (amarillo soft del sistema) |
+| DRP `En_curso` | `bg-green-100 text-green-800` | ✅ (no azul) |
 | DRP `Finalizado` | `bg-green-100 text-green-800` | ✅ |
-| DRP `Cancelado` | `bg-gray-100 text-gray-500` | ⚠️ Solo texto grande — usar `text-gray-700` |
+| DRP `Cancelado` | `bg-gray-100 text-gray-700` | ✅ |
 
-### Alertas y banners (fondo de color + texto sobre él)
+### Alertas y banners
 
-| Tipo | Clases contenedor | Clases texto | Ratio texto/fondo | WCAG AA |
+| Tipo | Clases contenedor | Clases texto | Ratio | WCAG AA |
 |---|---|---|---|---|
 | Error crítico | `bg-red-50 border-red-300` | `text-red-800` | **6.8:1** | ✅ |
 | Advertencia | `bg-amber-50 border-amber-300` | `text-amber-800` | **5.4:1** | ✅ |
-| Información | `bg-blue-50 border-blue-300` | `text-blue-800` | **7.0:1** | ✅ |
-| Éxito | `bg-green-50 border-green-300` | `text-green-800` | **6.8:1** | ✅ |
 | Sin conexión (BannerOffline) | `bg-amber-50 border-amber-300` | `text-amber-800` | **5.4:1** | ✅ |
+| Éxito / confirmación | `bg-green-50 border-green-300` | `text-green-800` | **6.8:1** | ✅ |
 
-### Controles interactivos
+> ❌ No usar `bg-blue-50 border-blue-300 text-blue-800` para "información" — azul decorativo prohibido.
+> Sustituir por `bg-gray-50 border-gray-200 text-gray-700` (neutro) o por advertencia ámbar.
 
-| Elemento | Estado | Clases | Ratio mínimo | WCAG AA |
-|---|---|---|---|---|
-| Botón primario | Normal | `bg-black text-white` | 21:1 | ✅ |
-| Botón primario | Hover | `bg-gray-800 text-white` | 15.3:1 | ✅ |
-| Botón primario | Disabled | `bg-gray-300 text-gray-500` | 2.5:1 | ⚠️ Exento (deshabilitado) |
-| Botón destructivo | Normal | `bg-red-600 text-white` | 4.6:1 | ✅ |
-| Botón destructivo | Hover | `bg-red-700 text-white` | 6.3:1 | ✅ |
-| Input text | Foco | `border-blue-600` (solo borde) | N/A borde | — |
-| Input text | Error | `border-red-500` + `text-red-600` debajo | 4.6:1 | ✅ |
-| Focus ring | Universal | `ring-2 ring-blue-500 ring-offset-2` | — | ✅ (visibilidad 3:1+) |
+### Controles interactivos — botones
+
+Todos los botones tienen **fondo `#111111` (negro único)**. No hay botones de color.
+
+| Variante | Fondo | Texto | Hover | Casing | WCAG AA |
+|---|---|---|---|---|---|
+| Primario | `bg-[#111111]` | `text-white` | `bg-[#1f1f1f]` | Sentence case | ✅ 19.5:1 |
+| Secundario | `bg-[#111111]` | `text-white` borde gris | `bg-[#1f1f1f]` | Sentence case | ✅ 19.5:1 |
+| Destructivo | `bg-[#111111]` | `text-red-500` | `text-red-400` | **UPPERCASE** | ✅ 7.1:1 |
+| Ghost | `transparent` | `text-gray-900` | `bg-gray-100` | Sentence case | ✅ 16.7:1 |
+| Disabled | cualquier variante | `opacity-45` | — | — | ⚠️ Exento |
+
+> ❌ Botón con `bg-red-600 text-white` no existe en U24. El rojo solo va en el **texto**
+> del botón destructivo, nunca en el fondo.
+> ❌ `bg-amber-400`, `bg-yellow-*` como fondo de botón — prohibido. El amarillo `#FFD60A`
+> solo es fondo en el `home_area` (zona estructural) y en el indicador activo de black_column.
+
+### Inputs y formularios
+
+| Elemento | Estado | Estilos | WCAG AA |
+|---|---|---|---|
+| Input text | Normal | `border-gray-300 bg-white text-gray-800` | ✅ |
+| Input text | Hover | `border-gray-400` | ✅ |
+| Input text | Foco | `border-[#111111]` + focus ring azul (accesibilidad) | ✅ |
+| Input text | Error | `border-red-400` + `text-red-600` bajo el campo | ✅ 4.6:1 |
+| Focus ring | Universal | `box-shadow: 0 0 0 2px #fff, 0 0 0 4px #3b82f6` | ✅ AA |
+| Label | — | `text-gray-600 font-bold text-xs` Barlow Condensed | ✅ 7.0:1 |
+
+> El focus ring azul (`#3b82f6`) está **expresamente permitido** para accesibilidad — es
+> la única excepción al color azul, y va exclusivamente en el anillo de foco, nunca
+> como color decorativo de fondo o texto.
 
 ### Reglas de accesibilidad adicionales (ADR-003)
 
-1. **Iconos sin texto:** todos los `ti-*` que actúan como controles únicos requieren
-   `aria-label` explícito. Ejemplos:
+1. **Iconos sin texto:** todos los iconos Tabler que actúan como controles únicos requieren
+   `aria-label` explícito. Sistema de iconos: **Tabler Icons (outline) únicamente** — no mezclar
+   con otros sets ni con emojis.
    ```tsx
-   <button aria-label="Cerrar modal"><span className="ti-x" aria-hidden="true" /></button>
-   <button aria-label="Instalar U24"><span className="ti-download" aria-hidden="true" /></button>
+   <button aria-label="Cerrar modal"><IconX size={18} aria-hidden="true" /></button>
    ```
 
 2. **Modales bloqueantes:** `focus-trap` obligatorio. Al cerrar, devolver el foco al
    elemento disparador (`ref.current?.focus()`).
 
-3. **Listas semánticas:** bandejas y listas de pacientes usan `role="list"` /
-   `role="listitem"` (o elementos `<ul>` / `<li>` nativos — preferibles).
+3. **Listas semánticas:** bandejas y listas de pacientes usan `<ul>` / `<li>` nativos
+   (o `role="list"` / `role="listitem"` si el elemento semántico es inviable).
 
 4. **Formularios offline:** `aria-required="true"` en campos obligatorios; `aria-invalid`
-   cuando hay error de validación; `aria-describedby` apuntando al `<FieldError />`.
+   cuando hay error de validación; `aria-describedby` apuntando al mensaje de error.
 
-5. **Texto `text-gray-400` sobre blanco** (ratio 3.0:1) está **permitido únicamente
-   para texto auxiliar grande** (≥18px o ≥14px bold). Nunca para texto de contenido
-   informativo crítico.
+5. **Texto `text-gray-400` sobre blanco** (ratio 3.0:1) — **solo texto auxiliar grande**
+   (≥18px o ≥14px bold). Nunca para contenido operativo crítico.
+
+6. **Tarjetas:** borde uniforme `1px solid #e5e7eb` en todos los lados, `border-radius: 6px`.
+
+---
+
+### Accesibilidad daltónica — badges con iconografía (C-04)
+
+> Los badges de estado **nunca confían exclusivamente en el color** para transmitir
+> información. Todo badge operativo incluye un icono Tabler que comunica el estado
+> de forma independiente del color (ADR-003).
+
+#### Mapa icono-estado para badges operativos
+
+| Estado | Color (fondo/texto) | Icono obligatorio | `aria-label` |
+|---|---|---|---|
+| Operativo / OK / Activo | `bg-green-100 text-green-800` | `<IconCheck size={14} />` | "activo" |
+| Advertencia / Pendiente | `bg-amber-50 text-amber-800` | `<IconAlertTriangle size={14} />` | "advertencia" |
+| Error / Crítico / Bloqueado | `bg-red-50 text-red-800` | `<IconAlertCircle size={14} />` | "error" |
+| Inactivo / Archivado | `bg-gray-100 text-gray-600` | `<IconCircleOff size={14} />` | "inactivo" |
+| En progreso / En curso | `bg-blue-50 text-blue-800`* | `<IconLoader size={14} />` | "en progreso" |
+| Sin conexión / Degradado | `bg-amber-50 text-amber-800` | `<IconWifiOff size={14} />` | "sin conexión" |
+| GPS sin señal | `bg-gray-100 text-gray-600` | `<IconMapPinOff size={14} />` | "GPS sin señal" |
+| Doc-8 Abierto\_En\_Turno | `bg-green-100 text-green-800` | `<IconCheck size={14} />` | "parte abierto" |
+| Doc-8 Enviado\_Cerrado | `bg-gray-100 text-gray-600` | `<IconCircleCheck size={14} />` | "parte cerrado" |
+| Doc-8 Enviado\_Cerrado\_Administrativo | `bg-gray-100 text-gray-600` | `<IconLock size={14} />` | "cierre administrativo" |
+| DRP En\_preparacion | `bg-[#FFF5B8] text-amber-800` | `<IconClock size={14} />` | "DRP en preparación" |
+| DRP En\_curso | `bg-green-100 text-green-800` | `<IconCheck size={14} />` | "DRP en curso" |
+| DRP Cancelado | `bg-gray-100 text-gray-700` | `<IconX size={14} />` | "DRP cancelado" |
+
+> *`bg-blue-50` solo está permitido en el contexto "En progreso" dentro de badges de
+> estado de proceso. No usar para estados DRP o estados de vehículo.
+
+#### Estructura canónica de badge accesible
+
+```tsx
+// Componente BadgeEstado — estructura obligatoria
+interface BadgeEstadoProps {
+  estado: string
+  icon:   React.ReactNode   // siempre un Tabler Icon con aria-hidden="true"
+  label:  string            // texto visible del badge
+  ariaLabel?: string        // si difiere del texto visible
+}
+
+function BadgeEstado({ estado, icon, label, ariaLabel }: BadgeEstadoProps) {
+  return (
+    <span
+      role="status"
+      aria-label={ariaLabel ?? label}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+    >
+      <span aria-hidden="true">{icon}</span>
+      {label}
+    </span>
+  )
+}
+
+// Uso correcto:
+<BadgeEstado
+  estado="activo"
+  icon={<IconCheck size={14} aria-hidden="true" />}
+  label="Operativo"
+/>
+```
+
+#### Patrón de relleno para impresión en blanco y negro
+
+En componentes que pueden imprimirse (Doc-8, informes de inventario), añadir clase
+`print:pattern-*` para distinguir estados sin color:
+
+| Estado | Clase print |
+|---|---|
+| OK / Activo | `print:bg-white print:border-2 print:border-black` |
+| Advertencia | `print:bg-white print:border-2 print:border-dashed print:border-black` |
+| Error | `print:bg-gray-200 print:border-2 print:border-black` |
+| Inactivo | `print:bg-white print:border print:border-gray-400` |
+
+---
+
+### Atajos de teclado — puestos de coordinación (C-05)
+
+> Los atajos de teclado aplican **únicamente** en terminales con rol `coordinacion` o
+> `gerencia`. En terminales móviles (puestos de ambulancia) se deshabilitan via
+> `useMediaQuery('(pointer: coarse)')` para evitar activaciones accidentales en táctil.
+
+#### Implementación
+
+```typescript
+// hooks/useKeyboardShortcuts.ts
+// Solo activo si: rol === 'coordinacion' || 'gerencia'  Y  pointer: fine (mouse/teclado)
+import { useEffect } from 'react'
+import { useAuthStore } from '@/stores/useAuthStore'
+
+const COORDINACION_ROLES = ['coordinacion', 'gerencia']
+
+export function useKeyboardShortcuts() {
+  const rol = useAuthStore(s => s.rol)
+  const isDesktop = window.matchMedia('(pointer: fine)').matches
+
+  useEffect(() => {
+    if (!COORDINACION_ROLES.includes(rol) || !isDesktop) return
+
+    function handler(e: KeyboardEvent) {
+      // Ignorar si el foco está en un input / textarea / select
+      const tag = (document.activeElement as HTMLElement)?.tagName
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
+
+      // Atajos con Alt (evitar colisiones con el SO)
+      if (!e.altKey) return
+
+      switch (e.key) {
+        case 'b': e.preventDefault(); openBandeja()          ; break
+        case 'a': e.preventDefault(); openAlertasCriticas()  ; break
+        case 'd': e.preventDefault(); openVisorDRP()         ; break
+        case 'v': e.preventDefault(); openVisorVehiculos()   ; break
+        case 's': e.preventDefault(); openVisorSeguimiento() ; break
+        case 'n': e.preventDefault(); openNuevoDRP()         ; break
+        case 'Escape': closeActiveModal()                    ; break
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [rol, isDesktop])
+}
+```
+
+#### Tabla de atajos disponibles
+
+| Atajo | Acción | Disponible en |
+|---|---|---|
+| `Alt + B` | Abrir bandeja de coordinación | coordinacion, gerencia |
+| `Alt + A` | Abrir panel de alertas críticas (Doc-11) | coordinacion, gerencia |
+| `Alt + D` | Abrir visor de DRPs activos | coordinacion, gerencia |
+| `Alt + V` | Abrir visor de vehículos | coordinacion, gerencia |
+| `Alt + S` | Abrir visor de seguimiento GPS | coordinacion, gerencia |
+| `Alt + N` | Nuevo DRP (shortcut de creación rápida) | coordinacion |
+| `Escape` | Cerrar modal activo / panel activo | todos los roles |
+| `Tab` | Navegación entre controles (estándar HTML) | todos los roles |
+| `Enter` / `Space` | Activar botón enfocado (estándar HTML) | todos los roles |
+
+#### Reglas de implementación
+
+1. **Sin colisiones con el SO:** todos los atajos personalizados usan `Alt + tecla`. No usar
+   `Ctrl + tecla` (reservado para el navegador y el SO).
+2. **No activos en inputs:** el handler comprueba `document.activeElement.tagName` antes
+   de ejecutar la acción.
+3. **Solo puntero fino:** desactivar con `matchMedia('(pointer: coarse)')` en táctil —
+   las tablets de ambulancia no deben disparar atajos por accidente.
+4. **Documentación en la UI:** un modal de ayuda (`Alt + ?`) muestra la tabla completa.
+   El modal se abre con:
+   ```typescript
+   case '?': if (e.altKey) { e.preventDefault(); openHelpShortcuts() }; break
+   ```
+5. **Sin atajos en `estado_0`:** el hook solo se monta cuando `useTerminalStore.estado === 'estado_1'`.
+
+#### Visibilidad del atajo en tooltips
+
+Los controles con atajo asociado muestran el atajo entre paréntesis en el `title` del botón:
+
+```tsx
+<button title="Bandeja de coordinación (Alt+B)" aria-label="Bandeja de coordinación">
+  <IconInbox size={20} aria-hidden="true" />
+</button>
+```
+   ❌ Prohibido `border-l-4` (borde acento de color) — anti-patrón explícito del design system.

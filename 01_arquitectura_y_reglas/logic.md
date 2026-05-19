@@ -6071,4 +6071,147 @@ for (const g of stale ?? []) {
 
 **Trigger de `ultima_activacion_at`:** en `ef_consumir_pin` (login via galleta), actualizar `ultima_activacion_at = NOW()` en la galleta correspondiente tras login exitoso. También en `set_claims` (login normal): actualizar si `id_terminal` coincide con una galleta activa.
 
+---
+
+## 63. Flujo de traspaso de terminal en cambio de turno — `rpc_transferir_galleta` (C-09)
+
+### 63.1 Cuándo aplica
+
+El traspaso de terminal ocurre cuando un empleado (cedente) termina su turno y entrega el dispositivo físico a otro empleado (receptor) que inicia el turno siguiente, antes de que el cedente haga checkout. El coordinador actúa como árbitro del traspaso.
+
+### 63.2 Precondiciones
+
+| Condición | Verificación |
+|---|---|
+| Cedente tiene galleta permanente activa en el terminal | `rpc_transferir_galleta` valida en DB |
+| Receptor está activo en fichas_empleados | Ídem |
+| Receptor no tiene ya galleta en ese terminal | Ídem — evita duplicados |
+| Coordinador tiene `can_manage_rbac` en JWT | Ídem |
+
+### 63.3 Flujo de UI (coordinador ejecuta)
+
+```
+1. Coordinador abre panel "Gestión de terminales" desde black_column → módulo coordinación
+2. Selecciona el terminal a traspasar (busca por id_terminal o matrícula del vehículo)
+3. Selecciona:
+     - Cedente: empleado actual con galleta activa en ese terminal
+     - Receptor: empleado entrante (búsqueda en fichas_empleados activos)
+4. Confirma: modal "¿Traspasar terminal a [receptor]? El acceso de [cedente] quedará revocado."
+5. Llamada a rpc_transferir_galleta
+6. Resultado:
+     - Toast "Terminal traspasado a [receptor]"
+     - En el terminal físico: si el cedente está logueado → modal de cierre de sesión automático
+     - El receptor ve la pantalla estado_0 y hace check-in con sus credenciales
+```
+
+### 63.4 Estado de la cola offline del cedente
+
+Si el cedente tenía mutaciones pendientes en su cola offline (`useOfflineQueue`) en el terminal antes del traspaso:
+
+- La cola offline está en IndexedDB del terminal físico, **no del empleado**. Al hacer el traspaso, el receptor hereda el terminal y su IndexedDB.
+- Las mutaciones pendientes del cedente **deben sincronizarse antes del traspaso** — el coordinador debe verificar que `pendingCount === 0` antes de ejecutar `rpc_transferir_galleta`.
+- Si hay mutaciones pendientes: el coordinador verá una advertencia en el panel: *"Este terminal tiene N operaciones sin sincronizar. Asegúrate de que esté en línea antes de traspasar."*
+
+### 63.5 Postcondiciones garantizadas
+
+| Invariante | Garantía |
+|---|---|
+| El cedente no puede volver a loguearse en ese terminal con su galleta (revocada) | DB — `revocado_at` no nulo |
+| El cedente puede loguearse en OTROS terminales con galletas activas en esos terminales | Solo revoca la galleta de ESTE terminal |
+| El receptor puede loguearse en el terminal tras el traspaso | Nueva galleta permanente en DB |
+| Ambas operaciones están auditadas en `auditoria_rbac` | Auditoría atómica en la misma transacción |
+| La sesión offline del cedente es invalidada | Broadcast `offline_session_invalidated` vía Realtime |
+
+### 63.6 Referencia cruzada
+
+- Especificación completa de la RPC: `rls_y_rpcs.md §29`
+- Flujo de UI en el terminal receptor: `terminal_check.md §Traspaso de terminal`
+- Auditoría: eventos `galleta_revocada` + `galleta_emitida` en `auditoria_rbac`
+
+---
+
+## 64. `useOfflineQueueBackup` — backup cifrado de la cola al cambio de turno (C-10)
+
+### 64.1 Propósito
+
+Seguro de último recurso contra pérdida física del dispositivo con mutaciones pendientes.
+El hook serializa la cola offline de IndexedDB, la cifra con AES-256-GCM usando la clave
+de sesión del servidor, y la sube a Supabase Storage (bucket privado).
+
+Ver `payloads_y_contratos.md §D.3` para la especificación completa del payload y la
+clave de cifrado de sesión.
+
+### 64.2 Comportamiento
+
+```typescript
+// hooks/useOfflineQueueBackup.ts
+
+interface BackupState {
+  lastBackupAt:    string | null    // ISO-8601 del último backup exitoso
+  lastBackupCount: number           // mutaciones incluidas en el último backup
+  isBackingUp:     boolean
+  backupError:     string | null
+}
+
+// El hook expone:
+interface UseOfflineQueueBackup {
+  state:     BackupState
+  runBackup: () => Promise<void>   // backup manual o programático
+}
+```
+
+### 64.3 Lógica del backup periódico
+
+```typescript
+useEffect(() => {
+  if (!isOnline || pendingCount === 0) return
+
+  const BACKUP_INTERVAL_MS = 5 * 60 * 1000  // 5 minutos
+  const interval = setInterval(async () => {
+    if (pendingCount > 0 && isOnline) {
+      await runBackup()
+    }
+  }, BACKUP_INTERVAL_MS)
+
+  return () => clearInterval(interval)
+}, [isOnline, pendingCount])
+```
+
+### 64.4 Backup obligatorio antes del checkout
+
+En el flujo de `check_out` de `terminal_check`, el backup debe completarse antes de limpiar la sesión:
+
+```typescript
+async function handleCheckout(idNombre: string) {
+  // 1. Backup de la cola SI hay mutaciones pendientes
+  const { pendingCount } = useOfflineQueueStore.getState()
+  if (pendingCount > 0) {
+    await useOfflineQueueBackup.getState().runBackup()
+    // Si el backup falla: advertencia pero no bloquea el checkout
+    // Las mutaciones pendientes se perderán si el backup falló — doc en postmortem
+  }
+
+  // 2. Checkout normal
+  await supabase.rpc('check_out', { p_id_nombre: idNombre })
+  // 3. Limpiar sessionStorage de la clave de backup
+  sessionStorage.removeItem('u24_queue_backup_key')
+}
+```
+
+### 64.5 Tabla de estados del hook
+
+| Estado | Condición | UI |
+|---|---|---|
+| Inactivo | `pendingCount === 0` | Sin indicador |
+| Backup en curso | `isBackingUp === true` | Spinner en BannerOffline |
+| Backup OK | `lastBackupAt` reciente | Tooltip "Cola respaldada [hora]" en BannerOffline |
+| Backup fallido | `backupError !== null` | Toast-warning "Error al respaldar cola — riesgo de pérdida" |
+
+### 64.6 Referencia cruzada
+
+- Payload `QueueBackupPayload`: `payloads_y_contratos.md §D.3`
+- Tabla `queue_backup_sessions`: `er_y_seeds.md §Dominio: Infraestructura y versiones`
+- Disparadores: `payloads_y_contratos.md §D.3.5`
+- Recuperación técnica: `payloads_y_contratos.md §D.3.6`
+
 **Notificación a coordinación:** si se revocan > 3 galletas en una ejecución, generar Doc-11 a coordinación con la lista de terminales revocados para revisión manual.

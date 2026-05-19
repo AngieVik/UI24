@@ -209,7 +209,31 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+  smoke-e2e:
+    needs: push-migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Smoke E2E post-deploy
+        run: npx playwright test tests/e2e/smoke.spec.ts
+        env:
+          STAGING_APP_URL:    ${{ secrets.STAGING_APP_URL }}
+          SEED_TEST_PASSWORD: ${{ secrets.SEED_TEST_PASSWORD }}
+          SEED_EMERGENCY_PIN: ${{ secrets.SEED_EMERGENCY_PIN }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
 ```
+
+> **El job `smoke-e2e` es gate de producción.** Si falla, el pipeline se detiene y no se
+> promueve el deploy a producción. Ver `testing_arquitectura.md §12` para la suite completa.
 
 ### 4.3 Secrets requeridos en GitHub
 
@@ -322,6 +346,14 @@ La comunicación de JWT al SW (si se necesita para Background Sync) se hace por
 
 **SDK:** `@sentry/react` con integración de React Error Boundaries y Performance.
 
+**Política de retención (C-03):**
+
+| Tipo de dato | Retención configurada | Motivo |
+|---|---|---|
+| Errores (issues) | **30 días** | Plan Team/Business — configurar en Sentry → Project → Settings → Data Management |
+| Session Replays | **7 días** | Reducir superficie RGPD; los replays contienen comportamiento de usuario |
+| Trazas de Performance | 30 días | Misma retención que errores |
+
 ```typescript
 // src/main.tsx — inicializar antes de renderizar el árbol React
 import * as Sentry from '@sentry/react'
@@ -332,7 +364,7 @@ Sentry.init({
   integrations: [
     Sentry.browserTracingIntegration(),
     Sentry.replayIntegration({
-      maskAllText: true,      // RGPD: no capturar texto de formularios
+      maskAllText: true,      // RGPD: enmascara TODO el texto de formularios en replays
       blockAllMedia: false,
     }),
   ],
@@ -340,11 +372,45 @@ Sentry.init({
   replaysSessionSampleRate: 0.01,
   replaysOnErrorSampleRate: 1.0,  // 100% de sesiones con error
 
-  // Filtrar errores esperados (cola offline, red)
+  // ── Scrubbing de PII clínico — OBLIGATORIO (C-03) ──────────────────────────
   beforeSend(event) {
     // No enviar errores de red durante modo offline
     if (event.exception?.values?.[0]?.type === 'NetworkError') return null
+
+    // Eliminar campos con PII clínica del payload antes de enviar a Sentry
+    // Los campos están en `event.extra` y en los breadcrumbs del request
+    const PII_FIELDS = [
+      'nombre_paciente', 'apellidos_paciente', 'dni_paciente', 'telefono_paciente',
+      'direccion', 'fecha_nacimiento', 'num_historia_clinica',
+      // Campos de fichas_empleados que no deben salir del dominio
+      'nombre_completo', 'email', 'telefono', 'dni',
+    ]
+
+    if (event.extra) {
+      for (const field of PII_FIELDS) {
+        if (field in event.extra) {
+          event.extra[field] = '[SCRUBBED]'
+        }
+      }
+    }
+
+    // Nunca incluir payloads completos de Doc-2/3/4/5 (datos clínicos)
+    if (event.extra?.['mutation_tipo']?.toString().startsWith('doc')) {
+      delete event.extra['payload']  // payload puede contener PII clínica
+    }
+
     return event
+  },
+
+  // Scrubbing en breadcrumbs (peticiones XHR/fetch)
+  beforeBreadcrumb(breadcrumb) {
+    // No registrar URLs con parámetros que puedan incluir PII
+    if (breadcrumb.category === 'xhr' || breadcrumb.category === 'fetch') {
+      if (breadcrumb.data?.url?.includes('fichas_empleados')) {
+        breadcrumb.data.url = '[SCRUBBED — fichas_empleados]'
+      }
+    }
+    return breadcrumb
   },
 })
 ```
@@ -378,7 +444,7 @@ Supabase integra Logflare nativamente para Edge Functions. No requiere SDK adici
 
 **Configuración en Supabase Dashboard → Logs:**
 
-- Retención: 7 días (plan Pro) / 30 días (Enterprise)
+- Retención: **30 días** (requiere plan Pro o superior — configurar en Dashboard → Logs → Retention). Plan Free retiene 1 día. (C-03)
 - Queries útiles en Logflare:
 
 ```sql
