@@ -488,7 +488,23 @@ descuadres_inventario:
 
 Desde `black_column → Logística → Descuadres`:
 
-* **Resolver_Manual** — llama obligatoriamente a una Función RPC que fuerza la clasificación contable del descuadre antes de cerrarlo. El operario debe elegir una de dos opciones mutuamente excluyentes:
+* **Resolver_Manual** — llama obligatoriamente a una Función RPC que fuerza la clasificación contable del descuadre antes de cerrarlo. El operario debe elegir una de dos opciones mutuamente excluyentes.
+
+  **Campo obligatorio previo (Gap R3 — Imputación contable):**
+
+  Antes de seleccionar la opción de resolución, el formulario exige asignar la entidad responsable del descuadre a efectos contables:
+
+  ```
+  entidad_imputable_tipo: 'vehiculo' | 'drp' | 'persona' | 'sin_imputar'
+  entidad_imputable_id:   matricula | id_drp (UUID) | id_nombre | null
+
+  Ejemplos: { tipo: 'vehiculo', id: 'M-1234-AB' }
+            { tipo: 'drp', id: 'uuid-drp-activo' }
+            { tipo: 'persona', id: 'jlopez' }
+            { tipo: 'sin_imputar', id: null }   ← solo con justificación de texto
+  ```
+
+  Estos campos se persisten en `descuadres_inventario` y en cada `INSERT` de `auditoria_inventario` generado por la resolución, garantizando traza contable completa.
 
   **Opción A — Pérdida / Rotura**
 
@@ -496,13 +512,16 @@ Desde `black_column → Logística → Descuadres`:
   El operario indica: "El material está perdido o inutilizable."
   RPC ejecuta en transacción atómica:
     1. stock_real no se modifica (material definitivamente fuera del sistema)
-    2. INSERT auditoria_inventario:
-         tipo_movimiento    = 'merma'
-         cantidad_delta     = -(diferencia)           ← negativo: baja contable
-         ID_origen          = descuadre.ID_origen
-         motivo             = 'descuadre_resuelto_perdida'
+    2. UPDATE descuadres_inventario:
+         entidad_imputable_tipo, entidad_imputable_id  ← asignados por el operario
+    3. INSERT auditoria_inventario:
+         tipo_movimiento       = 'merma'
+         cantidad_delta        = -(diferencia)         ← negativo: baja contable
+         ID_origen             = descuadre.ID_origen
+         motivo                = 'descuadre_resuelto_perdida'
+         entidad_imputable_tipo, entidad_imputable_id  ← propagados del descuadre
          ID_nombre_resolutor, timestamp_resolucion
-    3. descuadre → Resuelto
+    4. descuadre → Resuelto
   ```
 
   **Opción B — Recuperación Fraccionada**
@@ -515,53 +534,52 @@ Desde `black_column → Logística → Descuadres`:
     destino_recuperacion: ID_origen | ID_destino
 
   El sistema calcula automáticamente:
-    merma_definitiva = diferencia - cantidad_recuperada
-    (puede ser 0 si la recuperación es total)
+    merma_definitiva = diferencia - cantidad_recuperada   (puede ser 0 si total)
 
   RPC ejecuta en transacción atómica bajo un único UUID de transacción:
 
-    1. UPDATE stock_real += cantidad_recuperada  en el location elegido
-         (solo la cantidad efectivamente recuperada se reingresa al inventario)
+    1. UPDATE stock_real += cantidad_recuperada en el location elegido
 
-    2. INSERT auditoria_inventario — entrada de recuperación:
-         uuid_transaccion        = gen_random_uuid()   ← mismo UUID para ambas entradas
-         tipo_movimiento         = 'recuperacion_descuadre'
-         cantidad_delta          = +(cantidad_recuperada)   ← alta contable parcial o total
-         ID_destino_recuperacion = destino_recuperacion
-         id_descuadre_origen     = descuadre.id
+    2. UPDATE descuadres_inventario:
+         entidad_imputable_tipo, entidad_imputable_id
+
+    3. INSERT auditoria_inventario — entrada de recuperación:
+         uuid_transaccion          = gen_random_uuid()   ← mismo UUID para ambas entradas
+         tipo_movimiento           = 'recuperacion_descuadre'
+         cantidad_delta            = +(cantidad_recuperada)
+         ID_destino_recuperacion   = destino_recuperacion
+         id_descuadre_origen       = descuadre.id
+         entidad_imputable_tipo, entidad_imputable_id
          ID_nombre_resolutor, timestamp_resolucion
 
-    3. SI merma_definitiva > 0:
+    4. SI merma_definitiva > 0:
          INSERT auditoria_inventario — entrada de merma residual:
-           uuid_transaccion      = (mismo UUID que paso 2)
+           uuid_transaccion      = (mismo UUID que paso 3)
            tipo_movimiento       = 'merma_definitiva_residual'
-           cantidad_delta        = -(merma_definitiva)   ← baja contable del diferencial
+           cantidad_delta        = -(merma_definitiva)
            ID_origen             = descuadre.ID_origen
            id_descuadre_origen   = descuadre.id
            motivo                = 'descuadre_parcialmente_recuperado'
+           entidad_imputable_tipo, entidad_imputable_id
            ID_nombre_resolutor, timestamp_resolucion
 
-    4. descuadre → Resuelto
+    5. descuadre → Resuelto
 
   Invariante: cantidad_recuperada + merma_definitiva = diferencia (siempre)
-  Ambas entradas en auditoria_inventario llevan el mismo uuid_transaccion,
-  permitiendo trazabilidad completa de la resolución fraccionada en auditoría.
   ```
 
   **Validación frontend:**
-  * Campo `cantidad_recuperada` con rango `[1, diferencia]` (control numérico).
+  * Selector obligatorio de entidad imputable antes de mostrar opciones A/B.
+  * Campo `cantidad_recuperada` con rango `[1, diferencia]`.
   * Si `cantidad_recuperada = diferencia` → merma = 0, se muestra "Recuperación total".
-  * Si `cantidad_recuperada < diferencia` → merma residual visible en el formulario
-    antes de confirmar: "Se imputarán [N] unidades como merma definitiva."
+  * Si `cantidad_recuperada < diferencia` → merma residual visible antes de confirmar.
   * El operario debe confirmar explícitamente antes de ejecutar el RPC.
 
 * **Archivar**: cierra el descuadre sin clasificación contable. Estado → `Archivado`.
-  No genera entrada en `auditoria_inventario`. Para casos donde el descuadre no requiere
-  acción contable (ej. error de registro ya corregido por otros medios).
+  No genera entrada en `auditoria_inventario`. No requiere `entidad_imputable`.
+  Para casos donde el descuadre no requiere acción contable (ej. error de registro ya corregido por otros medios).
 
-> La clasificación contable es obligatoria en `Resolver_Manual` para garantizar la
-> trazabilidad de mermas y recuperaciones. El RPC impide cerrar el descuadre sin
-> haber elegido el destino del material.
+> La clasificación contable (Resolver_Manual) **y** la imputación de responsabilidad (entidad_imputable) son obligatorias. El RPC rechaza la llamada si `entidad_imputable_tipo` es null. Si se elige 'sin_imputar', se exige un campo `motivo_sin_imputar` de texto libre.
 
 ---
 
@@ -4018,3 +4036,639 @@ coordinacion / gerencia desde nucleo_coordinacion_y_seguridad:
   4. Realtime notifica a todos los terminales del DRP via doc11_aviso
   5. useDRPStore → estado = 'Cancelado'
 ```
+
+---
+
+## 49. Ajuste Manual de Stock — RPC `rpc_ajuste_manual_stock`
+
+### 49.1 Propósito
+
+Permite a logística y gerencia corregir el stock de cualquier location (base o subinventario)
+cuando el valor real físico difiere del registrado en el sistema por causas no cubiertas
+por Doc-6 (gasto), Doc-9 (entrada) o Doc-10 (transferencia). El ajuste requiere justificación
+obligatoria de texto libre y genera una entrada inmutable en `auditoria_inventario`.
+
+### 49.2 Firma
+
+```typescript
+// En hooks.md, useInventario expone la acción:
+ajustarStock(
+  locationId:    string,
+  itemId:        string,
+  cantidadNueva: number,   // valor absoluto correcto — NO un delta
+  motivo:        string    // obligatorio, mínimo 10 caracteres
+): Promise<{ stockAnterior: number; stockNuevo: number }>
+```
+
+### 49.3 RPC PostgreSQL
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_ajuste_manual_stock(
+  p_location_id   TEXT,
+  p_item_id       INT,
+  p_cantidad_nueva INT,
+  p_motivo        TEXT,
+  p_operador_id   TEXT
+)
+RETURNS TABLE (stock_anterior INT, stock_nuevo INT)
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_stock_actual  INT;
+  v_delta         INT;
+  v_tabla         TEXT;
+BEGIN
+  -- 1. Guard: cantidad_nueva no puede ser negativa
+  IF p_cantidad_nueva < 0 THEN
+    RAISE EXCEPTION 'ajuste_stock_negativo'
+      USING HINT = '422',
+            DETAIL = 'El stock resultante no puede ser negativo.';
+  END IF;
+
+  -- 2. Guard: motivo obligatorio (mínimo 10 caracteres)
+  IF length(trim(p_motivo)) < 10 THEN
+    RAISE EXCEPTION 'motivo_ajuste_insuficiente'
+      USING HINT = '422',
+            DETAIL = 'El motivo del ajuste debe tener al menos 10 caracteres.';
+  END IF;
+
+  -- 3. Leer stock actual y determinar tabla según tipo de location
+  IF p_location_id LIKE 'ID_DRP%' OR p_location_id LIKE 'BKP%' THEN
+    -- Subinventario de vehículo / mochila
+    SELECT stock_real INTO v_stock_actual
+      FROM inventario_vehiculo
+     WHERE matricula = p_location_id AND id_item = p_item_id;
+    v_tabla := 'inventario_vehiculo';
+  ELSE
+    -- Inventario de base (almacén central u otros locations)
+    SELECT stock_real INTO v_stock_actual
+      FROM inventario_base
+     WHERE location_id = p_location_id AND id_item = p_item_id;
+    v_tabla := 'inventario_base';
+  END IF;
+
+  IF v_stock_actual IS NULL THEN
+    RAISE EXCEPTION 'item_no_encontrado_en_location'
+      USING HINT = '404',
+            DETAIL = 'El ítem no existe en la location especificada.';
+  END IF;
+
+  v_delta := p_cantidad_nueva - v_stock_actual;
+
+  -- 4. Actualizar stock (no hacer nada si delta = 0)
+  IF v_delta != 0 THEN
+    IF v_tabla = 'inventario_vehiculo' THEN
+      UPDATE inventario_vehiculo
+         SET stock_real = p_cantidad_nueva, ultima_actualizacion = NOW()
+       WHERE matricula = p_location_id AND id_item = p_item_id;
+    ELSE
+      UPDATE inventario_base
+         SET stock_real = p_cantidad_nueva
+       WHERE location_id = p_location_id AND id_item = p_item_id;
+    END IF;
+  END IF;
+
+  -- 5. Registrar en auditoria_inventario (siempre, incluso si delta = 0 — queda traza del intento)
+  INSERT INTO auditoria_inventario (
+    tipo_movimiento, id_item, cantidad_delta,
+    location_origen, location_destino,
+    id_nombre_operador, rpc_ejecutada, motivo, created_at
+  ) VALUES (
+    'ajuste', p_item_id, v_delta,
+    p_location_id, p_location_id,
+    p_operador_id, 'rpc_ajuste_manual_stock', p_motivo, NOW()
+  );
+
+  RETURN QUERY SELECT v_stock_actual, p_cantidad_nueva;
+END;
+$$;
+```
+
+### 49.4 Reglas de acceso
+
+| Aspecto | Decisión |
+|---|---|
+| RBAC | `can_edit_inventory` — logistica, responsable_logistica, gerencia |
+| Stock resultante < 0 | Bloqueado — RAISE EXCEPTION |
+| Motivo | Obligatorio, mínimo 10 caracteres |
+| Scope | Cualquier location: base + subinventario vehículo/mochila |
+| Auditoria | Siempre — incluso si delta = 0 |
+| Offline | No apto para cola — ajuste manual requiere confirmación atómica del valor actual |
+
+### 49.5 Flujo UI
+
+```
+logistica / gerencia desde nucleo_logistica_almacen → Inventario maestro → [ítem]:
+  1. Pulsa "Ajustar stock" junto a un ítem de cualquier location
+  2. Modal:
+       Stock actual: [N] unidades
+       Stock correcto: [input numérico — mínimo 0]
+       Delta calculado: [+N / -N] (actualiza en tiempo real)
+       Motivo: [textarea, mín. 10 chars]
+       [ Aplicar ajuste ] [ Cancelar ]
+  3. RPC rpc_ajuste_manual_stock(locationId, itemId, cantidadNueva, motivo, operadorId)
+  4. Toast: "Stock ajustado de [anterior] a [nuevo] unidades. Motivo registrado."
+  5. Realtime actualiza la vista del inventario para todos los terminales
+```
+
+---
+
+## 50. Onboarding de Empleado — Edge Function `ef_alta_empleado` (Gap F3)
+
+### 50.1 Propósito
+
+Cuando RRHH da de alta a un nuevo empleado, se necesita crear simultáneamente la
+cuenta de autenticación en Supabase Auth y la fila correspondiente en `fichas_empleados`.
+Como Supabase Admin API solo es accesible desde el servidor, esta operación se
+implementa como Edge Function con SECURITY DEFINER equivalente.
+
+No se emite galleta de terminal automáticamente en el alta: las galletas están
+vinculadas a hardware físico y requieren validación presencial (flujo PIN). El empleado
+recibe sus credenciales temporales y las usa en su primer login, que cacheará la sesión
+offline y permitirá vincular posteriormente un terminal.
+
+Los emails son ficticios (`id_nombre@u24.internal`) — dominio interno no enrutable
+externamente. Supabase Auth los acepta como email válido.
+
+### 50.2 Firma
+
+**Auth:** JWT con `can_manage_rrhh` (roles: rrhh, gerencia).
+**Body:** `{ id_nombre, nombre_real, dni, rol, horas_contrato, contrasena_temporal }`
+
+### 50.3 Implementación
+
+```typescript
+// supabase/functions/ef-alta-empleado/index.ts
+
+Deno.serve(async (req) => {
+  const jwtClaims = await verifyJWT(req)
+  if (!jwtClaims.can_manage_rrhh) return errorResponse(403, 'insufficient_privilege')
+
+  const {
+    id_nombre, nombre_real, dni, rol,
+    horas_contrato, contrasena_temporal
+  } = await req.json()
+
+  // Validaciones básicas
+  if (!id_nombre || !nombre_real || !rol || !contrasena_temporal) {
+    return errorResponse(422, 'campos_requeridos_incompletos')
+  }
+  const ROLES_VALIDOS = ['tes','due','medico','flota','coordinacion','logistica',
+                          'responsable_logistica','responsable_flota','rrhh','gerencia']
+  if (!ROLES_VALIDOS.includes(rol)) {
+    return errorResponse(422, 'rol_invalido')
+  }
+
+  const email = `${id_nombre}@u24.internal`
+
+  // 1. Crear cuenta en auth.users (email_confirm = true — sin envío de email)
+  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: contrasena_temporal,
+    email_confirm: true,   // omite el flujo de verificación por email
+  })
+  if (authError) {
+    // Código 23505 = email ya existe → id_nombre duplicado
+    if (authError.message?.includes('already registered')) {
+      return errorResponse(409, 'id_nombre_duplicado')
+    }
+    throw authError
+  }
+
+  // 2. Insertar ficha de empleado (transacción implícita — si falla, auth.users queda huérfano;
+  //    el cron de limpieza o un reintento manual resuelve. No se revierte auth via Admin API
+  //    para evitar condiciones de carrera en reintentos.)
+  const { error: fichaError } = await supabaseAdmin
+    .from('fichas_empleados')
+    .insert({
+      auth_user_id: authUser.user.id,
+      id_nombre,
+      nombre_real,
+      dni,
+      rol,
+      horas_contrato: horas_contrato ?? null,
+      activo: true,
+      fecha_alta: new Date().toISOString(),
+      fecha_baja: null,
+    })
+  if (fichaError) throw fichaError
+
+  // 3. Auditar
+  const callerIdNombre = await getCallerIdNombre(jwtClaims)
+  await supabaseAdmin.from('auditoria_rbac').insert({
+    tipo_evento: 'alta_empleado',
+    id_nombre,
+    id_terminal: null,
+    metadata: jsonb({ rol, ejecutado_por: callerIdNombre }),
+    created_at: new Date().toISOString(),
+  })
+
+  return new Response(
+    JSON.stringify({ auth_user_id: authUser.user.id, id_nombre }),
+    { status: 201, headers: { 'Content-Type': 'application/json' } }
+  )
+})
+```
+
+### 50.4 Reglas de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| Email | `id_nombre@u24.internal` — ficticio, no se envía nada externo |
+| `email_confirm: true` | Omite verificación — el flujo de activación es presencial |
+| Galleta de terminal | NO se emite en el alta — vinculación posterior via flujo PIN |
+| Contraseña temporal | La impone RRHH; el empleado puede cambiarla en primer login (si la UI lo permite) |
+| `contrasena_temporal` | Mínimo de seguridad delegado al formulario de UI (≥ 8 chars) |
+| Idempotencia | Si `fichas_empleados` falla y `auth.users` ya existe, un reintento con mismo `id_nombre` devuelve 409. RRHH limpia manualmente desde la consola si es necesario |
+
+---
+
+## 51. Offboarding de Empleado — Edge Function `ef_baja_empleado` (Gap F3)
+
+### 51.1 Propósito
+
+Dar de baja a un empleado debe ser fulminante por seguridad y consistencia operativa.
+Una RPC pura no es suficiente porque la revocación del JWT requiere la Admin API de
+Supabase (solo disponible en servidor). Se implementa como Edge Function que ejecuta
+las tres acciones de forma secuencial en la misma invocación.
+
+Los registros históricos (Doc-1 checkins, Doc-8 partes, asistencias…) permanecen
+intactos: las FKs apuntan a `id_nombre` y `fichas_empleados.activo = false` no rompe
+ninguna referencia existente.
+
+### 51.2 Firma
+
+**Auth:** JWT con `can_manage_rrhh` (roles: rrhh, gerencia).
+**Body:** `{ id_nombre }`
+
+### 51.3 Implementación
+
+```typescript
+// supabase/functions/ef-baja-empleado/index.ts
+
+Deno.serve(async (req) => {
+  const jwtClaims = await verifyJWT(req)
+  if (!jwtClaims.can_manage_rrhh) return errorResponse(403, 'insufficient_privilege')
+
+  const { id_nombre } = await req.json()
+  if (!id_nombre) return errorResponse(422, 'id_nombre_requerido')
+
+  // 0. Obtener auth_user_id del empleado
+  const { data: ficha, error: fichaFetchError } = await supabaseAdmin
+    .from('fichas_empleados')
+    .select('auth_user_id, activo')
+    .eq('id_nombre', id_nombre)
+    .single()
+
+  if (fichaFetchError || !ficha) return errorResponse(404, 'empleado_no_encontrado')
+  if (!ficha.activo) return errorResponse(409, 'empleado_ya_inactivo')
+
+  // 1. SEGURIDAD — marcar inactivo + invalidar JWT
+  const { error: fichaUpdateError } = await supabaseAdmin
+    .from('fichas_empleados')
+    .update({ activo: false, fecha_baja: new Date().toISOString() })
+    .eq('id_nombre', id_nombre)
+  if (fichaUpdateError) throw fichaUpdateError
+
+  // signOut 'global' revoca todos los refresh tokens activos del empleado
+  await supabaseAdmin.auth.admin.signOut(ficha.auth_user_id, 'global')
+
+  // 2. SEGURIDAD — revocar todas las galletas de terminal del empleado
+  await supabaseAdmin
+    .from('galletas_terminales')
+    .update({ revocado_at: new Date().toISOString() })
+    .eq('id_nombre', id_nombre)
+    .is('revocado_at', null)
+
+  // 3. OPERATIVA — eliminar asignaciones de cuadrante futuras
+  //    Solo fechas estrictamente futuras; los turnos pasados/presentes quedan
+  //    como registro histórico (no se pueden reabrir).
+  const hoy = new Date().toISOString().split('T')[0]   // YYYY-MM-DD
+  await supabaseAdmin
+    .from('cuadrante_turnos')
+    .delete()
+    .eq('id_nombre', id_nombre)
+    .gt('fecha', hoy)
+
+  // 4. Auditar
+  const callerIdNombre = await getCallerIdNombre(jwtClaims)
+  await supabaseAdmin.from('auditoria_rbac').insert({
+    tipo_evento: 'baja_empleado',
+    id_nombre,
+    id_terminal: null,
+    metadata: jsonb({ ejecutado_por: callerIdNombre, auth_user_id: ficha.auth_user_id }),
+    created_at: new Date().toISOString(),
+  })
+
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200, headers: { 'Content-Type': 'application/json' }
+  })
+})
+```
+
+### 51.4 Efectos en cascada
+
+| Acción | Efecto | Reversible |
+|---|---|---|
+| `fichas_empleados.activo = false` | El `set_claims` devuelve `app_claims: {}` en el próximo JWT — acceso denegado a todo | Solo por RRHH/gerencia (UPDATE manual) |
+| `signOut global` | JWT actuales invalidados inmediatamente; el access token en memoria expira según TTL | No — requiere nuevo login |
+| `galletas_terminales revocado_at` | Terminales físicos quedan sin acceso permanente — piden PIN o credenciales | Solo reemitiendo nueva galleta |
+| `cuadrante_turnos DELETE fecha > hoy` | Turnos futuros eliminados — el coordinador debe reasignar si aplica | No (requiere reasignación manual) |
+| Datos históricos | Intactos — Doc-1, Doc-8, doc2/3, auditoria_rbac, auditoria_inventario | Inmutables por diseño |
+
+### 51.5 Guard contra re-baja
+
+Si `fichas_empleados.activo` ya es `false`, la Edge Function devuelve `409 empleado_ya_inactivo`
+sin ejecutar ninguna acción. Garantiza idempotencia en reintentos.
+
+---
+
+## 52. Purga RGPD — Edge Cron `ef_cron_rgpd` (Gap F7)
+
+### 52.1 Propósito y marco normativo
+
+El sistema maneja tres categorías de PII con plazos de retención distintos:
+
+| Categoría | Tablas afectadas | Base legal | Retención | Acción |
+|---|---|---|---|---|
+| **PII clínica** (datos de pacientes) | `doc2_informes_svb`, `doc3_informes_sva`, `doc4_consentimientos`, `doc5_rechazos_alta` | Ley 41/2002 (historia clínica) | 5 años desde la asistencia | Purga de claves PII del JSONB — preserva datos estadísticos |
+| **PII laboral** (empleados) | `fichas_empleados` | RGPD + normativa laboral española | 4 años desde `fecha_baja` | Seudoanonimización de campos identificativos |
+| **Logs de seguridad** | `auditoria_rbac` | RGPD + ENS | 1 año desde el evento | DELETE físico de filas caducadas |
+
+### 52.2 Estrategia de purga de PII clínica
+
+Se usa el **operador de sustracción de array de claves JSONB** nativo de PostgreSQL.
+Esta estrategia preserva intactos los datos estadísticos y operativos del documento
+(tiempos de respuesta, constantes vitales, patología, nivel de triaje…) y elimina solo
+las claves directamente identificativas del paciente.
+
+```sql
+-- Claves PII a eliminar de datos_paciente / datos_firma
+-- El conjunto exacto puede variar si el esquema del JSONB evoluciona; actualizar aquí.
+DO $$
+DECLARE
+  CLAVES_PII_CLINICA CONSTANT text[] := ARRAY[
+    'nombre', 'apellidos', 'dni', 'cip', 'sip',
+    'direccion', 'telefono', 'email', 'fecha_nacimiento_exacta'
+  ];
+BEGIN
+  -- doc2: informes SVB
+  UPDATE doc2_informes_svb
+     SET datos_paciente = datos_paciente - CLAVES_PII_CLINICA
+   WHERE timestamp_asistencia < NOW() - INTERVAL '5 years'
+     AND datos_paciente ?| CLAVES_PII_CLINICA;  -- solo actualizar si hay PII presente
+
+  -- doc3: informes SVA
+  UPDATE doc3_informes_sva
+     SET datos_paciente = datos_paciente - CLAVES_PII_CLINICA
+   WHERE timestamp_asistencia < NOW() - INTERVAL '5 years'
+     AND datos_paciente ?| CLAVES_PII_CLINICA;
+
+  -- doc4: consentimientos — el campo firma (Blob URL) se nulifica
+  UPDATE doc4_consentimientos
+     SET datos_firma = NULL
+   WHERE timestamp_firma < NOW() - INTERVAL '5 years'
+     AND datos_firma IS NOT NULL;
+
+  -- doc5: rechazos de alta — idem
+  UPDATE doc5_rechazos_alta
+     SET datos_firma = NULL
+   WHERE timestamp_rechazo < NOW() - INTERVAL '5 years'
+     AND datos_firma IS NOT NULL;
+END;
+$$;
+```
+
+> **Invariante:** la purga clínica NUNCA borra la fila completa. Los campos operativos
+> (`id_activacion`, `id_nombre_redactor`, `timestamp_asistencia`, `estado`) permanecen
+> intactos para trazabilidad de carga de trabajo y auditoría operativa.
+
+### 52.3 Seudoanonimización de empleados
+
+```sql
+-- Solo empleados inactivos con más de 4 años desde fecha_baja y que aún no están
+-- seudoanonimizados (nombre_real != 'EMPLEADO_ANONIMIZADO' como señal de marca).
+UPDATE fichas_empleados
+   SET nombre_real    = 'EMPLEADO_ANONIMIZADO',
+       dni            = NULL
+ WHERE activo         = false
+   AND fecha_baja     < NOW() - INTERVAL '4 years'
+   AND nombre_real   != 'EMPLEADO_ANONIMIZADO';  -- idempotente
+```
+
+> **`id_nombre` NO se anonimiza.** Es el alias operativo referenciado como FK en
+> decenas de tablas inmutables (auditoria_rbac, doc8_partes_trabajo, cuadrante_turnos…).
+> Borrarlo o cambiarlo rompería la integridad referencial. El `id_nombre` es un
+> seudónimo operativo (no el nombre real) y por sí solo no es PII identificativa.
+>
+> **`auth_user_id`:** la cuenta de `auth.users` ya fue eliminada por Supabase Auth
+> durante el offboarding (`ef_baja_empleado §51`). El campo UUID queda huérfano
+> (FK nullable) y puede nullificarse aquí también si se desea limpiar.
+
+### 52.4 Purga de logs de seguridad
+
+```sql
+-- Eliminar eventos de auditoria_rbac con más de 1 año de antigüedad.
+-- RLS UPDATE/DELETE = FALSE en producción, por lo que este bloque solo puede
+-- ejecutarse con service role (ef_cron_rgpd tiene service role vía supabaseAdmin).
+DELETE FROM auditoria_rbac
+ WHERE created_at < NOW() - INTERVAL '1 year';
+```
+
+> **Nota:** si en el futuro se implementa un mecanismo de "legal hold" (retención
+> extendida por incidente abierto), añadir aquí un `AND id_evento NOT IN (SELECT ...)`.
+> En la implementación actual no existe ese mecanismo; la purga es incondicional
+> tras 1 año.
+
+### 52.5 Implementación Edge Cron
+
+```typescript
+// supabase/functions/ef-cron-rgpd/index.ts
+// Frecuencia: diaria (cron: '0 3 * * *' — 3am UTC, baja carga)
+
+Deno.serve(async () => {
+  const now = new Date()
+
+  // BLOQUE 1 — Purga PII clínica (doc2, doc3, doc4, doc5)
+  const cutoff5y = new Date(now)
+  cutoff5y.setFullYear(cutoff5y.getFullYear() - 5)
+
+  const CLAVES_PII = ['nombre','apellidos','dni','cip','sip',
+                      'direccion','telefono','email','fecha_nacimiento_exacta']
+  const piiFilter = CLAVES_PII.map(k => `"${k}"`).join(',')
+
+  const tablasClincias = [
+    { table: 'doc2_informes_svb',  tsCol: 'timestamp_asistencia', piiCol: 'datos_paciente' },
+    { table: 'doc3_informes_sva',  tsCol: 'timestamp_asistencia', piiCol: 'datos_paciente' },
+  ]
+  for (const { table, tsCol, piiCol } of tablasClincias) {
+    await supabaseAdmin.rpc('_rgpd_purge_jsonb_keys', {
+      p_tabla: table, p_ts_col: tsCol, p_pii_col: piiCol,
+      p_cutoff: cutoff5y.toISOString(), p_claves: CLAVES_PII
+    })
+  }
+  // doc4/doc5: nullificar datos_firma (Blob URL — no aplica el operador JSONB)
+  for (const table of ['doc4_consentimientos', 'doc5_rechazos_alta']) {
+    const tsCol = table === 'doc4_consentimientos' ? 'timestamp_firma' : 'timestamp_rechazo'
+    await supabaseAdmin.from(table)
+      .update({ datos_firma: null })
+      .lt(tsCol, cutoff5y.toISOString())
+      .not('datos_firma', 'is', null)
+  }
+
+  // BLOQUE 2 — Seudoanonimización empleados inactivos (>4 años desde fecha_baja)
+  const cutoff4y = new Date(now)
+  cutoff4y.setFullYear(cutoff4y.getFullYear() - 4)
+  await supabaseAdmin.from('fichas_empleados')
+    .update({ nombre_real: 'EMPLEADO_ANONIMIZADO', dni: null })
+    .eq('activo', false)
+    .lt('fecha_baja', cutoff4y.toISOString())
+    .neq('nombre_real', 'EMPLEADO_ANONIMIZADO')  // idempotente
+
+  // BLOQUE 3 — Purga logs auditoria_rbac (>1 año)
+  const cutoff1y = new Date(now)
+  cutoff1y.setFullYear(cutoff1y.getFullYear() - 1)
+  await supabaseAdmin.from('auditoria_rbac')
+    .delete()
+    .lt('created_at', cutoff1y.toISOString())
+
+  console.log('ef_cron_rgpd completado:', now.toISOString())
+  return new Response('ok')
+})
+```
+
+> `_rgpd_purge_jsonb_keys` es una función SQL auxiliar (SECURITY DEFINER) que ejecuta
+> el UPDATE con el operador `-` de JSONB. Se implementa en SQL para aprovechar los
+> índices nativos de Postgres; la lógica equivalente en JavaScript sería más lenta
+> y sin índices.
+
+### 52.6 Reglas de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| Frecuencia | Diaria, 03:00 UTC (baja carga nocturna) |
+| Service role | Obligatorio — las políticas RLS de `auditoria_rbac` y docs son inmutables en RLS normal |
+| Idempotencia | Los tres bloques son idempotentes — reintentos seguros |
+| Logs del cron | Solo `console.log` — no se audita en `auditoria_rbac` (evitar loop) |
+| Extensión futura | Añadir "legal hold" antes del bloque 3 si se necesita retención extendida por incidente |
+
+---
+
+## 53. Alta de Vehículo Nuevo — RPC `rpc_alta_vehiculo` (Gap F4)
+
+### 53.1 Propósito
+
+Registrar un nuevo vehículo en el sistema implica cuatro efectos simultáneos:
+crear el registro del vehículo, crear su location (subinventario propio), inicializar
+el inventario según la plantilla asignada con `stock_real = 0`, y notificar a logística
+para que realice la primera dotación física. Inicializar con `stock_real = stock_objetivo`
+falsificaría el inventario y rompería la trazabilidad contable.
+
+### 53.2 Firma
+
+```typescript
+// useFlotaStore expone:
+altaVehiculo(params: {
+  matricula:   string
+  tipo:        'A1' | 'A2' | 'B' | 'C' | 'VIR' | 'Quad' | 'BKP'
+  plantillaId: string
+}): Promise<{ matricula: string; locationId: string; itemsInicializados: number }>
+```
+
+### 53.3 Wizard de alta (UI)
+
+```
+responsable_flota / gerencia — desde black_column → Flota y taller → Nuevo vehículo:
+
+Paso 1 — Datos del vehículo
+  Matrícula: [input text, formato libre]
+  Tipo:      [selector: A1 / A2 / B / C / VIR / Quad / BKP]
+
+Paso 2 — Plantilla de inventario
+  Plantilla: [selector de plantillas existentes — muestra nombre + perfil]
+  Vista previa: lista de ítems y stock_objetivo por subgrupo
+
+Paso 3 — Confirmación
+  Resumen: matrícula, tipo, plantilla, N ítems a inicializar (stock_real = 0)
+  Aviso: "⚠ El inventario se inicia vacío. Logística debe realizar la primera dotación."
+  [ Registrar vehículo ] [ Cancelar ]
+```
+
+### 53.4 RPC PostgreSQL
+
+```sql
+CREATE OR REPLACE FUNCTION rpc_alta_vehiculo(
+  p_matricula    TEXT,
+  p_tipo         TEXT,
+  p_plantilla_id TEXT,
+  p_registrado_por TEXT
+)
+RETURNS TABLE (matricula TEXT, location_id TEXT, items_inicializados INT)
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_tipo_valido CONSTANT text[] := ARRAY['A1','A2','B','C','VIR','Quad','BKP'];
+  v_count INT := 0;
+BEGIN
+  -- 1. Guard: tipo válido
+  IF NOT (p_tipo = ANY(v_tipo_valido)) THEN
+    RAISE EXCEPTION 'tipo_vehiculo_invalido'
+      USING HINT = '422', DETAIL = 'Tipo de vehículo no reconocido.';
+  END IF;
+
+  -- 2. Guard: matrícula no duplicada
+  IF EXISTS (SELECT 1 FROM vehiculos WHERE matricula = p_matricula) THEN
+    RAISE EXCEPTION 'matricula_duplicada'
+      USING HINT = '409', DETAIL = 'Ya existe un vehículo con esa matrícula.';
+  END IF;
+
+  -- 3. Guard: plantilla existe
+  IF NOT EXISTS (SELECT 1 FROM plantillas_stock WHERE plantilla_id = p_plantilla_id) THEN
+    RAISE EXCEPTION 'plantilla_no_encontrada'
+      USING HINT = '404', DETAIL = 'La plantilla de inventario no existe.';
+  END IF;
+
+  -- 4. Insertar vehículo
+  INSERT INTO vehiculos (matricula, tipo, condicion_tecnica, estado_operativo, plantilla_id)
+  VALUES (p_matricula, p_tipo, 'operativo', 'inactivo', p_plantilla_id);
+
+  -- 5. Crear location del vehículo (subinventario propio)
+  INSERT INTO locations (location_id, nombre, tipo)
+  VALUES (p_matricula, p_matricula, 'vehiculo');
+
+  -- 6. Inicializar inventario desde plantilla — stock_real = 0
+  INSERT INTO inventario_vehiculo (matricula, id_item, subgrupo, stock_real, ultima_actualizacion)
+  SELECT p_matricula, id_item, subgrupo, 0, NOW()
+    FROM plantilla_lineas
+   WHERE plantilla_id = p_plantilla_id;
+
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+
+  -- 7. Notificar a logística: primera dotación pendiente
+  INSERT INTO doc11_avisos (
+    tipo_aviso, nivel, id_nombre_emisor, texto, timestamp_publicacion, leido_por
+  ) VALUES (
+    'aviso_coordinacion', 'aviso', p_registrado_por,
+    'Nuevo vehículo registrado: ' || p_matricula || ' (' || p_tipo || '). '
+    || 'Pendiente primera dotación de material desde almacén.',
+    NOW(), '[]'::jsonb
+  );
+
+  RETURN QUERY SELECT p_matricula, p_matricula, v_count;
+END;
+$$;
+
+-- Conceder ejecución solo a roles con can_manage_fleet
+GRANT EXECUTE ON FUNCTION rpc_alta_vehiculo TO authenticated;
+-- La validación del claim se hace dentro del cuerpo (claim('can_manage_fleet'))
+```
+
+### 53.5 Reglas de diseño
+
+| Aspecto | Decisión |
+|---|---|
+| RBAC | `can_manage_fleet` — responsable_flota, gerencia |
+| `stock_real` inicial | Siempre 0 — nunca igualar a `stock_objetivo` automáticamente |
+| `location_id` del vehículo | `= matricula` — uso la matrícula como location_id para evitar una tabla de mapeo adicional |
+| Notificación logística | `doc11_avisos` tipo 'aviso_coordinacion' nivel 'aviso' — no crítico, no interrumpe operaciones |
+| Condición técnica inicial | `'operativo'` — asume que el vehículo llega en condiciones; responsable_flota puede cambiarla |
+| Estado operativo inicial | `'inactivo'` — no puede activarse hasta tener al menos una galleta de terminal asignada |
+| Offline | No apto — alta de vehículo requiere confirmación atómica en DB |

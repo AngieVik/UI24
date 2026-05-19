@@ -96,3 +96,70 @@ Durante la revisión de `terminal_check.md` en Fase 1 se detectó que la condici
 | Strings UI (descripciones largas) | `'Cookie permanente de terminal'` | `'Sesión temporal de terminal'` |
 
 **Regla:** los valores de DB/Store/RPC son siempre `'permanente'` / `'temporal'` (minúscula, sin acento). Los strings de UI son los únicos que pueden usar formas coloquiales como `'galleta'` / `'galleta pequeña'`.
+
+---
+
+## ADR-003 — PWA install prompt condicional + nivel de accesibilidad WCAG 2.1 AA
+
+**Estado:** Aceptado
+**Fecha:** 2026-05-19
+
+### Contexto
+
+La aplicación es una PWA (Progressive Web App) diseñada para funcionar en tabletas y móviles dentro de ambulancias, donde la instalación nativa mejora la experiencia (pantalla completa, sin barra del navegador, acceso desde home screen). Sin embargo, el prompt de instalación del navegador es agresivo y puede interrumpir flujos operativos críticos si aparece en el momento equivocado.
+
+Adicionalmente, el sistema opera en contextos de alta presión donde la legibilidad y la operatividad sin fricción son críticas. Se necesita un nivel mínimo de accesibilidad definido formalmente para guiar decisiones de implementación de UI.
+
+### Decisiones
+
+**A — PWA install prompt condicional**
+
+1. **Evento `beforeinstallprompt`** se captura y posterga (`event.preventDefault()`). El prompt nativo del navegador nunca se muestra automáticamente.
+
+2. **Condición para mostrar el banner interno:**
+   - El usuario ha completado al menos **1 login exitoso** en la sesión actual (no en la primera pantalla del flujo de autenticación).
+   - El perfil activo NO es una sesión de emergencia (tipo `'temporal'`).
+   - El dispositivo aún no tiene la app instalada (`window.matchMedia('(display-mode: standalone)').matches === false`).
+
+3. **Formato del banner:** Chip no intrusivo en el footer del header negro, no modal. Texto: *"Instalar U24 en este dispositivo"*. Botón: *"Instalar"* + icono `ti-download`. Descartable con X; la decisión se persiste en IndexedDB (`install_prompt_dismissed: true`) para no volver a mostrarlo en ese terminal.
+
+4. **Audiencia:** coordinación, gerencia, responsable_flota, responsable_logistica. Los perfiles de TES / DUE en ambulancias instalan la app en los terminales via el proceso de alta de hardware — el banner no es necesario para ellos (el terminal ya tiene la app instalada por defecto).
+
+**B — Rutas offline-capable**
+
+| Ruta / módulo | Offline-capable | Motivo |
+|---|---|---|
+| Login (verificación PBKDF2 local) | ✅ | `u24_offline_session` + IndexedDB |
+| Visor vehículos (`useVehiculoStore`) | ✅ | IndexedDB persist |
+| Doc-8 (parte de trabajo en curso) | ✅ Cola offline | `useOfflineQueue` |
+| Doc-2, Doc-3, Doc-4, Doc-5 | ✅ Cola offline | `useOfflineQueue` |
+| Doc-6 (deducción optimista) | ✅ Cola offline | `useOfflineQueue` |
+| Doc-7 (avería) | ✅ Cola offline | `useOfflineQueue` |
+| Bandejas (lectura) | ✅ caché | IndexedDB fallback (`useBandejasStore`) |
+| Marquesina + tablón (lectura) | ✅ caché | IndexedDB fallback (`useGlobalStore`) |
+| Inventario (lectura) | ⚠️ Solo caché puntual | No operaciones de escritura offline |
+| DRP (creación / transición) | ❌ | Operación atómica — requiere confirmación servidor |
+| Cuadrantes, RRHH, system_config | ❌ | Solo online |
+| Alta vehículo, alta empleado | ❌ | Requieren confirmación atómica |
+
+5. **Offline UX fallback:** si el usuario intenta una acción no offline-capable sin conexión, el sistema muestra un toast `"Sin conexión — esta acción requiere red"` y deshabilita el botón (no lanza la mutación). No se encola ni se reintentan estas operaciones.
+
+**C — Nivel de accesibilidad**
+
+1. **Target:** WCAG 2.1 nivel AA como línea base para toda la UI.
+
+2. **Criterios clave para este sistema:**
+   - Contraste mínimo 4.5:1 texto normal, 3:1 texto grande (sobre fondo negro del header y fondo blanco del contenido).
+   - Todos los controles interactivos tienen `aria-label` cuando el label visual no está en el DOM (p.ej. iconos `ti-*` sin texto).
+   - Modales de confirmación bloquean el foco (`focus trap`) y devuelven el foco al elemento disparador al cerrarse.
+   - Bandejas y listas de pacientes usan `role="list"` / `role="listitem"` semántico.
+   - Formularios offline usan `aria-required`, `aria-invalid` y mensajes de error asociados con `aria-describedby`.
+
+3. **Fuera de scope:** WCAG 2.1 nivel AAA, screen reader testing exhaustivo (el sistema opera en terminales dedicados con usuarios formados — no público general).
+
+### Consecuencias
+
+- El banner de instalación no interrumpe nunca un flujo activo de asistencia.
+- Los terminales de ambulancias instalados vía alta de hardware nunca ven el banner (ya están en modo standalone).
+- Las rutas offline-capable están definidas explícitamente — el equipo de frontend sabe sin ambigüedad qué puede y no puede encolarse.
+- WCAG 2.1 AA es el target de diseño; los componentes base del sistema de diseño deben documentar sus ratios de contraste.

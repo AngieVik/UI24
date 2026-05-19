@@ -928,3 +928,175 @@ supabase.channel(`filiacion:${filiacionId}`)
   })
   .subscribe()
 ```
+
+---
+
+## 15. RPC `rpc_ajuste_manual_stock` (Fase 4)
+
+**Tipo:** `CREATE FUNCTION ... SECURITY DEFINER LANGUAGE plpgsql`
+**Parámetros:** `p_location_id text, p_item_id int, p_cantidad_nueva int, p_motivo text, p_operador_id text`
+**RBAC:** `can_edit_inventory` — roles `logistica`, `responsable_logistica`, `gerencia`.
+**Llamada via:** `supabase.rpc('rpc_ajuste_manual_stock', { ... })`
+
+Ver especificación SQL completa en `logic.md §49`.
+
+**Reglas de acceso y validación:**
+
+| Regla | Detalle |
+|---|---|
+| Claim requerido | `can_edit_inventory` — verificado dentro del cuerpo SECURITY DEFINER |
+| Stock negativo | Bloqueado — si `p_cantidad_nueva < 0` → `RAISE EXCEPTION 'stock_negativo_no_permitido'` |
+| Motivo obligatorio | `length(trim(p_motivo)) < 10` → `RAISE EXCEPTION 'motivo_insuficiente'` |
+| Scope | Cualquier `location_id` válido (base central o subinventario de vehículo) |
+| Retorno | `TABLE(stock_anterior INT, stock_nuevo INT)` — para feedback en UI |
+
+**Policy RLS complementaria sobre `inventario_vehiculo` / `inventario_base`:**
+
+```sql
+-- Solo can_view_inventory puede hacer SELECT; los UPDATE van siempre via RPC.
+CREATE POLICY "lectura_inventario_autenticados"
+  ON inventario_vehiculo FOR SELECT
+  USING (claim('can_view_inventory'));
+
+CREATE POLICY "no_update_directo_inventario"
+  ON inventario_vehiculo FOR UPDATE
+  USING (false);  -- todo UPDATE pasa por rpc_ajuste_manual_stock (SECURITY DEFINER)
+```
+
+> Lo mismo aplica a `inventario_base`. El bloqueo de UPDATE directo garantiza
+> que cada modificación de stock quede registrada en `auditoria_inventario` sin excepción.
+
+---
+
+## 16. Edge Function `ef_alta_empleado` (Gap F3 — Onboarding)
+
+**Auth:** JWT con `can_manage_rrhh` — roles `rrhh`, `gerencia`.
+**Body:** `{ id_nombre, nombre_real, dni, rol, horas_contrato, contrasena_temporal }`
+**Respuesta exitosa:** `{ auth_user_id, id_nombre }` — HTTP 201.
+
+Ver implementación completa en `logic.md §50`.
+
+**Reglas de acceso y validación:**
+
+| Regla | Detalle |
+|---|---|
+| Claim requerido | `can_manage_rrhh` |
+| Email generado | `id_nombre@u24.internal` — ficticio, sin envío externo |
+| `email_confirm` | `true` — se omite el flujo de verificación por email |
+| Galleta de terminal | NO se emite — vinculación posterior via flujo PIN |
+| Duplicado `id_nombre` | HTTP 409 `id_nombre_duplicado` si la cuenta ya existe en `auth.users` |
+| Rol | Validado contra enum de roles del sistema; 422 si inválido |
+| Audita | `auditoria_rbac` evento `alta_empleado` |
+
+---
+
+## 17. Edge Function `ef_baja_empleado` (Gap F3 — Offboarding)
+
+**Auth:** JWT con `can_manage_rrhh` — roles `rrhh`, `gerencia`.
+**Body:** `{ id_nombre }`
+**Respuesta exitosa:** `{ success: true }` — HTTP 200.
+
+Ver implementación completa en `logic.md §51`.
+
+**Efectos (secuenciales, fulminantes):**
+
+| Acción | Tabla / API | Reversible |
+|---|---|---|
+| `activo = false`, `fecha_baja = NOW()` | `fichas_empleados` | Solo por RRHH/gerencia |
+| Invalidar todos los JWT activos | `supabase.auth.admin.signOut(..., 'global')` | No — requiere nuevo login |
+| Revocar galletas de terminal | `galletas_terminales.revocado_at = NOW()` | Solo reemitiendo nueva galleta |
+| Eliminar turnos futuros | `cuadrante_turnos DELETE WHERE fecha > hoy` | No — reasignación manual |
+| Datos históricos | Sin tocar — Doc-1, Doc-8, doc2/3, auditoria* | Inmutables por diseño |
+
+**Guards:**
+- HTTP 404 si el empleado no existe en `fichas_empleados`.
+- HTTP 409 `empleado_ya_inactivo` si `activo` ya es `false` — idempotencia sin efectos secundarios.
+- Audita `auditoria_rbac` evento `baja_empleado` siempre que la baja sea efectiva.
+
+---
+
+## 18. RLS tabla `system_config` (Gap F5)
+
+**Tipo:** Table-level RLS policies.
+**Modelo:** Clave-valor singleton — una fila por parámetro (`clave` TEXT PK).
+Ver claves canónicas en `er_y_seeds.md §3 Dominio: Configuración del sistema`.
+
+```sql
+-- Lectura: cualquier usuario autenticado (para que useGlobalStore pueda leer marquesina, etc.)
+CREATE POLICY "system_config_lectura"
+  ON system_config FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+-- Escritura: solo gerencia
+CREATE POLICY "system_config_escritura"
+  ON system_config FOR UPDATE
+  USING (claim('can_manage_rbac'));  -- 'can_manage_rbac' es el claim de gerencia
+
+-- INSERT bloqueado via RLS — las claves se crean solo en migrations/seeds
+CREATE POLICY "system_config_no_insert_directo"
+  ON system_config FOR INSERT
+  WITH CHECK (false);
+
+-- DELETE bloqueado siempre
+CREATE POLICY "system_config_no_delete"
+  ON system_config FOR DELETE
+  USING (false);
+```
+
+**Invariantes de diseño:**
+
+| Aspecto | Decisión |
+|---|---|
+| INSERT | Solo en migrations/seeds — el catálogo de claves no crece en runtime |
+| UPDATE `valor` (jsonb) | Gerencia via UI admin; cada UPDATE debe registrar `id_nombre_modificador` y `updated_at` (trigger o app-level) |
+| `useGlobalStore` | Se suscribe al canal Realtime de `system_config` para propagar cambios en marquesina y toggles sin reload |
+| `box_timeout_minutos` | `ef_cron_purge` lee esta clave al iniciar cada ejecución — permite cambiar el umbral sin redeploy |
+
+---
+
+## 19. Edge Cron `ef_cron_rgpd` (Gap F7 — RGPD y retención)
+
+**Frecuencia:** Diaria, 03:00 UTC.
+**Service role:** obligatorio — las políticas RLS de `auditoria_rbac` y docs son inmutables para roles normales.
+**Sin claim de usuario** — llamada interna del scheduler de Supabase Cron.
+
+Ver implementación completa en `logic.md §52`.
+
+**Tres bloques de purga (idempotentes):**
+
+| Bloque | Tablas | Acción | Umbral |
+|---|---|---|---|
+| 1 — PII clínica | `doc2_informes_svb`, `doc3_informes_sva`, `doc4_consentimientos`, `doc5_rechazos_alta` | Eliminar claves PII del JSONB con operador `-` nativo de Postgres. Preserva datos estadísticos (tiempos, constantes, patología). | 5 años desde la asistencia (Ley 41/2002) |
+| 2 — PII laboral | `fichas_empleados` | `nombre_real = 'EMPLEADO_ANONIMIZADO'`, `dni = NULL`. `id_nombre` intacto (FK en tablas inmutables). | 4 años desde `fecha_baja` |
+| 3 — Logs seguridad | `auditoria_rbac` | DELETE físico de filas caducadas. | 1 año desde `created_at` |
+
+**Nota de extensión:** si en el futuro se añade mecanismo de "legal hold" (retención
+extendida por incidente abierto), el bloque 3 debe excluir los registros afectados
+antes de DELETE. En la implementación actual la purga es incondicional tras 1 año.
+
+---
+
+## 20. RPC `rpc_alta_vehiculo` (Gap F4)
+
+**Tipo:** `CREATE FUNCTION ... SECURITY DEFINER LANGUAGE plpgsql`
+**Parámetros:** `p_matricula text, p_tipo text, p_plantilla_id text, p_registrado_por text`
+**RBAC:** `can_manage_fleet` — roles `responsable_flota`, `gerencia`.
+**Llamada via:** `supabase.rpc('rpc_alta_vehiculo', { ... })`
+
+Ver especificación SQL completa en `logic.md §53`.
+
+**Cuatro efectos automáticos (en transacción):**
+
+| Efecto | Tabla | Detalle |
+|---|---|---|
+| 1. Registro del vehículo | `vehiculos` | `condicion_tecnica='operativo'`, `estado_operativo='inactivo'`, `plantilla_id` asignada |
+| 2. Subinventario propio | `locations` | `location_id = matricula`, `tipo = 'vehiculo'` |
+| 3. Inventario inicializado | `inventario_vehiculo` | Una fila por ítem de la plantilla con `stock_real = 0` — nunca igualar a `stock_objetivo` |
+| 4. Aviso a logística | `doc11_avisos` | Nivel 'aviso' — primera dotación pendiente desde almacén |
+
+**Guards:**
+- `422` si `p_tipo` no es uno de: A1/A2/B/C/VIR/Quad/BKP.
+- `409 matricula_duplicada` si la matrícula ya existe en `vehiculos`.
+- `404 plantilla_no_encontrada` si `plantilla_id` no existe en `plantillas_stock`.
+
+**Retorno:** `TABLE(matricula TEXT, location_id TEXT, items_inicializados INT)` — para feedback del wizard.

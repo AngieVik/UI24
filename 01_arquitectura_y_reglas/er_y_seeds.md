@@ -79,6 +79,8 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | `galleta_revocada` | Galleta revocada (por `rpc_revocar_y_reemitir_galleta`) |
 | `logout_forzado` | Sesión invalidada forzosamente por coordinacion/gerencia via `ef_revocar_sesion_usuario` |
 | `checkout_forzado` | Checkout administrativo de Doc-8 forzado por coordinacion/gerencia via `forzar_checkout_administrativo` |
+| `alta_empleado` | Nuevo empleado dado de alta via `ef_alta_empleado` (Gap F3) |
+| `baja_empleado` | Empleado dado de baja via `ef_baja_empleado` — JWT + galletas revocados, cuadrante futuro eliminado (Gap F3) |
 
 ### Dominio: Vehículos y turnos ✓
 
@@ -98,7 +100,8 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | `inventario_vehiculo` | `(matricula, id_item, subgrupo)` | Stock actual por vehículo y subgrupo. `stock_real`, `ultima_actualizacion`. Modificable solo por RPC atómica. |
 | `inventario_base` | `(location_id, id_item)` | Stock del almacén central. `stock_real`. Modificable solo por RPC atómica. |
 | `inventario_en_transito` | `id_transito` (UUID) | Material en tránsito entre locations (origen → destino). `id_transferencia` (FK `doc10_transferencias`), `id_item`, `cantidad`, `estado` ('en_transito'/'confirmado'/'cancelado'), `timestamp_envio`, `timestamp_confirmacion`. No modifica `inventario_vehiculo` ni `inventario_base` hasta confirmación. |
-| `auditoria_inventario` | `id_auditoria` (UUID) | Log inmutable de movimientos de inventario. `tipo_movimiento` (deduccion/entrada/transferencia/ajuste), `id_item`, `cantidad_delta`, `location_origen`, `location_destino`, `id_nombre_operador`, `rpc_ejecutada`, `created_at`. RLS UPDATE/DELETE: `USING (FALSE)`. |
+| `descuadres_inventario` | `id_descuadre` (UUID) | Registro de discrepancias de stock generadas por Doc-10. `id_doc10` (FK), `id_item`, `cantidad_diferencia` (INT — enviado − recibido), `location_origen`, `location_destino`, `estado` ('Pendiente_Revision'/'Resuelto'/'Archivado'), `id_nombre_resolutor` (nullable), `timestamp_generacion`, `timestamp_resolucion` (nullable), `mutation_uuid` (idempotencia ON CONFLICT DO NOTHING), `entidad_imputable_tipo` ('vehiculo'/'drp'/'persona'/'sin_imputar' — obligatorio en Resolver_Manual), `entidad_imputable_id` (text nullable — matricula / id_drp / id_nombre). RLS UPDATE: `can_edit_inventory`. |
+| `auditoria_inventario` | `id_auditoria` (UUID) | Log inmutable de movimientos de inventario. `tipo_movimiento` (deduccion/entrada/transferencia/ajuste/merma/recuperacion_descuadre/merma_definitiva_residual), `id_item`, `cantidad_delta`, `location_origen`, `location_destino`, `id_nombre_operador`, `rpc_ejecutada`, `motivo` (text nullable), `entidad_imputable_tipo` (nullable — mismo discriminador que descuadres), `entidad_imputable_id` (text nullable), `created_at`. RLS UPDATE/DELETE: `USING (FALSE)`. |
 | `locations` | `location_id` (UUID) | Almacenes y bases operativas. `nombre`, `tipo` (base/almacen/punto_drp). |
 
 ### Dominio: Documentos operativos ✓
@@ -140,7 +143,37 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | Tabla | PK | Descripción |
 |---|---|---|
 | `mensajes_bandeja` | `id_mensaje` (UUID) | Mensajes por instancia (flota, logística, coordinación…). `timestamp_lectura`, `estado`. |
-| `tablon_anuncios` | `id_anuncio` (UUID) | Anuncios del tablón global. `timestamp_publicacion`, `timestamp_ultima_edicion`, `autor` (id_nombre). |
+| `tablon_anuncios` | `id_anuncio` (UUID) | Anuncios del tablón corporativo. `seccion` ('normativas'/'protocolos'/'avisos_corporativos'), `titulo` (text), `contenido` (text), `estado` ('activo'/'archivado'), `id_nombre_autor` (FK fichas_empleados), `timestamp_publicacion`, `timestamp_ultima_edicion`. RLS SELECT: authenticated. RLS INSERT/UPDATE: `can_manage_rrhh` (rrhh/gerencia) o `can_manage_rbac` (coordinacion/gerencia). |
+
+### Dominio: Gestión y RRHH
+
+| Tabla | PK | Descripción |
+|---|---|---|
+| `cuadrante_turnos` | `id` (serial) | Asignaciones de turno por empleado y fecha. `id_nombre` (FK fichas_empleados), `fecha` (date), `tipo_turno` ('T'/'L'/'V'/'B'/'C' — Trabaja/Libre/Vacaciones/Baja/Compensación), `es_excepcion_absoluta` (boolean, default false), `doc12_id` (UUID nullable, FK doc_solicitudes_vacaciones — solo cuando la excepción viene de una vacación aprobada), `timestamp_inyeccion` (timestamptz). UNIQUE(id_nombre, fecha). |
+| `cuadrante_patrones` | `id` (UUID) | Patrones de turno reutilizables. `nombre` (text), `secuencia` (text[] — array ordenado de códigos tipo_turno, p.ej. `['T','T','T','T','L','L']`), `creado_por` (text, FK fichas_empleados), `created_at`. |
+| `cuadrante_grupos` | `id` (UUID) | Agrupaciones de empleados para aplicar patrones en masa. `nombre` (text), `created_at`. |
+| `cuadrante_grupo_miembros` | `(grupo_id, id_nombre)` | Pertenencia de empleados a grupos. `grupo_id` (FK cuadrante_grupos), `id_nombre` (FK fichas_empleados). |
+| `doc_solicitudes_vacaciones` | `id` (UUID) | Doc-12: solicitudes de vacaciones. `id_nombre` (FK fichas_empleados), `periodo_anual` (text — año aplicable), `fecha_inicio` (date), `fecha_fin` (date), `preferencia_seleccion` ('opcion_1'/'opcion_2'/'opcion_3'), `observaciones` (text nullable), `resolucion_rrhh` (text nullable — nota de resolución), `id_nombre_resolutor` (text nullable, FK fichas_empleados), `estado` ('Borrador'/'Pendiente_Aprobacion'/'Aprobada'/'Denegada'), `created_at`, `timestamp_resolucion` (nullable). Visible al empleado solo cuando `sistema_config['periodo_vacaciones_abierto'].activo = true`. |
+
+### Dominio: Configuración del sistema (Gap F5)
+
+| Tabla | PK | Descripción |
+|---|---|---|
+| `system_config` | `clave` (text) | Almacén clave-valor de configuración global. `valor` (jsonb — ver claves canónicas abajo), `descripcion` (text — para legibilidad en admin), `id_nombre_modificador` (text FK fichas_empleados — quién editó por última vez), `updated_at` (timestamptz). RLS SELECT: authenticated. RLS INSERT/UPDATE: solo `gerencia` (claim `can_manage_rbac`). |
+
+**Claves canónicas de `system_config` (seeds iniciales):**
+
+| `clave` | `valor` (jsonb) | Descripción |
+|---|---|---|
+| `periodo_vacaciones_abierto` | `{"activo": false, "fecha_inicio": null, "fecha_fin": null}` | Toggle global del período de solicitud de vacaciones (Doc-12). Cuando `activo = false`, Doc-12 queda oculto para todos los empleados. |
+| `marquesina` | `{"texto": "", "velocidad": 50}` | Texto del ticker del header negro + velocidad de desplazamiento (0–100). Refleja en tiempo real via `useGlobalStore` + Realtime. |
+| `box_timeout_minutos` | `{"valor": 45}` | Minutos sin cambio de estado en `en_consulta` antes de que el watchdog emita alerta (Gap B2). Actualmente hardcodeado en `ef_cron_purge`; con esta clave se vuelve configurable. |
+| `offline_session_ttl_dias` | `{"valor": 7}` | TTL de la sesión offline PBKDF2 cacheada en `u24_offline_session`. Cambiar requiere redeploy del cliente (se lee en boot). |
+| `modulo_psa_habilitado` | `{"enabled": true}` | Kill switch del módulo PSA. Si `false`, el cliente oculta el acceso y rechaza nuevas sesiones PSA. Las sesiones abiertas no se cierran automáticamente — coordinación debe gestionarlas manualmente. |
+| `modulo_filiacion_habilitado` | `{"enabled": true}` | Kill switch del módulo de filiación. Mismo comportamiento que PSA. |
+| `modulo_drp_habilitado` | `{"enabled": true}` | Kill switch del módulo DRP. Si `false`, se bloquea la creación de nuevos DRPs; los DRPs en curso no se cancelan automáticamente. |
+| `realtime_kill_switch` | `{"enabled": false}` | Si `true`, todos los clientes pasan a `degraded_mode` forzado (polling 30s solo canales críticos) sin esperar a detectar desconexión. Útil durante mantenimiento de Supabase Realtime. |
+| `cola_offline_procesamiento` | `{"enabled": true}` | Si `false`, `useOfflineQueue` suspende el procesamiento de la cola (no encolade, solo acumula). Reservado para emergencias de consistencia de datos. Las mutaciones ya encoladas no se descartan. |
 
 ### Solo IndexedDB (sin tabla Supabase)
 
@@ -182,3 +215,6 @@ supabase/
 | `doc1_asistencias` | RLS UPDATE/DELETE `USING (FALSE)` | Append-only por diseño |
 | `sesiones_emergencia` | RLS UPDATE/DELETE `USING (FALSE)` | Solo purgadas por Edge Function cron |
 | `galletas_terminales` | RLS UPDATE/DELETE `USING (FALSE)` | Revocar = insertar nueva + marcar antigua |
+| `cuadrante_turnos` | UNIQUE(`id_nombre`, `fecha`) | Un empleado tiene un único turno por día |
+| `descuadres_inventario` | UNIQUE(`location_id`, `id_item`) WHERE `estado = 'Pendiente_Revision'` | Un descuadre activo por ítem/location |
+| `system_config` | RLS INSERT `USING (FALSE)` para non-gerencia | Solo gerencia puede crear o editar claves |
