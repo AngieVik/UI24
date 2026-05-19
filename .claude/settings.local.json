@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem -Path \"D:\\\\Proyectos\\\\UI24\" -Recurse -Filter \"*.md\")",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(cmd.exe //c \"dir D:\\\\Proyectos\\\\UI24\\\\revisiones.md\")",
+      "Bash(git -C D:/Proyectos/UI24 log --oneline -20)",
+      "Bash(git -C D:/Proyectos/UI24 status)"
     ]
   }
 }
