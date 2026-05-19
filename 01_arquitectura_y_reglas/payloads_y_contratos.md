@@ -13,7 +13,7 @@ interface OfflineMutation {
   // IDENTIFICADORES Y METADATOS
   mutation_uuid: string;       // UUID v4 generado en el cliente. Clave de idempotencia.
   ejecutorId: string;          // ID_nombre del usuario que realizó la acción.
-  timestamp_encolado: string;  // Fecha/hora local con el time_offset aplicado (ISO-8601).
+  timestamp_encolado: string;  // ISO-8601 corregido con clock_offset (ver §A.4).
   
   // ENRUTAMIENTO
   tipo: TipoMutacionOffline;   // El nombre exacto de la RPC en Supabase o acción especial.
@@ -21,10 +21,24 @@ interface OfflineMutation {
   // CARGA ÚTIL
   payload: PayloadDoc1 | PayloadDoc2_5 | PayloadDoc6 | PayloadDoc7 | PayloadPurge;
   
-  // ESTADO DE RESOLUCIÓN LOCAL
-  estado: 'pendiente' | 'fallido'; 
-  error_detalle?: string;      // Relleno por el SW si falla tras recuperar la red (ej. HTTP 409).
+  // ESTADO Y POLÍTICA DE REINTENTOS (B-07)
+  estado: 'pendiente' | 'fallido' | 'descartado';
+  error_detalle?: string;      // Relleno por el procesador de cola en cada fallo (red o validación 5xx).
+  retry_count: number;         // Inicialmente 0. Incrementado en cada reintento fallido de red.
+  max_retries: number;         // DEFAULT 5. Al superar → estado = 'descartado' + notificación usuario.
+  ultima_falla?: string;       // ISO-8601 del último intento fallido.
+  ttl_descarte: string;        // ISO-8601 = timestamp_encolado + 7 días. Al superar → 'descartado'.
 }
+
+// Política de descarte — reglas evaluadas en este orden al procesar la cola:
+// 1. Si estado === 'descartado': saltar (ya procesado).
+// 2. Si new Date(ttl_descarte) < new Date(): marcar 'descartado', insertar en bandeja_conflictos.
+// 3. Si retry_count >= max_retries: marcar 'descartado', insertar en bandeja_conflictos.
+// 4. Si el error de la última ejecución fue de VALIDACIÓN (4xx): marcar 'descartado' directamente
+//    (no reencolar — nunca va a pasar). Ver classifyError() en error_handling.md §5.
+// 5. Si el error fue de RED (5xx / no-fetch): incrementar retry_count, mantener 'pendiente'.
+// Los ítems 'descartados' persisten en IndexedDB y se muestran en bandeja_conflictos
+// hasta que el usuario los revisa y los descarta manualmente.
 
 type TipoMutacionOffline = 
   | 'rpc_insertar_asistencia_doc1'
@@ -333,5 +347,81 @@ interface PayloadResolverDescuadre {
 }
 ```
 
+---
+
+## DOMINIO D: CORRECCIÓN DE RELOJ Y CANAL DE SEGURIDAD
+
+### D.1 Corrección de drift de reloj (B-12)
+
+Los dispositivos embarcados en ambulancias pueden tener el reloj desincronizado respecto al servidor.
+Un timestamp_encolado erróneo puede causar rechazo de la mutación por la validación de timestamps.
+
+**Mecanismo:** el servidor incluye el header `X-Server-Time` (ISO-8601 UTC) en cada respuesta HTTP.
+El cliente calcula y mantiene un `clock_offset` en memoria:
+
+```typescript
+// lib/clockSync.ts
+let clockOffset = 0  // milisegundos; positivo = reloj cliente adelantado; negativo = atrasado
+
+export function syncClock(serverTimeHeader: string | null): void {
+  if (!serverTimeHeader) return
+  const serverMs = new Date(serverTimeHeader).getTime()
+  const clientMs = Date.now()
+  clockOffset = clientMs - serverMs  // >0: cliente adelantado; <0: cliente atrasado
+}
+
+export function nowCorrected(): string {
+  return new Date(Date.now() - clockOffset).toISOString()
+}
+
+// Drift máximo tolerado: ±5 minutos (B-12)
+export const MAX_DRIFT_MS = 5 * 60 * 1000
+
+export function isClockDrifted(): boolean {
+  return Math.abs(clockOffset) > MAX_DRIFT_MS
+}
+```
+
+**Reglas:**
+- `timestamp_encolado` en `OfflineMutation` se genera con `nowCorrected()`, no `new Date().toISOString()`.
+- Si `isClockDrifted() === true`: banner de advertencia discreta en UI: *"El reloj del dispositivo difiere del servidor. Sincroniza la hora."*
+- El header `X-Server-Time` se lee en el interceptor de respuesta del cliente Supabase (no requiere cambios en las RPCs).
+
+**Validación al encolar** (actualización de `error_handling.md §8`):
+
+| Condición | Acción |
+|---|---|
+| `timestamp_encolado` corregido > 5 min en el futuro | Rechazar encolado + toast-error "Timestamp en el futuro. Verifica el reloj del dispositivo." |
+| `timestamp_encolado` corregido > 5 min en el pasado | Rechazar encolado + toast-error "Timestamp demasiado antiguo. Verifica el reloj del dispositivo." |
+
+> **Nota:** la validación anterior toleraba 72h en el pasado y 5min en el futuro. B-12 la ajusta a ±5min para detectar drift de reloj antes de encolar mutaciones que el servidor rechazará.
+
+### D.2 Canal `terminal:{device_id}:security` (B-02)
+
+Canal Realtime broadcast de seguridad por terminal. El cliente se suscribe al conectar.
+
+```typescript
+// Canal / Topic: terminal:{id_terminal}:security
+// Dirección: servidor → cliente (broadcast unidireccional)
+// Suscripción: al activar terminal (estado_1); desuscripción: al destruir el terminal
+
+interface PayloadOfflineSessionInvalidated {
+  event: 'offline_session_invalidated'
+  payload: {
+    id_nombre: string    // El empleado cuya sesión offline fue invalidada
+    reason: 'password_reset' | 'baja_empleado' | 'admin_force'
+  }
+}
+```
+
+**Comportamiento del cliente al recibir `offline_session_invalidated`:**
+1. `idbDel('u24_offline_session')` — borrar hash PBKDF2 local
+2. Si `useAuthStore.idNombre === payload.id_nombre`:
+   - `useAuthStore.clear()`
+   - Modal bloqueante: *"Tu contraseña fue modificada por un administrador. Inicia sesión de nuevo para continuar."*
+   - Redirigir a estado_0
+
+---
+
 **Conclusión Arquitectónica:**
-Con la redacción de este tercer bloque, tu equipo de desarrollo tiene un **mapa de contratos estricto (Interfaces TypeScript)** para toda la comunicación Cliente-Servidor. Esta estandarización evitará que el frontend envíe tipos incorrectos o que la base de datos rechace peticiones malformadas.
+Con la redacción de este documento, el equipo de desarrollo dispone de un **mapa de contratos estricto (Interfaces TypeScript)** para toda la comunicación cliente-servidor. Esta estandarización evita que el frontend envíe tipos incorrectos o que la base de datos rechace peticiones malformadas.

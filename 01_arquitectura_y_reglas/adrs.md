@@ -410,3 +410,111 @@ La migración es lineal y no requiere cambios arquitectónicos — solo extracci
   monolingüe y horizonte operativo definido.
 - Los desarrolladores que añadan strings de UI deben escribirlos en español directamente
   — no en inglés con comentario de traducción futura.
+
+---
+
+> ⚠ **ADR-007 y ADR-008 reservados para Fase A pendiente** (A-01: renombrar ADR-001 duplicado; A-09: decisión arquitectónica módulo filiación). Ver `06_operaciones/revisiones.md`.
+
+---
+
+## ADR-009 — Manejo de JWT expirado en modo offline (B-01)
+
+**Estado:** Aceptado
+**Fecha:** 2026-05-19
+
+### Contexto
+
+En U24 el ciclo de vida offline puede ser largo: un vehículo puede estar sin conexión durante todo un turno (8-12 h). El JWT de Supabase tiene un TTL de 1 hora por defecto. Si el JWT expira mientras el usuario está offline, la cola acumula mutaciones firmadas con ese JWT. Al reconectar, el cliente intenta procesarlas con un JWT expirado → `401 Unauthorized` → las mutaciones nunca se sincronizan.
+
+Opciones evaluadas:
+
+| Opción | Pros | Contras |
+|---|---|---|
+| **A) JWT largo (24h+)** | Sin cambios en la cola | Ventana de compromiso enorme si el JWT se filtra |
+| **B) Refresh silencioso al reconectar** | Estándar OAuth2 | El refresh token puede expirar también si el cliente estuvo offline > TTL del refresh |
+| **C) Queue con JWT propio firmado por `u24_offline_session`** | JWT nunca necesario offline | Requiere nueva infraestructura de verificación; superficie de ataque nueva |
+| **D) Queue tolera JWT expirado → refresca antes de sync** | Mínimo cambio arquitectónico | Requiere que el refresh token esté vivo; falla si offline > refresh TTL |
+
+### Decisión
+
+**Opción D como mecanismo principal, con Opción A como tuning del TTL de refresh token.**
+
+1. **JWT TTL:** mantener en 1 hora (valor por defecto Supabase) — no alargarlo.
+
+2. **Refresh token TTL:** extender a **7 días** en Supabase Auth config (`auth.jwt_expiry = 3600`, `auth.refresh_token_rotation_enabled = true`, `auth.refresh_token_reuse_interval = 10`). El refresh token es rotante — cada uso genera uno nuevo. Si el dispositivo no hace login en 7 días, pierde la sesión (comportamiento correcto para un terminal físico — si está 7 días offline, algo operativamente malo ocurrió).
+
+3. **Flujo de sync al reconectar:** `useOfflineQueue.processQueue()` comprueba primero si el JWT activo está expirado. Si lo está:
+   - Intenta `supabase.auth.refreshSession()` — si tiene refresh token válido, obtiene JWT nuevo.
+   - Si el refresh falla (TTL expirado, refresh token revocado): muestra modal "Sesión expirada — inicia sesión para sincronizar X operaciones pendientes". La cola **no se descarta** — persiste en IndexedDB hasta que el usuario vuelva a autenticarse.
+   - Tras login online exitoso, `processQueue()` se relanza automáticamente con el nuevo JWT.
+
+4. **Las mutaciones de cola NO incluyen el JWT** en su payload — `OfflineMutation.ejecutorId` identifica al usuario. El JWT se obtiene del store en el momento del procesamiento, no en el momento de encolado. Esto evita que una mutación encolada con JWT expirado sea imposible de procesar.
+
+5. **u24_offline_session NO se usa para firmar mutaciones de cola.** El hash PBKDF2 solo se usa para autenticar la *pantalla de login* offline. Las mutaciones de cola requieren JWT válido en el momento del sync — esta es una garantía de que la operación es real y autorizada, no una firma derivada de credenciales locales.
+
+### Consecuencias
+
+- El sistema soporta turnos de hasta 7 días sin conexión antes de perder la capacidad de sync.
+- Las mutaciones encoladas no se pierden aunque el JWT expire durante el turno.
+- `ef_reset_password` debe invalidar los refresh tokens (ya lo hace via `supabase.auth.admin.signOut(uid, { scope: 'global' })`).
+- Implementación en cliente: `useOfflineQueue` debe llamar `refreshSession()` antes de despachar el primer batch de mutaciones al reconectar. Ver `hooks.md §useOfflineQueue`.
+
+---
+
+## ADR-010 — Step-up auth para acciones críticas (B-08)
+
+**Estado:** Aceptado
+**Fecha:** 2026-05-19
+
+### Contexto
+
+Ciertas operaciones de U24 tienen consecuencias irreversibles o de alta gravedad:
+- `rpc_revocar_y_reemitir_galleta` — revocar acceso de un terminal físico
+- `ef_baja_empleado` — desactivar un empleado (revoca JWT + galletas)
+- `system_config UPDATE` — cambiar kill switches o configuración global
+
+El JWT activo garantiza que el usuario se autenticó en algún momento reciente, pero no que sigue siendo él quien opera el terminal en este momento (terminal desatendido, sesión robada post-login). Se necesita un segundo factor inmediato para estas acciones.
+
+Opciones evaluadas:
+
+| Opción | Integración | Seguridad | Complejidad |
+|---|---|---|---|
+| **TOTP (Google Authenticator / FIDO2)** | Requiere setup de MFA por usuario | Alta | Alta — requiere setup de dispositivos, infraestructura MFA |
+| **Re-introducir contraseña** | Sin infraestructura adicional | Media — expone contraseña en formulario en contexto de alta actividad | Media |
+| **PIN step-up dedicado (6 dígitos)** | Un PIN separado gestionado por RRHH/Gerencia | Media-Alta — PIN diferente a contraseña de login | Baja — same stack que emergency PINs |
+| **Confirmación verbal a coordinación** | Sin tech | Baja — no auditable técnicamente | Nula (no implementable en sistema) |
+
+### Decisión
+
+**PIN step-up de 6 dígitos, gestionado por Gerencia/RRHH, almacenado como PBKDF2-SHA256.**
+
+1. **Campo añadido a `fichas_empleados`:** `pin_stepup_hash TEXT NULL` (NULL = no configurado). Solo los roles `gerencia` y `rrhh` tienen `pin_stepup_hash` no nulo — son los únicos que ejecutan las acciones críticas listadas.
+
+2. **Flujo step-up:**
+   ```
+   Usuario pulsa acción crítica (revocar galleta / baja empleado / system_config)
+   → Modal step-up: "Introduce tu PIN de confirmación"
+   → Cliente deriva PBKDF2-SHA256 del PIN introducido
+   → RPC/Edge Function: compara hash derivado con fichas_empleados.pin_stepup_hash
+   → Si coincide: ejecuta la acción + registra en auditoria_rbac con step_up_verified = true
+   → Si falla: toast-error "PIN incorrecto" + registro de intento en auditoria_rbac
+   → Tras 3 intentos fallidos en 10 min: bloqueo de step-up para ese id_nombre durante 15 min
+   ```
+
+3. **Provisioning del PIN:** RRHH/Gerencia configuran su propio PIN step-up desde `fichas_empleados → Seguridad → Configurar PIN de confirmación`. El flujo es análogo a `ef_cambiar_contrasena` (logic.md §59): introduce PIN nuevo, confirma, se deriva y almacena hash. El PIN step-up nunca viaja en claro al servidor.
+
+4. **Acciones que requieren step-up:**
+   - `rpc_revocar_y_reemitir_galleta`
+   - `ef_baja_empleado`
+   - `system_config` UPDATE (gerencia únicamente)
+   - Cualquier acción futura clasificada como `nivel_critico = true` en la tabla de permisos RBAC
+
+5. **El PIN step-up NO es el mismo que el PIN de emergencia** (`sesiones_emergencia`). Son mecanismos independientes para propósitos distintos.
+
+### Consecuencias
+
+- `fichas_empleados` necesita columna `pin_stepup_hash TEXT NULL` y `pin_stepup_salt TEXT NULL`.
+- Los empleados con rol `gerencia` o `rrhh` deben configurar su PIN step-up en el proceso de onboarding (runbook RB-06 — ver A-10 pendiente).
+- Las RPCs/EFs de acciones críticas añaden un paso de verificación step-up antes de ejecutar.
+- Se añaden nuevos tipos de evento a `auditoria_rbac`: `step_up_exitoso` y `step_up_fallido`.
+- El PIN step-up expira si el usuario no lo rota en 90 días (alerta en bandeja RRHH — cron mensual).

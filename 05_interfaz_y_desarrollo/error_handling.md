@@ -269,6 +269,7 @@ const ERROR_MAP: Record<string, ErrorResolution> = {
   drp_ya_cancelado:                   { message: 'Este DRP ya fue cancelado anteriormente.', type: 'toast-error' },
   drp_estado_invalido:                { message: 'El DRP no puede cancelarse en su estado actual.', type: 'toast-error' },
   subinventario_ya_asignado:          { message: 'La mochila seleccionada ya está asignada a otro DRP activo.', type: 'modal' },
+  operativo_condicionado_limite_alcanzado: { message: 'Esta mochila tiene demasiados ciclos sin reconciliar. Logística debe cerrar al menos uno antes de reasignar.', type: 'modal' },
   // §4.3 Inventario
   stock_insuficiente:                 { message: 'Stock insuficiente para realizar este gasto.', type: 'toast-error' },
   stock_negativo_no_permitido:        { message: 'El stock no puede quedar en negativo.', type: 'inline' },
@@ -280,6 +281,7 @@ const ERROR_MAP: Record<string, ErrorResolution> = {
   motivo_ajuste_insuficiente_rotura:  { message: 'Con stock a cero, describe la causa de la rotura con al menos 30 caracteres.', type: 'inline' },
   destino_no_apto_para_recepcion:     { message: 'El vehículo de destino no puede recibir material en su estado actual.', type: 'toast-error' },
   // §4.4 Vehículos
+  checkin_ya_activo:                  { message: 'Este ID ya tiene una sesión activa en otro terminal. Cierra la sesión anterior antes de iniciar una nueva.', type: 'modal' },
   vehiculo_ya_tiene_pilot:            { message: 'Este vehículo ya tiene un piloto asignado.', type: 'toast-error' },
   pilot_no_activo_en_vehiculo:        { message: 'Este empleado no está activo como piloto de este vehículo.', type: 'toast-error' },
   vehiculo_no_encontrado:             { message: 'Vehículo no encontrado en el sistema.', type: 'toast-error' },
@@ -373,8 +375,9 @@ Siempre son `inline` y **nunca** llegan al servidor.
 
 | Contexto | Condición | Mensaje UI | Tipo |
 |---|---|---|---|
-| `useOfflineQueue.enqueue()` | `timestamp_apertura` > 72h en el pasado | "Timestamp demasiado antiguo. Verifica el reloj del dispositivo." | toast-error |
-| `useOfflineQueue.enqueue()` | `timestamp_apertura` > 5 min en el futuro | "Timestamp en el futuro. Verifica el reloj del dispositivo." | toast-error |
+| `useOfflineQueue.enqueue()` | `timestamp_apertura` corregido (con `clockOffset`) > 5 min en el pasado | "Timestamp demasiado antiguo. Verifica el reloj del dispositivo." | toast-error |
+| `useOfflineQueue.enqueue()` | `timestamp_apertura` corregido (con `clockOffset`) > 5 min en el futuro | "Timestamp en el futuro. Verifica el reloj del dispositivo." | toast-error |
 | Formulario Doc-7 | Motivo vacío | "El motivo de la avería es obligatorio." | inline |
 | Formulario ajuste stock | `cantidad_nueva < 0` | "El stock no puede ser negativo." | inline |
 | `idbStorageWithQuotaGuard` | `QuotaExceededError` irrecuperable | "Almacenamiento del dispositivo lleno. Libera espacio para continuar." | toast-error |
+| `clockSync.isClockDrifted()` | Drift detectado > ±5 min respecto a `X-Server-Time` (B-12) | "El reloj del dispositivo difiere del servidor. Sincroniza la hora del sistema." | toast-warning (persistente, no auto-dismiss mientras `isClockDrifted() === true`) |

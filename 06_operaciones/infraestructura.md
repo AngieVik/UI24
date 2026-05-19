@@ -595,3 +595,82 @@ REVOKE ALL ON dotaciones_drp      FROM grafana_reader;
 | Datos clínicos de Doc-2/3/4/5 | RGPD — datos de pacientes nunca en dashboard operativo |
 | Sesiones de galleta activas en tiempo real | Dato operativo caliente — no histórico |
 | Conteos de empleados activos en tiempo real | Tabla `fichas_empleados` operativa — fuera de scope |
+
+---
+
+## 8. Control de versiones del cliente — `X-Client-Version` (B-14)
+
+### 8.1 Mecanismo
+
+El cliente PWA incluye el header `X-Client-Version: <semver>` en **todas** las peticiones HTTP a Supabase (RPCs, Edge Functions, Storage). El valor se inyecta desde la variable de entorno `VITE_APP_VERSION` durante el build.
+
+```typescript
+// lib/supabaseClient.ts — configurar el header global
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: {
+    headers: { 'X-Client-Version': import.meta.env.VITE_APP_VERSION ?? '0.0.0' }
+  }
+})
+```
+
+### 8.2 Edge Function `validate_client_version`
+
+**Tipo:** middleware Edge Function invocado desde las RPCs críticas que requieren versión mínima.
+**Ubicación:** `supabase/functions/validate-client-version/index.ts`
+
+```typescript
+// Llamada desde otras Edge Functions: await validateClientVersion(req)
+export async function validateClientVersion(req: Request): Promise<void> {
+  const clientVersion = req.headers.get('X-Client-Version')
+  if (!clientVersion) return  // Clientes sin header: permitidos con warning en logs
+
+  const { data: config } = await supabaseAdmin
+    .from('versiones_cliente')
+    .select('min_version_permitida')
+    .eq('activa', true)
+    .order('publicada_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (!config) return  // Sin config de versión: no bloquear
+
+  if (semverLt(clientVersion, config.min_version_permitida)) {
+    throw new Response(
+      JSON.stringify({ error: 'client_version_obsoleta', min_required: config.min_version_permitida }),
+      { status: 426, headers: { 'Content-Type': 'application/json', 'X-Min-Version': config.min_version_permitida } }
+    )
+  }
+}
+```
+
+### 8.3 Comportamiento del cliente al recibir 426
+
+```typescript
+// lib/supabaseClient.ts — interceptor de respuesta
+if (response.status === 426) {
+  const minVersion = response.headers.get('X-Min-Version')
+  // Modal bloqueante no descartable — el usuario debe actualizar antes de continuar
+  showModalBlocking({
+    title: 'Actualización requerida',
+    body: `Esta versión del sistema ya no está soportada (mínima: ${minVersion}). 
+           Recarga la página para obtener la versión más reciente.`,
+    action: () => window.location.reload()
+  })
+}
+```
+
+### 8.4 Proceso de publicación de nueva versión mínima
+
+```
+1. Publicar build nuevo en Vercel/Netlify (VITE_APP_VERSION bumpeado)
+2. Verificar que la nueva versión funciona correctamente en staging
+3. Insertar en versiones_cliente: { version_semver, min_version_permitida, publicada_at }
+4. Monitorizar `useRealtime` en producción — los clientes con versión antigua recibirán 426
+5. Período de gracia recomendado: 7 días antes de bloquear (solo para actualizaciones no críticas)
+```
+
+**Variables de entorno CI/CD añadidas:**
+
+| Variable | Descripción |
+|---|---|
+| `VITE_APP_VERSION` | Semver del build actual (ej. `1.2.3`). Inyectada por el pipeline CI/CD desde el tag git. |

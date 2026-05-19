@@ -1728,10 +1728,19 @@ CANALES CRÍTICOS (siguen vivos en polling — intervalo 30 s):
   - global:alertas_criticas    → SELECT * FROM doc11_avisos ORDER BY timestamp_publicacion DESC LIMIT 10
   - vehiculo:{id}              → SELECT condicion_tecnica, estado_operativo FROM vehiculos WHERE id = {id}
 
+CANALES NO CRÍTICOS (polling fallback — intervalo 60 s) (B-10):
+  - bandeja_entrada_coordinacion  → SELECT id, estado, timestamp_publicacion FROM doc11_avisos ORDER BY timestamp_publicacion DESC LIMIT 20
+  - bandeja_entrada_logistica     → idem
+  - bandeja_entrada_flota         → idem
+  - bandeja_entrada_rrhh          → idem
+  - tablón_central                → SELECT id, texto, archivado FROM anuncios_tablon ORDER BY updated_at DESC LIMIT 10
+  Motivo: las bandejas son relevantes para la coordinación en campo incluso sin WS.
+  El intervalo 60 s (frente a 30 s de canales críticos) evita saturar Supabase con polling doble.
+
 CANALES SUSPENDIDOS en degraded (sin polling — esperan reconexión WS):
   - coordinacion:flota
   - terminal:{device_id}:precache
-  - Cualquier otro canal de bandeja o inventario
+  - inventario_realtime
 
 RECONEXIÓN:
   → Reintentos exponenciales del WS: 1s, 2s, 4s, 8s, 16s (máx 30s)
@@ -1745,15 +1754,22 @@ INDICADOR EN UI:
 ```
 
 ```typescript
-// Implementación interna del polling de canales críticos en degraded_mode
-const POLLING_INTERVAL_MS = 30_000;
+// Implementación interna del polling en degraded_mode — dos niveles (B-10)
+const POLLING_CRITICAL_MS  = 30_000;   // canales críticos (alertas, estado vehículo)
+const POLLING_BANDEJA_MS   = 60_000;   // canales no críticos (bandejas, tablón)
 
 useEffect(() => {
   if (mode !== "degraded") return;
-  const timer = setInterval(() => {
+  const timerCritical = setInterval(() => {
     criticalChannels.forEach((ch) => ch.poll());
-  }, POLLING_INTERVAL_MS);
-  return () => clearInterval(timer);
+  }, POLLING_CRITICAL_MS);
+  const timerBandeja = setInterval(() => {
+    bandejaChannels.forEach((ch) => ch.poll());
+  }, POLLING_BANDEJA_MS);
+  return () => {
+    clearInterval(timerCritical);
+    clearInterval(timerBandeja);
+  };
 }, [mode]);
 ```
 

@@ -59,9 +59,10 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | Tabla | PK | Descripción |
 |---|---|---|
 | `fichas_empleados` | `id_persona` (UUID) | Personal registrado. `auth_user_id` (FK → `auth.users.id`), `id_nombre` (alias operativo único, NOT NULL), `nombre_real`, `dni`, `rol` (tes/flota/coordinacion/logistica/gerencia/rrhh), `activo` boolean, `fecha_alta`, `fecha_baja`. El `id_nombre` es el identificador operativo visible; el email en `auth.users` es `id_nombre@u24.internal` (dominio ficticio). |
-| `galletas_terminales` | `id_galleta` (UUID) | Cookies de terminal registrado. `id_terminal` (SHA-256 fingerprint — canvas + userAgent + screen + timezone), `tipo` ('permanente'/'temporal'), `id_nombre` (FK `fichas_empleados`), `created_at`, `expires_at` (null para permanente), `revocado_at` (nullable — null = galleta activa; timestamp = revocada, soft delete). Partial unique index: UNIQUE(`id_terminal`) WHERE `revocado_at IS NULL` — permite historial de revocaciones por terminal. RLS DELETE: `USING (FALSE)`. RLS UPDATE: solo via `rpc_revocar_y_reemitir_galleta` (SECURITY DEFINER). |
+| `galletas_terminales` | `id_galleta` (UUID) | Cookies de terminal registrado. `id_terminal` (SHA-256 fingerprint — canvas + userAgent + screen + timezone), `tipo` ('permanente'/'temporal'), `id_nombre` (FK `fichas_empleados`), `created_at`, `expires_at` (null para permanente), `revocado_at` (nullable — null = galleta activa; timestamp = revocada, soft delete), `ultima_activacion_at` (TIMESTAMPTZ nullable — actualizada en cada login exitoso via trigger; usada por `ef_cron_revoke_stale_terminals` para revocación automática > 90 días sin uso; B-05). Partial unique index: UNIQUE(`id_terminal`) WHERE `revocado_at IS NULL` — permite historial de revocaciones por terminal. RLS DELETE: `USING (FALSE)`. RLS UPDATE: solo via `rpc_revocar_y_reemitir_galleta` (SECURITY DEFINER). |
 | `sesiones_emergencia` | `id_sesion` (UUID) | Tokens PIN de emergencia. `pin_hash` (PBKDF2-SHA256), `tipo` ('permanente'/'temporal'), `id_nombre_emisor`, `created_at`, `consumido_at`, `expires_at` (TTL 10 min para no-consumidas). Purgados por Edge Function cronjob. RLS UPDATE/DELETE: `USING (FALSE)`. |
 | `solicitudes_desbloqueo` | `id_solicitud` (UUID) | Solicitudes de desbloqueo de terminal. `id_terminal`, `id_nombre_solicitante`, `motivo` (text), `estado` ('pendiente'/'aprobada'/'rechazada'/'expirada'), `id_nombre_revisor` (null hasta revisión), `created_at`, `expires_at`. El cron purge marca las pendientes expiradas como 'expirada' (no las elimina). |
+| `presencias_activas_terminal` | `id_nombre` (TEXT PK) | Tabla de presencia activa — un único registro por persona checked-in (B-06). `id_terminal` (TEXT NOT NULL — fingerprint del terminal actual), `checkin_at` (TIMESTAMPTZ NOT NULL). INSERT en `rpc_checkin`, DELETE en `rpc_checkout`. PRIMARY KEY garantiza unicidad: imposible tener dos filas para el mismo `id_nombre`. RLS SELECT: `can_read_fleet` (coordinación, gerencia) para visor de presencias. RLS INSERT/DELETE: via `rpc_checkin` / `rpc_checkout` (SECURITY DEFINER). RLS UPDATE: `USING (FALSE)` — no hay UPDATE, solo INSERT/DELETE. |
 | `auditoria_rbac` | `id_evento` (UUID) | Log inmutable de eventos de seguridad. `tipo_evento` (ver enum abajo), `id_nombre`, `id_terminal` (nullable), `ip` (nullable), `metadata` (jsonb), `created_at`. RLS INSERT: política de servicio (solo Edge Functions/triggers). RLS UPDATE/DELETE: `USING (FALSE)`. |
 
 **Enum `tipo_evento` de `auditoria_rbac`:**
@@ -97,7 +98,7 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 
 | Tabla | PK | Descripción |
 |---|---|---|
-| `catalogo_items` | `id_item` (integer, 1–244) | Catálogo maestro. `categoria`, `nombre`, `especificacion`. |
+| `catalogo_items` | `id_item` (integer, 1–244) | Catálogo maestro. `categoria`, `nombre`, `especificacion`, `archivado` (boolean NOT NULL DEFAULT FALSE — soft-delete; B-13). RLS UPDATE: solo `can_manage_catalog`. El archivado dispara trigger `trg_purge_plantilla_lineas` que elimina las líneas del ítem de todas las plantillas. |
 | `plantillas_stock` | `plantilla_id` (text) | Definición de plantilla por tipo de vehículo. `tipo`, `perfil`. |
 | `plantilla_lineas` | `(plantilla_id, subgrupo, id_item)` | Líneas de plantilla. `stock_objetivo`. FK `plantilla_id` + `id_item`. |
 | `inventario_vehiculo` | `(matricula, id_item, subgrupo)` | Stock actual por vehículo y subgrupo. `stock_real`, `ultima_actualizacion`. Modificable solo por RPC atómica. |
@@ -106,6 +107,15 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | `descuadres_inventario` | `id_descuadre` (UUID) | Registro de discrepancias de stock generadas por Doc-10. `id_doc10` (FK), `id_item`, `cantidad_diferencia` (INT — enviado − recibido), `location_origen`, `location_destino`, `estado` ('Pendiente_Revision'/'Resuelto'/'Archivado'), `id_nombre_resolutor` (nullable), `timestamp_generacion`, `timestamp_resolucion` (nullable), `mutation_uuid` (UUID — idempotencia de cola offline; UNIQUE constraint `uq_descuadre_mutation_uuid`), `entidad_imputable_tipo` (tipo enum `entidad_imputable` — **NOT NULL DEFAULT 'sin_imputar'**; se actualiza al resolver manualmente), `entidad_imputable_id` (text nullable — matricula / id_drp / id_nombre). RLS UPDATE: `can_edit_inventory`. |
 | `auditoria_inventario` | `id_auditoria` (UUID) | Log inmutable de movimientos de inventario. `tipo_movimiento` (tipo enum `tipo_movimiento_inventario` — ver §6.2), `id_item`, `cantidad_delta`, `location_origen`, `location_destino`, `id_nombre_operador`, `rpc_ejecutada`, `motivo` (text nullable), `entidad_imputable_tipo` (tipo enum `entidad_imputable`, **nullable** — no todos los movimientos tienen entidad imputable), `entidad_imputable_id` (text nullable), `created_at`. RLS UPDATE/DELETE: `USING (FALSE)`. |
 | `locations` | `location_id` (UUID) | Almacenes y bases operativas. `nombre`, `tipo` (base/almacen/punto_drp). |
+
+### Dominio: Infraestructura y versiones ✓
+
+| Tabla | PK | Descripción |
+|---|---|---|
+| `versiones_cliente` | `version_semver` (TEXT) | Registro de versiones publicadas del cliente PWA (B-14). `min_version_permitida` (TEXT NOT NULL — la versión mínima que el servidor acepta), `publicada_at` (TIMESTAMPTZ), `activa` (boolean DEFAULT TRUE), `notas` (text nullable — changelog interno). La Edge Function `validate_client_version` comprueba el header `X-Client-Version` de cada request contra `min_version_permitida`; si es inferior devuelve `426 Upgrade Required`. RLS INSERT/UPDATE/DELETE: solo `service_role`. RLS SELECT: `authenticated`. |
+| `pin_intentos_fallidos` | `(id_terminal, ventana_inicio)` composite PK | Rate-limit de consumo de PIN de emergencia (B-09). `id_terminal` (TEXT), `ventana_inicio` (TIMESTAMPTZ — truncado a ventana de 10 min: `date_trunc('hour', NOW()) + INTERVAL '10 min' * FLOOR(EXTRACT(MINUTE FROM NOW()) / 10)`), `intentos` (INT DEFAULT 1), `bloqueado_hasta` (TIMESTAMPTZ nullable). Incrementado por `ef_consumir_pin` en cada fallo. RLS: solo SECURITY DEFINER. Purgado por `ef_cron_purge` (entradas con `ventana_inicio < NOW() - INTERVAL '1 hour'`). |
+
+---
 
 ### Dominio: Documentos operativos ✓
 
@@ -118,10 +128,10 @@ Ver `adrs.md` sección "Nomenclatura Canónica" para la regla completa.
 | `doc5_rechazos_alta` | `id_doc` (UUID) | Rechazo de asistencia o alta voluntaria. `id_activacion`, `id_nombre_redactor`, `auth_uid_redactor` (UUID), `timestamp_rechazo`, `motivo_rechazo`, `firmado` boolean. Offline-queueable. |
 | `doc6_deducciones` | `id_deduccion` (UUID) | Deducciones de stock. Ejecutadas por RPC atómica exclusivamente. FK `matricula` + `id_item`. |
 | `doc7_averias` | `id_averia` (UUID) | Informe de avería. `nivel_criticidad` (Leve/Moderada/Grave), `sistema_afectado`, `descripcion_detallada`, `timestamp_incidencia`. FK `matricula`. Offline-queueable. Imágenes: Blob en Supabase Storage (no Base64). |
-| `doc8_partes_trabajo` | `id_parte` (UUID) | Parte de vehículo. `km_inicio`, `km_fin` (entrada manual), `timestamp_inicio`, `timestamp_fin`, `estado` ('Borrador_En_Curso'/'Activo'/'Enviado_Cerrado'), `cerrado_por_admin_id` (UUID nullable, FK `fichas_empleados` — null si cierre normal por el pilot; UUID del coordinador si cierre administrativo forzado). FK `id_activacion`. |
+| `doc8_partes_trabajo` | `id_parte` (UUID) | Parte de vehículo. `km_inicio`, `km_fin` (entrada manual), `timestamp_inicio`, `timestamp_fin`, `estado` ('Abierto_En_Turno'/'Enviado_Cerrado'/'Enviado_Cerrado_Administrativo'), `cerrado_por_admin_id` (UUID nullable, FK `fichas_empleados` — null si cierre normal por el pilot; UUID del coordinador si cierre administrativo forzado via `forzar_checkout_administrativo`). FK `id_activacion`. Ver estados canónicos en `estados.md §15 Doc-8`. |
 | `doc9_entradas_almacen` | `id_entrada` (UUID) | Recepción de material en almacén. `fecha_recepcion` (entrada manual). FK `location_id`. |
 | `doc10_transferencias` | `id_transferencia` (UUID) | Transferencia de material entre unidades. `timestamp_envio`, `timestamp_confirmacion`, `location_origen`, `location_destino`. |
-| `doc11_avisos` | `id_aviso` (UUID) | Avisos críticos del sistema. `tipo_aviso` (rotura_stock/averia_grave/drp_activado/alerta_seguridad/aviso_coordinacion), `nivel` (informativo/aviso/critico), `id_nombre_emisor`, `texto`, `timestamp_publicacion`, `leido_por` (jsonb — array de id_nombre). |
+| `doc11_avisos` | `id_aviso` (UUID) | Avisos críticos del sistema. `tipo_aviso` (rotura_stock/averia_grave/drp_activado/**drp_cancelado**/transito_vencido/alerta_seguridad/aviso_coordinacion — B-03 añade `drp_cancelado`; B-04 añade `transito_vencido`), `nivel` (informativo/aviso/critico), `id_nombre_emisor`, `texto`, `timestamp_publicacion`, `leido_por` (jsonb — array de id_nombre). |
 
 ### Dominio: DRP ✓
 
@@ -232,6 +242,9 @@ supabase/
 | `filiacion_eventos` | UNIQUE(`filiacion_id`, `paciente_id`, `tipo_evento`) | Idempotencia del watchdog: `upsert` con `ignoreDuplicates: true` nunca genera duplicados de alerta |
 | `filiacion_eventos` | RLS UPDATE/DELETE `USING (FALSE)` | Append-only — cada evento es un registro inmutable de lo que ocurrió |
 | Tablas offline-queueables (doc2/3/4/5/7) | PK UUID generada en cliente | Ver §6.3 — la PK actúa como clave de idempotencia; ON CONFLICT (pk) DO NOTHING en el INSERT de la cola. |
+| `presencias_activas_terminal` | PRIMARY KEY(`id_nombre`) — `pk_presencia_unica_por_persona` | Garantía de un único check-in activo por persona en cualquier terminal (B-06). La RPC `rpc_checkin` hace INSERT + ON CONFLICT DO NOTHING y evalúa el resultado; si ya existía → lanza `RAISE EXCEPTION 'checkin_ya_activo' USING HINT='409'`. Checkout = DELETE de la fila. Ver tabla en §3 Dominio: Identidad y acceso. |
+| `catalogo_items` | `archivado = FALSE` recomendado en queries de selección de ítem | Los ítems archivados (B-13) deben excluirse por defecto de los selectores UI y de las plantillas activas. |
+| `versiones_cliente` | UNIQUE(`version_semver`) | Una entrada por versión publicada; ver §3 Dominio Infraestructura. |
 
 ---
 

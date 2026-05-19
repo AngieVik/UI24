@@ -657,9 +657,27 @@ await insertAudit('cambio_password', body.id_nombre, null, {
   ejecutado_por: callerIdNombre
 })
 
-// Nota: el u24_offline_session del empleado en IndexedDB queda stale.
-// La próxima vez que haga login online, se reescribirá con el nuevo hash.
-// En el ínterin, el acceso offline fallará (comportamiento deseado tras reset).
+// 5. Broadcast de invalidación de sesión offline a todos los terminales del empleado (B-02)
+//    Cualquier terminal con galleta activa de este empleado debe borrar su u24_offline_session.
+const { data: terminales } = await supabaseAdmin
+  .from('galletas_terminales')
+  .select('id_terminal')
+  .eq('id_nombre', body.id_nombre)
+  .is('revocado_at', null)
+
+for (const { id_terminal } of terminales ?? []) {
+  await supabaseAdmin
+    .channel(`terminal:${id_terminal}:security`)
+    .send({
+      type: 'broadcast',
+      event: 'offline_session_invalidated',
+      payload: { id_nombre: body.id_nombre, reason: 'password_reset' }
+    })
+}
+// Comportamiento esperado en el cliente (hooks.md § useRealtime canal security):
+//   → idbDel('u24_offline_session')
+//   → useAuthStore.clear()
+//   → modal: "Tu contraseña fue cambiada. Inicia sesión de nuevo."
 return { success: true }
 ```
 
@@ -1335,4 +1353,114 @@ Coordinador revisa → rpc_aprobar_desbloqueo  → estado:'aprobado' + pg_notify
                    → rpc_rechazar_desbloqueo → estado:'rechazado' + pg_notify
                           ↓ Realtime al terminal
 Terminal recibe notificación → UI actualiza estado
+```
+
+---
+
+## 27. Rate-limit de consumo de PIN de emergencia — `ef_consumir_pin` (B-09)
+
+**Tipo:** Edge Function (modifica `ef_consumir_pin` existente)
+**Ubicación:** `supabase/functions/ef-consumir-pin/index.ts`
+
+El flujo de consumo de PIN de emergencia no tenía ningún límite de intentos, lo que permite ataques de fuerza bruta desde un terminal comprometido.
+
+### 27.1 Lógica de rate-limit
+
+```typescript
+const VENTANA_MS     = 10 * 60 * 1000   // 10 minutos
+const MAX_INTENTOS   = 5                // intentos máximos por ventana
+const BLOQUEO_BASE_S = 60               // bloqueo inicial tras superar límite (segundos)
+
+async function checkRateLimit(id_terminal: string): Promise<void> {
+  // Truncar timestamp a ventana de 10 min
+  const ahora = new Date()
+  const minutos = Math.floor(ahora.getMinutes() / 10) * 10
+  const ventana_inicio = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(),
+                                   ahora.getHours(), minutos, 0, 0).toISOString()
+
+  const { data: fila } = await supabaseAdmin
+    .from('pin_intentos_fallidos')
+    .select('intentos, bloqueado_hasta')
+    .eq('id_terminal', id_terminal)
+    .eq('ventana_inicio', ventana_inicio)
+    .maybeSingle()
+
+  if (fila?.bloqueado_hasta && new Date(fila.bloqueado_hasta) > ahora) {
+    const restantes = Math.ceil((new Date(fila.bloqueado_hasta).getTime() - ahora.getTime()) / 1000)
+    throw new RateLimitError(`Terminal bloqueado temporalmente. Espera ${restantes} segundos.`)
+  }
+
+  if ((fila?.intentos ?? 0) >= MAX_INTENTOS) {
+    // Escalar bloqueo: 60s × 2^(veces_superado - 1), máx 30 min
+    const veces = Math.floor((fila!.intentos - MAX_INTENTOS) / MAX_INTENTOS) + 1
+    const bloqueo_s = Math.min(BLOQUEO_BASE_S * Math.pow(2, veces - 1), 1800)
+    const bloqueado_hasta = new Date(ahora.getTime() + bloqueo_s * 1000).toISOString()
+    await supabaseAdmin
+      .from('pin_intentos_fallidos')
+      .upsert({ id_terminal, ventana_inicio, intentos: fila!.intentos + 1, bloqueado_hasta })
+    throw new RateLimitError(`Demasiados intentos fallidos. Terminal bloqueado ${bloqueo_s} segundos.`)
+  }
+}
+
+async function registrarFallo(id_terminal: string): Promise<void> {
+  const ahora = new Date()
+  const minutos = Math.floor(ahora.getMinutes() / 10) * 10
+  const ventana_inicio = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(),
+                                   ahora.getHours(), minutos, 0, 0).toISOString()
+  await supabaseAdmin
+    .from('pin_intentos_fallidos')
+    .upsert({ id_terminal, ventana_inicio, intentos: supabase.sql`intentos + 1` },
+             { onConflict: 'id_terminal,ventana_inicio', ignoreDuplicates: false })
+}
+```
+
+**Orden de ejecución en `ef_consumir_pin`:**
+1. `checkRateLimit(id_terminal)` — lanza 429 si bloqueado
+2. Verificar PIN via hash
+3. Si PIN inválido → `registrarFallo(id_terminal)` → 401
+4. Si PIN válido → consumir PIN + registrar evento `sesion_emergencia_consumida` (no registrar fallo)
+
+**Guard de auditoría:** todos los bloqueos generan entrada en `auditoria_rbac` con `tipo_evento = 'fallo_autenticacion'` y `metadata.motivo = 'rate_limit_pin'`.
+
+---
+
+## 28. RLS políticas adicionales (B-13)
+
+### `catalogo_items` — gestión de catálogo
+
+```sql
+-- Solo can_manage_catalog puede archivar/desarchivar ítems
+CREATE POLICY "catalogo_update" ON catalogo_items
+  FOR UPDATE USING (claim('can_manage_catalog'));
+
+-- Lectura del catálogo: todos los autenticados (incluyendo ítems archivados para admin)
+CREATE POLICY "catalogo_select" ON catalogo_items
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+-- INSERT: solo can_manage_catalog (añadir nuevo ítem al catálogo)
+CREATE POLICY "catalogo_insert" ON catalogo_items
+  FOR INSERT WITH CHECK (claim('can_manage_catalog'));
+
+-- DELETE: prohibido — solo soft-delete via archivado = TRUE
+CREATE POLICY "catalogo_delete" ON catalogo_items
+  FOR DELETE USING (FALSE);
+```
+
+**Claim `can_manage_catalog`:** asignado a roles `responsable_logistica` y `gerencia`. Ver `rbac_y_permisos.md §ROLE_CLAIMS`.
+
+**Trigger de purga en plantillas:** al UPDATE con `archivado = TRUE`:
+```sql
+CREATE OR REPLACE FUNCTION trg_fn_purge_plantilla_lineas()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.archivado = TRUE AND OLD.archivado = FALSE THEN
+    DELETE FROM plantilla_lineas WHERE id_item = NEW.id_item;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_purge_plantilla_lineas
+  AFTER UPDATE OF archivado ON catalogo_items
+  FOR EACH ROW EXECUTE FUNCTION trg_fn_purge_plantilla_lineas();
 ```

@@ -242,7 +242,7 @@ Estado de cada slot de subinventario para DRP o PSA.
 | `Operativo` | Disponible para asignar a un nuevo DRP o PSA. |
 | `Asignado` | Vinculado a un DRP o PSA activo. |
 | `En_Transito` | DRP/PSA finalizado. Stock físico pendiente de verificación. Asignación estándar bloqueada. |
-| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. El snapshot del DRP anterior pasa automáticamente a `resuelto_por_transferencia` (no visible en la cola activa de logística). Se crea un nuevo snapshot con el `stock_real` actual como única referencia activa. La nueva dotación asume ciegamente el stock teórico. Al retornar a base, logística hace un único cuadre que cubre la merma acumulada de todos los DRP anteriores. |
+| `Operativo_Condicionado` | Reasignado antes de completar la reconciliación del DRP anterior. El snapshot del DRP anterior pasa automáticamente a `resuelto_por_transferencia` (no visible en la cola activa de logística). Se crea un nuevo snapshot con el `stock_real` actual como única referencia activa. La nueva dotación asume ciegamente el stock teórico. Al retornar a base, logística hace un único cuadre que cubre la merma acumulada de todos los DRP anteriores. **Límite:** máx. 2 encadenamientos consecutivos sin reconciliación. Si el slot ya lleva 2 asignaciones previas con snapshot pendiente, la asignación a un nuevo DRP queda bloqueada hasta que logística cierre al menos uno. Bloqueo + Doc-11 a gerencia. Ver `logic.md §7.1.3`. |
 
 **Flujo estándar:**
 
@@ -452,6 +452,7 @@ Estado global que habilita o bloquea el formulario Doc-12 para todos los emplead
 |---|---|
 | `Abierto_En_Turno` | Al activar el vehículo (asignación de pilot + km_inicio) |
 | `Enviado_Cerrado` | Checkout del pilot (`flujo_checkout_automatico`, registra km_fin) **o** desactivación manual explícita con pilot activo |
+| `Enviado_Cerrado_Administrativo` | Cierre forzado por coordinación/gerencia via `forzar_checkout_administrativo` — registra `cerrado_por_admin_id`. Distinguible del cierre normal para auditoría. Ver `logic.md §42`. |
 
 Se genera uno por vehículo por turno de pilot. Si el pilot hace checkout y un nuevo pilot activa el mismo vehículo después, se crea un nuevo Doc-8 independiente.
 

@@ -459,6 +459,42 @@ La RPC devuelve error 422 'destino_no_apto_para_recepcion'
       vuelva a estado 'Asignado'
 ```
 
+### 7.1.3 Límite de encadenamiento de `Operativo_Condicionado` (B-11)
+
+**Problema:** cada reasignación de una mochila BKP en `Operativo_Condicionado` sin reconciliación previa crea un snapshot adicional con merma potencial acumulada. Sin límite, los encadenamientos pueden acumular descuadres imposibles de auditar retroactivamente.
+
+**Regla:** máximo 2 encadenamientos consecutivos sin reconciliación (es decir, la mochila puede estar en `Operativo_Condicionado` a lo sumo con 2 snapshots pendientes previos).
+
+**Guard en `rpc_asignar_mochila_a_drp`:**
+
+```sql
+-- Contar snapshots pendientes (estado != 'resuelto_por_transferencia' y != 'reconciliado')
+SELECT COUNT(*) INTO v_snapshots_pendientes
+  FROM subinventario_snapshots
+ WHERE id_mochila = p_id_mochila
+   AND estado NOT IN ('resuelto_por_transferencia', 'reconciliado');
+
+IF v_snapshots_pendientes >= 2 THEN
+  -- Bloquear asignación + notificar a gerencia
+  INSERT INTO doc11_avisos (id_aviso, tipo_aviso, nivel, id_nombre_emisor, texto,
+                             timestamp_publicacion, leido_por)
+  VALUES (gen_random_uuid(), 'alerta_seguridad', 'critico', p_coordinador_id,
+          format('Mochila %s alcanzó el límite de encadenamientos sin reconciliar (%s pendientes). '
+                 'Logística debe cerrar al menos un ciclo antes de reasignar.',
+                 p_id_mochila, v_snapshots_pendientes),
+          NOW(), '[]'::jsonb);
+
+  RAISE EXCEPTION 'operativo_condicionado_limite_alcanzado'
+    USING HINT   = '409',
+          DETAIL = format('La mochila tiene %s snapshots pendientes de reconciliación. '
+                          'Máximo permitido: 2.', v_snapshots_pendientes);
+END IF;
+```
+
+**Error en `error_handling.md`:** añadir `operativo_condicionado_limite_alcanzado` → `{ message: 'Esta mochila tiene demasiados ciclos sin reconciliar. Logística debe cerrar al menos uno antes de reasignar.', type: 'modal' }`.
+
+---
+
 ### 7.2 Campos del descuadre generado
 
 ```
@@ -4119,6 +4155,31 @@ BEGIN
          id_drp_activo = NULL
    WHERE id_drp_activo = p_drp_id;
 
+  -- 11. Doc-11 automático — aviso de cancelación a coordinación, gerencia y dotaciones (B-03)
+  --     Tipo 'drp_cancelado' (añadido al enum tipo_aviso — ver er_y_seeds.md §3).
+  --     Nivel 'critico': interrumpe la UI con banner rojo en todos los terminales suscritos.
+  INSERT INTO doc11_avisos (
+    id_aviso,
+    tipo_aviso,
+    nivel,
+    id_nombre_emisor,
+    texto,
+    timestamp_publicacion,
+    leido_por
+  ) VALUES (
+    gen_random_uuid(),
+    'drp_cancelado',
+    'critico',
+    p_coordinador_id,
+    format(
+      'DRP %s cancelado por %s. Todas las dotaciones han sido desvinculadas. '
+      'Las sesiones PSA y Filiación vinculadas han sido cerradas.',
+      p_drp_id, p_coordinador_id
+    ),
+    NOW(),
+    '[]'::jsonb
+  );
+
   -- Doc-1: sin acción (append-only — inmutable en su estado actual)
   -- Doc-8: sin acción (pilots continúan sus turnos fuera del DRP; checkout normal al terminar)
 
@@ -4139,6 +4200,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 | `filiacion_pacientes` activos del DRP | `estado = 'cancelado_por_drp'`; si `en_consulta`, también `timestamp_fin_consulta = NOW()` (C-01) |
 | `descuadres_inventario` | INSERT por cada ítem con `stock_real > 0` en mochilas BKP del DRP; `entidad_imputable_tipo = 'drp'` (C-02) |
 | `mochilas_backpack` asignadas al DRP | `estado = 'disponible'`, `id_drp_activo = NULL` — **después** de generar descuadres |
+| `doc11_avisos` | INSERT con `tipo_aviso = 'drp_cancelado'`, `nivel = 'critico'` (B-03) |
 | **Doc-8** de los pilots activos | **Sin cambio** — pilots siguen su turno; checkout normal al terminar |
 | **Doc-1** del DRP | **Sin cambio** — append-only; queda congelado en estado `Activo_En_Curso` |
 | **Hard delete de `drps`** | **Prohibido** — DRPs que alcanzaron `En_curso` no se eliminan nunca |
@@ -5875,18 +5937,19 @@ Antes de encolar una mutación offline, el cliente valida que los timestamps del
 sean razonables para detectar errores de reloj del dispositivo:
 
 ```typescript
-// Validación ejecutada en useOfflineQueue.enqueue() para campos transaccionales
-const MAX_OFFLINE_AGO_MS = 72 * 60 * 60 * 1000  // máx. 72h hacia atrás
-const MAX_FUTURE_MS       =  5 * 60 * 1000        // máx. 5 min hacia adelante
+// Validación ejecutada en useOfflineQueue.enqueue() — usa nowCorrected() de clockSync.ts (B-12)
+// La tolerancia se redujo a ±5 min para detectar drift de reloj antes de encolar.
+// Ver payloads_y_contratos.md §D.1 para el mecanismo de corrección de clock offset.
+const MAX_DRIFT_MS = 5 * 60 * 1000  // ±5 min en ambas direcciones (B-12, reducido de 72h/5min)
 
 function validarTimestampTransaccional(ts: string, campo: string): void {
-  const epochMs = new Date(ts).getTime()
-  const now     = Date.now()
+  const epochMs  = new Date(ts).getTime()
+  const nowCorrMs = Date.now() - getClockOffset()  // nowCorrected() del clockSync.ts
   if (isNaN(epochMs))
     throw new Error(`timestamp_invalido: ${campo}`)
-  if (epochMs < now - MAX_OFFLINE_AGO_MS)
+  if (epochMs < nowCorrMs - MAX_DRIFT_MS)
     throw new Error(`timestamp_demasiado_antiguo: ${campo} (${ts})`)
-  if (epochMs > now + MAX_FUTURE_MS)
+  if (epochMs > nowCorrMs + MAX_DRIFT_MS)
     throw new Error(`timestamp_en_el_futuro: ${campo} (${ts})`)
 }
 ```
@@ -5901,3 +5964,111 @@ Todos los timestamps se almacenan en UTC (`TIMESTAMPTZ`). La conversión a
 (`Intl.DateTimeFormat` con `timeZone: 'Europe/Madrid'`). Las RPCs no devuelven
 strings localizados — siempre devuelven `TIMESTAMPTZ` en UTC. Ver ADR-005 para
 la configuración de timezone en el servidor PostgreSQL.
+
+---
+
+## 61. Edge Cron `ef_cron_transito_ttl` — alerta de tránsitos vencidos (B-04)
+
+**Frecuencia:** Diaria, 05:00 UTC.
+**Service role:** obligatorio — `inventario_en_transito` y `doc11_avisos` requieren privilegio elevado.
+**Ubicación:** `supabase/functions/ef-cron-transito-ttl/index.ts`
+
+### 61.1 Propósito
+
+Un `inventario_en_transito` permanece en estado `'en_transito'` cuando el receptor no confirma ni rechaza la recepción. Después de 48 h sin confirmación el material puede estar perdido, extraviado o en un vehículo fuera de servicio. El cron detecta estos casos y genera Doc-11 de alerta.
+
+### 61.2 Lógica
+
+```typescript
+// 1. Obtener tránsitos vencidos (> 48h sin confirmar)
+const { data: vencidos } = await supabaseAdmin
+  .from('inventario_en_transito')
+  .select('id_transito, id_transferencia, id_item, cantidad, location_origen, location_destino, timestamp_envio')
+  .eq('estado', 'en_transito')
+  .lt('timestamp_envio', new Date(Date.now() - 48 * 3600 * 1000).toISOString())
+
+for (const t of vencidos ?? []) {
+  // 2. Verificar que no hay ya un Doc-11 de tipo transito_vencido para este tránsito
+  //    (evitar spam si el cron se dispara múltiples días consecutivos para el mismo item)
+  const { data: yaNotificado } = await supabaseAdmin
+    .from('doc11_avisos')
+    .select('id_aviso')
+    .eq('tipo_aviso', 'transito_vencido')
+    .ilike('texto', `%${t.id_transito}%`)
+    .maybeSingle()
+
+  if (yaNotificado) continue
+
+  // 3. Generar Doc-11 a logística origen y destino
+  await supabaseAdmin
+    .from('doc11_avisos')
+    .insert({
+      id_aviso:             crypto.randomUUID(),
+      tipo_aviso:           'transito_vencido',
+      nivel:                'aviso',
+      id_nombre_emisor:     'system',
+      texto:                `Tránsito vencido (>48h): ${t.cantidad} uds. ítem ${t.id_item} `
+                          + `de ${t.location_origen} → ${t.location_destino}. `
+                          + `Enviado: ${t.timestamp_envio}. ID: ${t.id_transito}.`,
+      timestamp_publicacion: new Date().toISOString(),
+      leido_por:            []
+    })
+}
+```
+
+**Acción requerida:** logística debe confirmar, rechazar o redirigir manualmente via UI de Doc-10. El cron solo alerta — no cancela ni cierra tránsitos automáticamente.
+
+---
+
+## 62. Edge Cron `ef_cron_revoke_stale_terminals` — revocación de galletas sin uso > 90 días (B-05)
+
+**Frecuencia:** Semanal, domingos 02:00 UTC.
+**Service role:** obligatorio — `galletas_terminales` tiene RLS UPDATE `USING (FALSE)` para JWT normales.
+**Ubicación:** `supabase/functions/ef-cron-revoke-stale-terminals/index.ts`
+
+### 62.1 Propósito
+
+Las galletas permanentes de terminales no usados en > 90 días representan vectores de acceso fantasma (terminales físicos desinstalados, obsoletos o robados). La revocación automática reduce la superficie de ataque sin intervención manual.
+
+### 62.2 Lógica
+
+```typescript
+const INACTIVO_MS = 90 * 24 * 3600 * 1000   // 90 días en ms
+const umbral = new Date(Date.now() - INACTIVO_MS).toISOString()
+
+// 1. Obtener galletas permanentes sin uso reciente
+const { data: stale } = await supabaseAdmin
+  .from('galletas_terminales')
+  .select('id_galleta, id_terminal, id_nombre, ultima_activacion_at, created_at')
+  .eq('tipo', 'permanente')
+  .is('revocado_at', null)
+  .or(`ultima_activacion_at.lt.${umbral},and(ultima_activacion_at.is.null,created_at.lt.${umbral})`)
+
+for (const g of stale ?? []) {
+  // 2. Revocar: marcar revocado_at con timestamp actual
+  await supabaseAdmin
+    .from('galletas_terminales')
+    .update({ revocado_at: new Date().toISOString() })
+    .eq('id_galleta', g.id_galleta)
+
+  // 3. Auditar
+  await supabaseAdmin
+    .from('auditoria_rbac')
+    .insert({
+      id_evento:   crypto.randomUUID(),
+      tipo_evento: 'galleta_revocada',
+      id_nombre:   g.id_nombre,
+      id_terminal: g.id_terminal,
+      metadata: {
+        motivo:              'inactividad_90_dias',
+        ultima_activacion:   g.ultima_activacion_at ?? g.created_at,
+        revocado_por_cron:   true
+      },
+      created_at: new Date().toISOString()
+    })
+}
+```
+
+**Trigger de `ultima_activacion_at`:** en `ef_consumir_pin` (login via galleta), actualizar `ultima_activacion_at = NOW()` en la galleta correspondiente tras login exitoso. También en `set_claims` (login normal): actualizar si `id_terminal` coincide con una galleta activa.
+
+**Notificación a coordinación:** si se revocan > 3 galletas en una ejecución, generar Doc-11 a coordinación con la lista de terminales revocados para revisión manual.
