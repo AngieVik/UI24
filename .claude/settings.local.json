@@ -5,7 +5,13 @@
       "Bash(Select-Object FullName)",
       "Bash(cmd.exe //c \"dir D:\\\\Proyectos\\\\UI24\\\\revisiones.md\")",
       "Bash(git -C D:/Proyectos/UI24 log --oneline -20)",
-      "Bash(git -C D:/Proyectos/UI24 status)"
+      "Bash(git -C D:/Proyectos/UI24 status)",
+      "Bash(grep -E \"\\\\.\\(css|tsx|jsx|ts|js\\)$\")",
+      "Read(//d/Proyectos/U24webapp/**)",
+      "Bash(npm install *)",
+      "Bash(dir D:\\\\Proyectos\\\\UI24)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

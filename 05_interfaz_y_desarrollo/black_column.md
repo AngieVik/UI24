@@ -1,7 +1,7 @@
 # black_column
 
 * Barra lateral permanente de 52px de ancho, fondo `#111111`, junto con el header.
-* `Logo.svg` (`#F5C518`) en la parte superior.
+* `Logo.svg` en la parte superior — color `#FFD60A` (token `--u24-yellow`, único amarillo del sistema). No usar `#F5C518` ni variantes doradas.
 * Todos los iconos son Tabler Icons (outline). Sin etiqueta visible. Tooltip al hover con el nombre del módulo.
 * Indicador de ítem activo: barra vertical amarilla de 3px en el borde izquierdo del botón.
 

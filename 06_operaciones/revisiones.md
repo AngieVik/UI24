@@ -13,40 +13,6 @@ Módulos referenciados pero no desarrollados: nucleo_coordinacion_y_seguridad.md
 El proyecto tiene madurez de diseño de producto avanzada pero infraestructura/operación inexistente. El roadmap debe priorizar pavimentar la base antes de capas de negocio.
 </razonamiento>
 
-1. DETECCIÓN DE ERRORES Y CUELLOS DE BOTELLA
-
-1.A — Contradicciones entre fuentes de verdad (severidad crítica)
-InconsistenciaUbicación AUbicación BC1Persistencia Zustand: localStorage prohibido vs declarado como usadorules.md:63 ("IndexedDB obligatorio, prohibido localStorage")estados.md:526-534 (5 stores usan localStorage)C2Adjuntos Base64rules.md:64 + nucleo_flota_y_taller.md:253 ("prohibición explícita")payloads_y_contratos.md:92 ("imágenes en Base64 no deben superar 500KB")C3Estado inicial de vehículos: desactivado "solo por acción manual explícita"estados.md:129Sin definir cómo se entra al sistema desde un seed inicial
-1.B — Single Points of Failure humanos
-CuelloRiesgoMitigación faltanteB1Desbloqueo de vehículo inoperativo_critico depende 100% de coordinaciónFlota inmóvil sin SLAEscalación automática a gerencia + timeoutB2LIBERAR BOX solo manual; sin timeout automáticoBox bloqueado indefinidamente si terminal caeWatchdog server-side por inactividadB3forzar_checkout_administrativo requiere km_fin que "el coordinador conoce por comunicación externa"Si no hay comunicación: bypass forzado con km del Doc-8 anteriorPolítica de degradación documentadaB4Revocación de galleta permanente solo manualTablet robada queda operativa hasta acción humanaAuto-revocación tras N días de inactividad o cambio de fingerprint
-1.C — Dependencia ciega en Realtime
-Todo el realtime (marquesina, bandejas, estados, descuadres, ping/pong GPS, alertas críticas) cae si Supabase Realtime se degrada. No hay polling fallback definido en ninguna parte de la documentación. Los flujos de inventario (§24.5) y vehículos (§29.3) asumen WS sano.
-1.D — Race conditions y flujos rotos
-EscenarioRiesgoR1JWT congelado offline replicado: usuario hace Doc-6 offline, mientras tanto gerencia le revoca permisos. Al sync, ¿qué evalúa RLS?Mutación con permisos obsoletos aplicadaR2DRP cancelado en En_curso: el borrado en cascada de nucleo_drp.md:194 está documentado para En_espera/En_preparacion. No hay flujo para cancelación con dotaciones dentroEstado huérfanoR3Operativo_Condicionado acumulado: 3 DRPs encadenados sin reconciliar — ¿quién responde contablemente del descuadre?Imputación contable ambiguaR4terminal_check offline en estado_1: si nunca se hizo check-in online previo Y no hay precache → "acceso denegado" sin instrucción de qué hacerBloqueo operativoR5Galleta_pequeña sin checkout: terminal en estado_1 con cookie temporal y sin nunca añadir ID_nombre — la cookie no expira por TTL, solo "al último checkout" que nunca ocurreTerminal autoritativo indefinido2. ANÁLISIS DE BRECHAS (LO QUE FALTA)
-
-2.A — Módulos críticos no documentados
-#Módulo faltanteImpactoF1Recuperación de contraseña (forgot_password)Empleado sin acceso depende de gerencia/coordinación 24/7F2Revocación de sesión de usuario (dispositivo robado de TES/DUE)Solo se contempla revocar galletas, no JWTs de cuentas realesF3Onboarding/offboarding de empleado¿Cómo se da de alta un nuevo TES? ¿Y de baja respecto a Doc-1 históricos?F4Alta de vehículo nuevo en flotaNo hay flujo: ID, location de inventario inicial, plantilla a aplicarF5Configuración global del sistemaTTLs de galletas, umbrales km/fechas, intervalo throttle GPS — todo hardcoded en docsF6Auditoría de cambios RBACSin trazabilidad de "quién promocionó a quién y cuándo"F7Política de retención RGPDDoc-1 inmutables eternamente, pero datos personales sensibles deben tener TTL legal
-2.B — Capa de operaciones inexistente
-
-    Pieza faltante  Justificación
-
-O1 Observabilidad (Sentry/Logflare + métricas) PWA en producción sin trazas = imposible debugging post-incidente
-O2 Versionado de cliente PWA + update strategyTerminal en ruta con versión vieja vs servidor con nuevo schema = bugs invisibles
-O3 Service Worker lifecycle definidoMencionado tangencialmente, no especificado (install/activate/skipWaiting)
-O4 Estrategia de testingCero menciones a unit, integration o E2E (Playwright)
-O5 Esquema ER + migraciones seedHay tablas referenciadas sin diagrama consolidado ni script inicial
-O6 Backup/Restore RPO-RTOSupabase tiene backups, pero IndexedDB local no — pérdida de cola offline si tablet se daña
-O7 Validación de integridad de IndexedDBSin recovery si estructura local se corrompe
-O8 Healthcheck de Edge Functionsset_claims cae → ¿qué pasa con login?
-O9 Sistema de feature flagsSin manera de desactivar selectivamente módulos en incidente
-O10 Pipeline de despliegue + presupuesto de bundleReglas mencionan 3MB/800KB pero no la implementación del guard2.C — Edge cases sin documentar
-
-    Empleado con checkin_on en dos terminales simultáneos (¿permitido?).
-    Doc-8 de un pilot que cambia de vehículo a mitad de turno.
-    Doc-12 aprobado que se solapa con un servicio ya agendado.
-    Modal-ligero abierto durante un cambio de estado realtime que invalida su contexto.
-    Galleta_pequeña expira mid-operativo durante un DRP.
-
 <razonamiento>
 He interpretado el mapa del proyecto como **un sistema offline-first de misión crítica para gestión de ambulancias**, donde la integridad de datos clínicos y la disponibilidad operativa son innegociables. La documentación de las 7 fases está estructuralmente sólida en lo que es **especificación arquitectónica pura** (tablas, RPCs, estados), pero presenta tres clases de problemas graves:
 **1. Acoplamiento entre archivos sin verificación cruzada:** durante las 7 fases se referenciaron entidades (`filiacion_eventos`, `responsable_flota`, `responsable_logistica`) que se asumieron existentes pero nunca se documentaron formalmente. Esto crea **fantasmas de schema** — tablas/roles citados que romperán la migración SQL al ejecutarse.
@@ -59,92 +25,6 @@ Los **5 problemas más graves** que veo son:
 - Sin RPC de borrado RGPD on-demand (incumple "derecho al olvido")
 - Cero documentación de backups, migraciones zero-downtime, CI/CD ni observabilidad
 </razonamiento>
-
-1. DETECCIÓN DE ERRORES Y CUELLOS DE BOTELLA
-   1.1 Fallos lógicos / Callejones sin salida
-   | # | Severidad | Archivo / Sección | Descripción | - | - | - | - | - |
-   | F-01 | **CRÍTICO** | `rls_y_rpcs.md §14` | **Tabla fantasma `filiacion_eventos`**
-   — el watchdog Gap B2 hace `upsert` cada 5 min sobre una tabla no definida en `er_y_seeds.md`. La Edge Function `ef_cron_purge` fallará silenciosamente en su bloque 3. |
-   | F-02 | **CRÍTICO** | `rls_y_rpcs.md §16` + `logic.md §50` | **Huérfanos en `auth.users`**
-   — si el INSERT en `fichas_empleados` falla tras crear el usuario de Auth, la cuenta queda viva sin ficha. No existe `ef_cron_cleanup_orphans`. El usuario no podrá hacer login (claims vacíos) y nadie sabrá que existe. |
-   | F-03 | **CRÍTICO** | `rls_y_rpcs.md §3` + `rbac_y_permisos.md` | **Roles fantasma con permisos efectivos**
-   — `due`, `medico`, `responsable_flota`, `responsable_logistica` aparecen en `ROLE_CLAIMS` y RLS policies pero no están en los 6 seeds demo. No hay `rpc_cambiar_rol` documentada. `set_claims` no documenta qué hace ante un rol desconocido. |
-   | F-04 | **ALTO** | `er_y_seeds.md §3 (línea 64)` | **`solicitudes_desbloqueo` sin path de resolución**
-   — la tabla tiene estados `aprobada`/`rechazada` pero no hay RPC ni UPDATE policy para transicionar desde `pendiente`. Las solicitudes pueden expirar pero nunca aprobarse. |
-   | F-05 | **ALTO** | `logic.md §48` | **Cancelación de DRP deja mochilas con stock huérfano**
-   — al cancelar DRP, las mochilas BKP se marcan `disponible` pero su subinventario residual no se reconcilia con el almacén central. Genera descuadres silenciosos. |
-   | F-06 | **ALTO** | `logic.md §48` | **Pacientes PSA/filiación quedan en estado incoherente al cancelar DRP**
-   — las sesiones se cierran con `timestamp_cierre = NOW()` pero los pacientes individuales mantienen `estado = 'en_consulta'`. Las métricas operativas se corrompen. |
-
-1.2 Fricciones de arquitectura/DB
-| # | Severidad | Archivo / Sección | Descripción |
-| - | - | - | - |
-| F-07 | **ALTO** | `er_y_seeds.md §3 (línea 103)` | **`entidad_imputable_tipo` sin enum PostgreSQL** — el campo se describe como `('vehiculo'/'drp'/'persona'/'sin_imputar')` pero no hay `CREATE TYPE`. Cualquier valor de texto pasa el constraint. |
-| F-08 | **ALTO** | `er_y_seeds.md §3 (línea 104)` | **`auditoria_inventario.tipo_movimiento` no exhaustivo** — la lista enum no incluye todos los flujos documentados (consumo PSA/filiación, eventos físicos vehículo, ajustes RGPD). |
-| F-09 | **ALTO** | `rls_y_rpcs.md` | **`cancelar_drp` no centralizada en `rls_y_rpcs.md`** — la SQL completa vive solo en `logic.md §48`. Riesgo de drift si alguien busca por rls*y_rpcs y modifica sin actualizar logic. |
-| F-10 | **MEDIO** | `er_y_seeds.md §3 (línea 103)` + §5 | **`mutation_uuid` sin índice UNIQUE explícito** — la idempotencia ON CONFLICT DO NOTHING requiere `UNIQUE(mutation_uuid)` pero no aparece en la sección §5 de índices. |
-| F-11 | **CRÍTICO** | Sin doc | **Sin estrategia de migraciones zero-downtime** — `0001_init.sql` se asume aplicado pero no hay path documentado para `0002*\*.sql` y siguientes. ¿Qué pasa con datos en producción al añadir un NOT NULL? |
-
-1.3 Vulnerabilidades operativas
-
-| # | Severidad | Archivo / Sección | Descripción | - | - | - |
-| F-12                                                                                                                                                                             | **ALTO**    | `er_y_seeds.md §3 (línea 118)` + `rls_y_rpcs.md` | **`doc8.cerrado_por_admin_id` editable sin RPC**    |
-| — no hay policy que restrinja UPDATE de este campo solo a `forzar_checkout_administrativo`. Cualquier usuario autenticado podría manipular el registro de quién forzó el cierre. |
-| F-13                                                                                                                                                                             | **ALTO**    | `er_y_seeds.md §3 (línea 62)`                    | **Galletas revocadas sin recuperación de terminal** |
-| — al dar de baja al único usuario asignado a un terminal, queda inaccesible sin que coordinación reciba aviso. Requiere intervención física.                                     |
-| F-14                                                                                                                                                                             | **CRÍTICO** | `logic.md §52` + `rls_y_rpcs.md §19`             | **RGPD sin "derecho al olvido" on-demand**          |
-| — solo hay purga automática a los 5 años. Si un paciente solicita borrado inmediato (obligación RGPD, plazo 30 días), no hay RPC ni Edge Function.                               |
-| F-15                                                                                                                                                                             | **MEDIO**   | `logic.md §49`                                   | **Ajuste de stock a 0 sin validación reforzada**    |
-| — el guard de `motivo ≥ 10 chars` permite vaciar un stock completo con motivo trivial. No notifica a logística.                                                                  |
-
-1. ANÁLISIS DE BRECHAS (LO QUE FALTA)
-
-2.1 Módulos críticos olvidados
-
-| # | Módulo faltante | Impacto | - | - | - | - |
-| G-01 | **Recuperación de contraseña self-service**     | `ef_reset_password` requiere RRHH presencial. No hay flujo "Olvidé mi contraseña" → email/SMS. En offline-first con dominios `@u24.internal` ficticios, no hay forma de recuperar autoservicio. ¿Es por diseño? Si sí, documentarlo en ADR. Si no, falta. |
-| G-02 | **Cambio de contraseña por el propio empleado** | Tras login con contraseña temporal del onboarding, el empleado debería poder cambiarla. No hay RPC ni Edge Function documentada.                                                                                                                          |
-| G-03 | **`rpc_cambiar_rol`**                           | Cambiar rol de un empleado dispara el trigger `trg_audit_cambio_rol` pero no hay RPC con validación de claim. Cualquier UPDATE directo pasa el trigger sin RBAC.                                                                                          |
-| G-04 | **Borrado RGPD on-demand**                      | Falta tabla `solicitudes_rgpd` + RPC `rpc_solicitar_borrado_rgpd` + RPC `rpc_procesar_borrado_rgpd`.                                                                                                                                                      |
-| G-05 | **`ef_cron_cleanup_orphans`**                   | Cron diario que busque users en `auth.users` sin ficha y los elimine. Indispensable para reparar fallos parciales del onboarding.                                                                                                                         |
-| G-06 | **Sistema de notificaciones push (PWA)**        | Nada documentado sobre Web Push API para alertas críticas (Doc-11) cuando la PWA no está en foco. Crítico para coordinación.                                                                                                                              |
-| G-07 | **Migraciones evolutivas (`0002+`)**            | Sin estrategia documentada de añadir columnas/tablas a un schema en producción con datos. ¿Branching? ¿Hot migration? ¿Downtime aceptable?                                                                                                                |
-| G-08 | **Sistema de backups + restore**                | RPO/RTO no definidos. ¿Daily? ¿Hourly PITR? ¿Cómo se prueba que un restore funciona? ¿Quién es responsable?                                                                                                                                               |
-
-2.2 Edge cases sin documentar
-
-| #    | Edge case                                                 | Riesgo                                                                                                                                                                                                   |
-| ---- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| G-09 | **Reloj del cliente desincronizado**                      | El cliente usa `NOW()` local para timestamps de cola offline. Si el reloj está mal (5 horas atrasado), los timestamps en DB serán incoherentes. ¿Se confía o se sobrescribe en servidor?                 |
-| G-10 | **Cuota de IndexedDB excedida**                           | `useOfflineQueue` sin límite + Doc-7 con imágenes pueden saturar la cuota del dispositivo. No hay manejo de `QuotaExceededError`.                                                                        |
-| G-11 | **JWT expira durante una operación crítica**              | El usuario está rellenando Doc-2 cuando el JWT expira a los 60 min. Al guardar, la mutación falla. ¿Se silent-refresh? ¿Se pierde el draft?                                                              |
-| G-12 | **Concurrencia: dos coordinadores cancelan el mismo DRP** | `cancelar_drp` no documenta `FOR UPDATE` ni guard de doble cancelación. Posible race condition.                                                                                                          |
-| G-13 | **Cambio de zona horaria**                                | El proyecto asume Europe/Madrid pero no lo declara. Operaciones internacionales (rescates fronterizos) confundirían timestamps.                                                                          |
-| G-14 | **Vehículo dado de baja con DRP activo**                  | No hay guard. ¿Qué pasa si flota da de baja un vehículo que está en `dotaciones_drp` activo?                                                                                                             |
-| G-15 | **Empleado con turno activo es dado de baja mid-shift**   | `ef_baja_empleado` no verifica si tiene Doc-8 abierto. La cola offline del terminal seguirá intentando sincronizar bajo un user inactivo → mutaciones rechazadas por RLS → bandeja de conflictos masiva. |
-
-2.3 Infraestructura operativa ausente
-
-| #    | Componente                                | Estado                                                                                                                 |
-| ---- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| G-16 | **Observabilidad / Logging centralizado** | `runbooks.md` menciona Logflare pero no hay setup documentado. Sin Sentry o equivalente para errores frontend.         |
-| G-17 | **Métricas de negocio**                   | ¿Cuántos DRPs/semana? ¿Latencia P95 por RPC? ¿% de mutaciones offline vs online? Sin dashboard, sin alertas tempranas. |
-| G-18 | **Service Worker — Estrategia de cache**  | ADR-003 lista qué es offline-capable, no cómo se cachean assets/API. Sin esto, deploys nuevos sirven UI stale.         |
-| G-19 | **CI/CD pipeline**                        | Sin documento de stages, gates, rollback. ¿Branch protection? ¿Required reviewers?                                     |
-| G-20 | **Health checks de Edge Functions**       | No hay endpoint `/health` documentado. Si una EF cae, nadie se entera hasta que un usuario reporta.                    |
-
-2.4 UI/UX gaps
-
-| #    | Componente                                 | Estado                                                                                                                                 |
-| ---- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| G-21 | **Mapeo de errores RPC → mensaje UI**      | Sin tabla que traduzca `'stock_insuficiente'` → "Stock insuficiente para esta operación". Riesgo de mostrar códigos crudos al usuario. |
-| G-22 | **Loading states / Skeleton screens**      | Sin estándar documentado. Cada developer improvisa.                                                                                    |
-| G-23 | **Componente de pantalla offline general** | El banner de degraded_mode está documentado, pero falta vista de "Sin conexión total — última sincronización hace X min".              |
-| G-24 | **i18n**                                   | Decisión arquitectónica no tomada. Strings hardcoded en español.                                                                       |
-| G-25 | **Modo daltónico / dark mode**             | ADR-003 fija WCAG AA pero no documenta paleta con ratios verificados.                                                                  |
-
-1. HOJA DE RUTA DE DESARROLLO (BACKLOG PRIORIZADO)
-🚨 FASE 8 — Corrección de bloqueadores de go-live (sprint 1, **1-2 semanas**)
 
 **8.1 Fantasmas de schema y huérfanos**
 
@@ -174,7 +54,8 @@ Los **5 problemas más graves** que veo son:
 
 🟠 FASE 9 — Cierre de edge cases y consistencia (sprint 2, **2-3 semanas**)
 
-**9.1 Cascadas y coherencia transaccional**
+**9.1* Cascadas y coherencia transaccional**
+
 - [x] **C-01** Refactorizar `cancelar_drp`: añadir cierre explícito de `psa_pacientes` y `filiacion_pacientes` con nuevo estado `'cancelado_por_drp'` [F-06]
       → `logic.md §48` pasos 6 y 8: `UPDATE psa_pacientes SET estado = 'cancelado_por_drp' WHERE estado NOT IN ('alta','exitus','cancelado_por_drp')` + ídem `filiacion_pacientes` con `timestamp_fin_consulta` condicional.
 - [x] **C-02** Refactorizar `cancelar_drp`: generar descuadre automático por cada mochila BKP devuelta con stock residual [F-05]
@@ -186,12 +67,14 @@ Los **5 problemas más graves** que veo son:
 - [x] **C-05** Añadir guard a baja de vehículo: bloquear si está en `dotaciones_drp` activo [G-14]
       → `logic.md §57` paso 4 + `rls_y_rpcs.md §25`: guard `EXISTS (SELECT 1 FROM dotaciones_drp WHERE matricula = p_matricula AND timestamp_salida IS NULL)` → `vehiculo_en_drp_activo` 409.
 
-**9.2 Flujos de resolución pendientes**
+**9.2* Flujos de resolución pendientes**
+
 - [x] **C-06** Crear RPCs `rpc_aprobar_desbloqueo` y `rpc_rechazar_desbloqueo` + UPDATE policy en `solicitudes_desbloqueo` [F-04] → `logic.md §58`; `rls_y_rpcs.md §26`; policy `solicitudes_update` → USING(FALSE); `er_y_seeds.md` enum extendido con `desbloqueo_aprobado`/`desbloqueo_rechazado`
 - [x] **C-07** Documentar en `logic.md §Doc-12` la transición al cerrar período de vacaciones: `'Borrador'` → descarte, `'Pendiente_Aprobacion'` → congelado [G del audit] → `logic.md §23.2` (nueva subsección con tabla de estados + regla de purga)
 - [x] **C-08** Reforzar `rpc_ajuste_manual_stock`: si `cantidad_nueva = 0`, exigir motivo ≥ 30 chars + emitir Doc-11 aviso a logística [F-15] → `logic.md §49.2` (firma), `§49.3` (guard reforzado + paso 6 doc11_avisos INSERT), `§49.4` (reglas), `§49.5` (modal UI)
 
-**9.3 Recuperación de credenciales y terminales**
+**9.3* Recuperación de credenciales y terminales**
+
 - [x] **C-09** Definir ADR sobre recuperación de contraseña: ¿self-service o solo por RRHH? Documentar decisión [G-01]
       → `adrs.md ADR-004`: "Recuperación de contraseña: flujo gestionado exclusivamente por RRHH (C-09)". Justificación: dominios `@u24.internal` ficticios, sin email externo. Reset solo via `ef_reset_password` por RRHH/gerencia. Primer login online regenera sesión offline.
 - [x] **C-10** Crear `rpc_cambiar_mi_password` (callable por el propio empleado autenticado, validación de contraseña actual + nueva) [G-02]
@@ -199,7 +82,8 @@ Los **5 problemas más graves** que veo son:
 - [x] **C-11** Antes de revocar la última galleta de un terminal: emitir Doc-11 a coordinación + procedimiento documentado en runbook [F-13]
       → `logic.md §51.3` paso 2.5: `GUARD TERMINAL HUÉRFANO — emitir aviso crítico si algún terminal quedó sin galleta (C-11)`. Ignora galletas con `revocado_at IS NOT NULL`. Si recuento cae a 0 → INSERT `doc11_avisos` tipo `terminal_sin_galleta` dirigido a coordinación. Referencia `runbooks.md RB-05`.
 
-**9.4 Hardening de cliente**
+**9.4* Hardening de cliente**
+
 - [x] **C-12** Implementar manejo de `QuotaExceededError` en IndexedDB: priorización de purga (mantener cola offline > caché bandejas > caché global) [G-10]
       La gestión se hace interceptando los errores de escritura en idb-keyval (middleware de Zustand). El orden estricto de borrado para liberar cuota debe ser: 1º global_cache (marquesina), 2º bandejas_cache, 3º (solo en caso extremo) purgar imágenes de Doc-7 en la offline_queue. Nunca vaciar las mutaciones clínicas de la cola offline.
       → `idbStorageWithQuotaGuard` en hooks.md §15 (Persistencia Asíncrona). Purge loop con PURGE_ORDER + `purgeDoc7Images()` como último recurso.
@@ -219,7 +103,9 @@ Los **5 problemas más graves** que veo son:
 ---
 
 🟡 FASE 10 — Pulido UI/UX y desarrollo end-to-end (sprint 3+, **3-4 semanas**)
-**10.1 Estándares de UI**
+
+**10.1* Estándares de UI**
+
 - [x] **U-01** Crear `05_interfaz_y_desarrollo/error_handling.md` con tabla completa de errores RPC → mensaje UI en español + tipo (toast/modal/inline) [G-21]
       → Creado `error_handling.md`. Cubre: anatomía PostgrestError, 5 tipos de presentación, 10 errores PG nativos (23505/42501/P0002/etc.), ~40 errores custom por módulo (autenticación, DRP, inventario, vehículos, Doc-8, filiación, RRHH, galletas), errores de red vs validación, hook `resolveRpcError()` con tabla maestra y detección por substring para mensajes dinámicos, errores de Auth SDK y errores de cliente previos al envío.
 
@@ -232,7 +118,8 @@ Los **5 problemas más graves** que veo son:
 - [x] **U-04** Documentar paleta de colores con ratios WCAG AA verificados (texto, badges, alertas) [G-25]
       → Sección `## Paleta de colores` añadida a componentes.md. Ratios calculados para: texto sobre header negro (8:1 min), texto sobre blanco (4.6:1 min), badges (5.4:1 min), alertas, botones. Flagea amber-600 sobre blanco (2.97:1 ❌) y prescribe amber-700 (4.6:1 ✅). 5 reglas de accesibilidad adicionales (aria-label, focus-trap, listas semánticas, formularios, texto deshabilitado).
 
-**10.2 Decisiones aplazadas**
+**10.2* Decisiones aplazadas**
+
 - [x] **U-05** ADR sobre i18n: SP-only por ahora, plan de migración a i18next si se requiere multi-lang [G-24]
       → ADR-006 añadido en adrs.md. Evalúa 4 opciones (sin librería, react-intl, i18next, Intl nativa). Decide español directo en JSX: 0KB overhead, legibilidad inmediata. Reglas: strings de UI en español, identificadores de máquina en inglés, formatos con Intl API nativa. Ruta de migración: i18next-scanner + jscodeshift codemods (2-3 sprints cuando sea necesario).
 
@@ -242,7 +129,8 @@ Los **5 problemas más graves** que veo son:
 - [x] **U-07** Métricas de negocio: definir dashboard mínimo (Supabase + Grafana o equivalente) con KPIs operativos [G-17]
       → infraestructura.md §7. Stack: Grafana + datasource PostgreSQL (recomendado) o Supabase Studio SQL views. 4 vistas materializadas CONCURRENT REFRESH cada 15 min sobre auditoria_rbac, descuadres_inventario, doc1_asistencias, drps (nunca tablas operativas calientes). 13 KPIs tabulados. Rol grafana_reader con GRANT SELECT solo en vistas + REVOKE explícito en tablas operativas. 4 alertas de negocio en Grafana. Sección explícita de qué NO incluye el dashboard (stock en tiempo real, datos clínicos, GPS, galletas activas).
 
-**10.3 Validación pre-producción**
+**10.3* Validación pre-producción**
+
 - [x] **U-08** Ejecutar el plan de pentest documentado en `testing_arquitectura.md §3` y registrar resultados en issue tracker
       → `testing_arquitectura.md §6`. Protocolo de ejecución con tabla de resultados por vector (3.1.A–G RLS/RPC, 3.2.A–E JWT/galletas, 3.3.A–D cola offline, 3.4.A–B SW/assets). Comandos curl de referencia por vector. Criterio de cierre: cualquier FAIL → issue `blocker` en tracker, bloquea go-live. Setup: staging + seeds 01–06 + tokens de cada rol. Todas las entradas Pass/Fail vacías listas para rellenar durante la ejecución real.
 
@@ -257,24 +145,44 @@ Los **5 problemas más graves** que veo son:
 
 ---
 
-## Estado del backlog tras Fases 8 + 9 + 10
+A — Contradicciones entre fuentes de verdad (drift documental)
+      A-01 Resolver duplicado ADR-001 — renumerar la clarificación como ADR-007 y actualizar todas las referencias en terminal_check.md, estados.md §16grep -r "ADR-001" docs/ retorna solo el original
+      A-02 Reconciliar nomenclatura de cookies a permanente/temporal en estados.md §2. Eliminar galleta / galleta_pequeña / estandar / sin_sesion como nombres de estado. Documentar mapeo UI-only en una sola tabla.estados.md §2 usa exclusivamente los valores canónicos
+      A-03 Decidir 244 vs 245 ítems y propagar. Auditar 01_catalogo.sql cuando se genere.Un único número en todos los .md
+      A-04 Añadir estado Enviado_Cerrado_Administrativo a estados.md §15 Doc-8. Incluir transición desde Abierto_En_Turno. Máquina cerrada
+      A-05 Unificar enum tipo_movimiento_inventario. La autoridad debe ser er_y_seeds.md §6.2. Reescribir nucleo_logistica_y_almacen.md:27-38 con los 8 valores canónicos + tabla evento→valor.Un solo diccionario
+      A-06 Añadir valor 'dado_de_baja' al enum condicion_tecnica en estados.md §4b + en migración.C-05 deja de violar dominio
+      A-07 Resolver cerrado_por_admin_id vs cerrado_por_coordinador_id. Mantener *admin* (más general). Actualizar referencias en núcleo coordinación.Un solo nombre
+      A-08 Corregir classifyError para que el caso hint=null/httpHint=0 no caiga en network. Default seguro = validation o unknown. Añadir test que verifique.Test unitario Vitest pasa
+      A-09 Decidir si p_filiacion es repositorio dedicado o estructura inline. Si repositorio → añadir tabla en er_y_seeds.md. Si inline → eliminar referencias confusas.Decisión documentada en ADR-008
+      A-10 Decidir alta de due / medico / responsable_flota / responsable_logistica: ¿se incluyen en 04_admin_users.sql o se generan post-bootstrap? Documentar el flujo "First gerencia user provisioning" como runbooks.md RB-06.Runbook publicado
 
-| Bloque | Items | Cerrados | Pendientes |
-|---|---|---|---|
-| **8.1** Fantasmas de schema y huérfanos | B-01 … B-05 | ✅ 5/5 | — |
-| **8.2** Integridad de datos y enums | B-06 … B-09 | ✅ 4/4 | — |
-| **8.3** RGPD compliance | B-10, B-11 | ✅ 2/2 | — |
-| **8.4** Operaciones / Infraestructura mínima | B-12 … B-14 | ✅ 3/3 | — |
-| **9.1** Cascadas y coherencia transaccional | C-01 … C-05 | ✅ 5/5 | — |
-| **9.2** Flujos de resolución pendientes | C-06 … C-08 | ✅ 3/3 | — |
-| **9.3** Recuperación de credenciales y terminales | C-09 … C-11 | ✅ 3/3 | — |
-| **9.4** Hardening de cliente | C-12 … C-15 | ✅ 4/4 | — |
-| **10.1** Estándares de UI | U-01 … U-04 | ✅ 4/4 | — |
-| **10.2** Decisiones aplazadas | U-05 … U-07 | ✅ 3/3 | — |
-| **10.3** Validación pre-producción | U-08 … U-11 | ✅ 4/4 | — |
-| **Total** | **40** | **40 cerrados** | **0 pendientes** |
+B — Fallos lógicos y race conditions
+      B-01 Diseñar manejo de JWT expirado en modo offline. ADR sobre: ¿usar u24_offline_session para firmar mutaciones de cola? ¿Aceptar JWT expirado en cola con tolerancia y revalidar al sync? L3
+      B-02 Multi-terminal password change: ef_renovar_offline_session debe invalidar el hash en todos los terminales del empleado vía Supabase Realtime broadcast → cada cliente borra su u24_offline_session local y exige re-login online. L2
+      B-03 Implementar Doc-11 automático en cancelar_drp a coordinación, gerencia y dotaciones afectadas. SQL en logic.md §48 paso 10. L5
+      B-04 TTL automático de inventario_en_transito > 48h → Doc-11 a logística origen + destino. Edge Cron diario. V1
+      B-05 Auto-revocación de galleta permanente sin uso > 90 días. ef_cron_revoke_stale_terminals. G7
+      B-06 Constraint EXCLUDE (id_nombre WITH =) WHERE (checkin_on = true) o Presence channel para evitar doble checkin. L8 / G5
+      B-07 Max-retries y TTL de descarte en useOfflineQueue. Tras 5 reintentos o > 7 días → forzar a bandeja_conflictos con notificación al usuario. L9
+      B-08 Step-up auth para acciones críticas (revocar_y_reemitir_galleta, ef_baja_empleado, system_config UPDATE). PIN secundario o TOTP. ADR. G8
+      B-09 Rate-limit en consumo de PIN de emergencia: 5 intentos/id_terminal/10min, bloqueo escalado. Edge Function. G9 / V5
+      B-10 Extender polling fallback a bandejas no críticas en degraded_mode (intervalo 60s para no saturar). Actualizar useRealtime. 1.C
+      B-11 Acotar Operativo_Condicionado a máx. 2 encadenamientos antes de exigir reconciliación física. Si se alcanza el límite → bloqueo de asignación + alerta a gerencia. L6
+      B-12 Reducir cota de drift de reloj a ±5 min pasado y futuro. Forzar resync NTP en cliente con Date - performance.now() corregido por offset servidor (devolver header X-Server-Time en cada respuesta). L10
+      B-13 Soft-delete: añadir columna archivado boolean en catalogo_items + RLS UPDATE solo can_manage_catalog. G11
+      B-14 Tabla versiones_cliente + header X-Client-Version + Edge Function validate_client_version. Rechazo de RPCs con versión < min permitida. G13
 
-### ✅ Especificación completa — lista para iniciar implementación
+C — Dependencia ciega del Realtime
+      C-01 Capacity planning formal: simular 100 dispositivos concurrentes en staging, medir Realtime + Postgres + Edge Functions. Documentar techo. O5
+      C-02 DR drill trimestral: simulacro de restore desde PITR a un proyecto Supabase nuevo, midiendo RTO real. O3
+      C-03 Política de retención Sentry/Logflare. 30 días para errores, 7 días para replays, scrubbing automático de campos PII clínicos en beforeSend. G10
+      C-04 Diseño accesibilidad daltónica: badges con iconografía adicional al color (ti-check, ti-alert), patrones de relleno. UX4
+      C-05 Atajos de teclado en puestos de coordinación. Documentar en componentes.md. UX5
+      C-06 Auditoría de cobertura auditoria_rbac: test que ejecute cada Edge Function/RPC sensitiva y verifique INSERT correspondiente. V4
+      C-07 Smoke E2E automatizado post-deploy (Playwright en CI tras supabase db push). O2
+      C-08 Política RGPD operativa: SLA 30 días, runbook de verificación de identidad, comunicación post-borrado al solicitante. O7
+      C-09 Mid-shift terminal handover: flujo documentado + RPC rpc_transferir_galleta. G4
+      C-10 Backup de cola offline al cambio de turno: serializar IndexedDB → blob cifrado → enviar al servidor cada N min como insurance contra pérdida física del dispositivo. O6
 
-Todos los ítems del backlog de auditoría están implementados en la documentación.
-El siguiente paso es la **Fase 1 de `hoja_de_ruta.md`**: inicializar Supabase CLI y crear la migración 0001.
+---
