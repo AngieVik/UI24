@@ -1,155 +1,431 @@
-# Hoja de Ruta de Desarrollo Granular — Proyecto U24
+# Hoja de Ruta de Desarrollo — Proyecto U24
 
-# Sprint 1: Infraestructura de Datos Base
+**Versión:** 2.0 (auditada)
+**Fecha:** 2026-05-20
+**Estado del proyecto:** Sprint 1 completado · iniciando Sprint 2
+**Documentos complementarios:** `AUDITORIA.md` (hallazgos y trazabilidad) · `hoja_de_ruta_v1_backup.md` (versión anterior)
 
-Objetivo: Preparar el repositorio local para que el esquema de Supabase sea determinista y profesional.
-Instrucciones paso a paso:
+---
 
-1. Inicialización: Ejecuta supabase init. Asegúrate de que el .gitignore ignora correctamente la carpeta .supabase y los archivos de entorno local.
-2. Estructura de migraciones: Crea la migración supabase/migrations/20260519000001_init_schema.sql.
+## Cómo leer este documento
 
-* **Orden de ejecución (Crítico):**
-  Primero: Crear todos los tipos ENUM (ej. entidad_imputable, tipo_movimiento_inventario).
-  Segundo: Crear las tablas de dominio (Identidad, Vehículos, Inventario, DRP, Clínico).
-  Tercero: Definir los índices parciales (ej. UNIQUE(id_terminal) WHERE revocado_at IS NULL).
+Cada sprint se describe con seis bloques fijos:
 
-**Seeds (Semillas):** Crea los archivos en supabase/seeds/ para 01_catalogo.sql, 02_plantillas.sql, 03_vehiculos.sql y 04_admin_users.sql.
-**Validación:** Ejecuta supabase db reset. Si el comando termina sin errores y la base de datos queda poblada con los 244 ítems del catálogo, el Sprint 1 está completado correctamente.
-**Nota de seguridad:** No olvides configurar la migración de la zona horaria (ALTER DATABASE postgres SET timezone TO 'Europe/Madrid';) al principio de la migración principal para cumplir con el ADR-005.
-**[ ] Validación de Tipos TS:** Ejecuta el generador de tipos de Supabase (supabase gen types typescript --local > src/types/supabase.ts) y verifica que los ENUM definidos en SQL aparecen correctamente como tipos en el archivo generado. Si aparecen, tu base de datos y tu frontend ya hablan el mismo lenguaje.
+- **🎯 Objetivo** — el resultado de negocio/técnico del sprint.
+- **📋 Tareas** — trabajo concreto con checkboxes.
+- **✅ Definition of Done (DoD)** — criterios objetivos para dar el sprint por cerrado.
+- **🔗 Dependencias** — qué debe existir antes.
+- **⚠️ Riesgos** — qué puede salir mal y su mitigación.
+- **🧪 Testing** — qué pruebas demuestran que funciona.
+- **📦 Entregables** — artefactos versionados que quedan en el repo.
 
-## Sprint 1 completado ✓
+> **Cambios frente a la v1:** se añade **Sprint 0** (fundaciones de ingeniería), se cierran 2 deudas del Sprint 1, se amplían los Sprints 2-4 con los gaps ADR↔implementación, se divide el backend (≈14 RPCs / ≈14 Edge Functions / ≈12 triggers reales), se añade el **Sprint 12** (RRHH + Comunicación, hoy huérfanos) y el **Sprint 14** (gate de seguridad/RGPD + producción). El testing pasa a ser transversal.
 
-### Lo que se creó
+---
 
-**Infraestructura Supabase:**
+## Principios transversales (aplican a todos los sprints)
 
-* `.gitignore` — ignora `.supabase/`, `supabase/.temp/`, `.env*`
-* `supabase/config.toml` — generado por `supabase init`
+1. **Migraciones inmutables y deterministas.** Una migración aplicada no se edita; se corrige con una nueva. `supabase db reset` debe ser reproducible siempre.
+2. **Escritura solo vía RPC/Edge Function `SECURITY DEFINER`.** El cliente nunca hace `INSERT/UPDATE/DELETE` directo sobre tablas de dominio. RLS es *deny-by-default*.
+3. **UTC en la base, `Europe/Madrid` en presentación** (ADR-005). Los payloads del cliente viajan en ISO 8601 UTC.
+4. **Idempotencia obligatoria** en toda mutación encolable (ver ADR de idempotencia, Sprint 2).
+5. **Identificadores en inglés, UI en español** (ADR-006).
+6. **WCAG 2.1 AA** como línea base de toda la UI (ADR-003).
+7. **Sin Base64 para imágenes; Blobs → Storage** (ADR-002).
+8. **Definition of Done global:** ningún sprint se cierra sin (a) sus tests verdes en CI, (b) tipos TS regenerados y sincronizados, (c) documentación actualizada, (d) revisión de PR aprobada.
 
-**Migración** [`supabase/migrations/20260519000001_init_schema.sql`](supabase/migrations/20260519000001_init_schema.sql) — 1010 líneas:
+### Estrategia de testing (transversal)
 
-* `ALTER DATABASE postgres SET timezone TO 'Europe/Madrid'` (ADR-005)
+| Capa | Herramienta | Qué cubre |
+|---|---|---|
+| Base de datos | **pgTAP** | Políticas RLS, RPCs (casos felices + errores + concurrencia con `FOR UPDATE`), triggers, constraints e índices parciales. |
+| Lógica cliente | **Vitest** | Stores Zustand, `useOfflineQueue` (enqueue/dequeue/retry/idempotencia), `resolveRpcError`, derivación PBKDF2. |
+| E2E | **Playwright** | Flujos críticos: login normal/emergencia, check-in vehículo, Doc-8, gasto Doc-6, ciclo offline→online. |
+| Accesibilidad | **axe-core** (en Playwright) | Contraste, roles ARIA, focus trap (ADR-003). |
+| Carga/estrés | Script dedicado | Cola offline con cientos de mutaciones, reconexión masiva. |
 
-  * **Paso 1:** 27 tipos ENUM completos (todos los dominios)
-  * **Paso 2:** 50 tablas (todos los dominios del ER)
-  * **Paso 3:** Índices parciales críticos — `uq_galleta_terminal_activa`, `uq_vehiculo_drp_activo`, `uq_filiacion_evento_idempotente`, `uq_descuadre_pendiente`, `uq_descuadre_mutation_uuid` + índices de rendimiento
-  * **Paso 4:** RLS habilitado en las 50 tablas + 24 políticas para tablas append-only e inmutables
+### Mapa de dependencias (resumen)
 
-**Seeds:**
+```
+S0 (CI/CD) ──► S1 cierre ──► S2 (RLS+gaps) ──► S3 (RPC/triggers I) ──► S4 (EF/cron II)
+                                   │                                        │
+                                   └────────────► S5 (scaffolding) ◄────────┘
+S5 ──► S6 (offline) ──► S7 (UI base) ──► S8 (acceso) ──► S9 (flota+Storage)
+                                                              │
+                              S10 (operativa) ── S11 (DRP) ── S12 (RRHH/comms)
+                                                              │
+                                            S13 (PWA/Push/Obs) ──► S14 (gate prod)
+```
 
-* [`01_catalogo.sql`](supabase/seeds/01_catalogo.sql) — 244 ítems, IDs 1–244 exactos
-* [`02_plantillas.sql`](supabase/seeds/02_plantillas.sql) — 6 plantillas + todas las líneas (A1A2, B, C, VIR, Quad, Backpack)
-* [`03_vehiculos.sql`](supabase/seeds/03_vehiculos.sql) — 5 vehículos demo + locations
-* [`04_admin_users.sql`](supabase/seeds/04_admin_users.sql) — 6 usuarios demo (contraseña via `$SEED_ADMIN_PASSWORD`) + 9 claves `system_config` + 8 mochilas BKP
+---
 
-**Correcciones aplicadas durante la implementación:**
+# Sprint 0 — Fundaciones de Ingeniería *(NUEVO)*
 
-* `estado_parte` eliminó `'Enviado_Cerrado_Administrativo'` (decisión Fase 2 — solo `cerrado_por_admin_id`)
-* `locations.location_id` cambiado a `TEXT` (soporta UUIDs + matrículas, necesario para `rpc_alta_vehiculo`)
+> Puede ejecutarse en paralelo al cierre del Sprint 1. Reduce riesgo en todos los sprints siguientes.
 
-**Nota sobre validación:** `supabase db reset` requiere **Docker Desktop** que no está instalado. Para completar la validación final y generar los tipos TypeScript:
+**🎯 Objetivo:** que cada cambio se valide automáticamente y que los entornos y secretos estén gobernados antes de escribir más backend.
 
-1. Instala [Docker Desktop](https://docs.docker.com/desktop/install/windows-install/)
-2. Ejecuta: `npx supabase db reset`
-3. Luego: `npx supabase gen types typescript --local > src/types/supabase.ts`
+**📋 Tareas**
 
-**🎉 Sprint 1 completado al 100%**
-Todo lo que se ejecutó correctamente:
-  ✅ Migración aplicada (20260519000001_init_schema.sql)
-  ✅ 4 archivos de seeds cargados (244 ítems catálogo + plantillas + vehículos + usuarios)
-  ✅ src/types/supabase.ts generado
+- [ ] **0.1 CI de base de datos:** workflow de GitHub Actions que levanta Supabase, ejecuta `supabase db reset`, valida que migración + seeds aplican y que `supabase gen types` no produce *diff* (tipos sincronizados).
+- [ ] **0.2 CI de calidad:** lint (ESLint), formato (Prettier), `tsc --noEmit`. Falla el PR si no pasan.
+- [ ] **0.3 Gestión de secretos y entornos:** `.env.example`, separación local/staging/producción, verificación de que `.env*` y claves nunca se commitean. Documentar en runbook.
+- [ ] **0.4 Convención de migraciones y ramas:** nomenclatura `YYYYMMDDHHMMSS_descripcion.sql`, política de PR, plantilla de PR con checklist de DoD. Unificar la convención `ef-…` / `ef_…` (ver Anexo A).
+- [ ] **0.5 `.gitattributes`:** `*.ts text eol=lf`, `*.sql text eol=lf` para evitar problemas de codificación/EOL.
+- [ ] **0.6 Hooks pre-commit** (opcional): `lint-staged` para formatear y validar antes de commitear.
 
-## SPRINT 2: Seguridad de Datos (Supabase RLS)
+**✅ DoD:** un PR de prueba dispara CI; si la migración falla o los tipos están desincronizados, el PR se bloquea automáticamente.
 
-*Objetivo: Blindar el acceso a los datos.*
+**🔗 Dependencias:** ninguna.
 
-* [ ] **2.1 RLS de Tablas Core:** Migración para aplicar las políticas de Row Level Security a Identidad y Vehículos.
-* [ ] **2.2 RLS de Tablas Clínicas:** Políticas RLS para Doc-X asegurando el `auth_uid_redactor`.
-* [ ] **2.3 RLS Inmutables:** Políticas `USING (FALSE)` para tablas de auditoría (`auditoria_rbac`, `auditoria_inventario`, `doc1_asistencias`).
-* [ ] **2.4 Restricciones Clave:** Añadir las constraints de unicidad (ej. `mutation_uuid` para idempotencia).
+**⚠️ Riesgos:** *Docker en CI lento* → cachear imagen de Supabase. *Falsos negativos en diff de tipos* → fijar versión del CLI.
 
-## SPRINT 3: Lógica de Servidor (RPCs y Triggers)
+**🧪 Testing:** el propio pipeline es la prueba (smoke test de infraestructura).
 
-*Objetivo: Implementar las reglas de negocio atómicas en el backend.*
+**📦 Entregables:** `.github/workflows/ci.yml`, `.gitattributes`, `.env.example`, runbook de secretos, plantilla de PR.
 
-* [ ] **3.1 RPCs de Autenticación/Galletas:** `rpc_revocar_y_reemitir_galleta`, `rpc_generar_token_emergencia`.
-* [ ] **3.2 RPCs de Vehículos y Flota:** `rpc_alta_vehiculo`, baja de vehículo (con *guard* de DRP activo).
-* [ ] **3.3 RPCs de DRP:** `cancelar_drp` (con transacción completa y *FOR UPDATE*).
-* [ ] **3.4 Triggers y Validaciones:** Trigger del odómetro (validación de `km_inicio`) y trigger de `checklist360 -> doc7`.
+---
 
-## SPRINT 4: Funciones Edge y Tareas Programadas
+# Sprint 1 — Infraestructura de Datos Base ✅ COMPLETADO
 
-*Objetivo: Procesos asíncronos y de mantenimiento.*
+**🎯 Objetivo:** esquema de Supabase determinista y profesional. **Verificado:** 27 ENUMs, 50 tablas, índices parciales, RLS en todas, semillas cargadas, tipos generados.
 
-* [ ] **4.1 Gestión de Empleados (Auth):** `ef_alta_empleado` y `ef_baja_empleado` (gestión de `auth.users`).
-* [ ] **4.2 Cron: Limpieza:** `ef-cron-cleanup-orphans` y expiración de sesiones temporales.
-* [ ] **4.3 Cron: RGPD y Métricas:** `ef-cron-rgpd` y `ef-cron-refresh-dashboard`.
-* [ ] **4.4 Generación de Tipos:** `supabase start` y volcado de `supabase.ts` para el frontend.
+**📋 Cierre de deuda (hacer antes del Sprint 2)**
 
-## SPRINT 5: Scaffolding y Arquitectura Frontend
+- [ ] **1.D1** Regenerar `src/types/supabase.ts` en **UTF-8** (hoy está en UTF-16LE por el `>` de PowerShell). Validar con `file` y commitear. *(Hallazgo S1-01)*
+- [ ] **1.D2** Eliminar las claves/secretos del documento `sprint_1_complete` (son defaults locales, pero no deben vivir en el repo). *(Hallazgo S2-01)*
 
-*Objetivo: Estructura del proyecto Vite y estilos base.*
+**✅ DoD:** `supabase db reset` reproducible · catálogo poblado (244 ítems) · tipos en UTF-8 sincronizados · sin secretos en el repo.
 
-* [ ] **5.1 Setup Base:** Inicialización Vite + React + TS.
-* [ ] **5.2 Estructura de Carpetas:** Crear árbol de carpetas (`components`, `hooks`, `lib`, `modules`, `stores`, `types`).
-* [ ] **5.3 Tailwind y Diseño:** Configurar paleta WCAG AA en `tailwind.config.js` y clases tipográficas.
-* [ ] **5.4 Cliente Supabase:** Configurar `src/lib/supabase.ts` (Singleton).
+**📦 Entregables:** `20260519000001_init_schema.sql`, `seeds/01..04`, `supabase.ts` (UTF-8), `config.toml`.
 
-## SPRINT 6: El Motor Offline (Zustand + IndexedDB)
+---
 
-*Objetivo: La capa de persistencia local.*
+# Sprint 2 — Seguridad de Datos (RLS) + Migración Correctiva *(AMPLIADO)*
 
-* [ ] **6.1 Setup IndexedDB:** Instalación de `idb-keyval` y middleware de Zustand.
-* [ ] **6.2 Cacheo de Tablas Lentas:** `useInventarioStore` y `useBandejasStore`.
-* [ ] **6.3 Auth Local (`useAuthStore`):** Gestión de sesión, JWT activo y *Silent Refresh*.
-* [ ] **6.4 La Cola (`useOfflineQueue`):** Implementar la lógica de *enqueue*, *dequeue* y *re-try* en base al patrón de idempotencia.
+**🎯 Objetivo:** blindar el acceso a los datos **y cerrar los gaps ADR↔implementación de severidad alta** antes de construir la lógica de servidor.
 
-## SPRINT 7: Core UI y Componentes Base
+**📋 Tareas**
 
-*Objetivo: Bloques de construcción visuales de la aplicación.*
+*Políticas RLS*
+- [ ] **2.1 RLS de tablas core:** políticas de lectura/escritura para `fichas_empleados`, `vehiculos`, `galletas_terminales` (escritura solo vía RPC).
+- [ ] **2.2 RLS de tablas clínicas (Doc-2..Doc-5):** el redactor solo accede a sus informes (`auth_uid_redactor = auth.uid()`); lectura ampliada según rol.
+- [ ] **2.3 RLS inmutables:** confirmar `USING (FALSE)` en `auditoria_rbac`, `auditoria_inventario`, `doc1_asistencias`, `filiacion_eventos` (ya en migración inicial; verificar cobertura).
+- [ ] **2.4 Políticas `SELECT` para Supabase Realtime** *(dependencia del Sprint 10.2)*: `authenticated` debe poder `SELECT` en `psa_pacientes`, `filiacion_pacientes`, `doc11_avisos`, `tablon_anuncios`, `mensajes_bandeja` (salas de espera y bandejas en tiempo real). *(Hallazgo P-06)*
 
-* [ ] **7.1 Componentes de Error:** Toasts, `ModalError` y la función `resolveRpcError()`.
-* [ ] **7.2 Loading States:** Componente `<LoadingSkeleton />`.
-* [ ] **7.3 Layout Principal:** App Shell con `<BlackColumn />`.
-* [ ] **7.4 Sistema de Alertas Globales:** `<Marquesina />` y `<BannerOffline />`.
+*Migración correctiva de gaps*
+- [ ] **2.5 Step-up auth (ADR-010):** migración que añade `pin_stepup_hash TEXT NULL` y `pin_stepup_salt TEXT NULL` a `fichas_empleados`, y los valores `step_up_exitoso` / `step_up_fallido` al ENUM `tipo_evento_rbac` (vía `ALTER TYPE ... ADD VALUE`). *(Hallazgo G-01)*
+- [ ] **2.6 Idempotencia (decisión + constraint):** redactar **ADR-012** eligiendo entre (a) `mutation_uuid UUID UNIQUE` en cada tabla encolable (Doc-2..Doc-8, Doc-6) o (b) tabla central `idempotency_keys(mutation_uuid PK, rpc, id_nombre, created_at, resultado)`. Implementar la migración correspondiente. *(Hallazgo G-02 — crítico para la cola del Sprint 6)*
+- [ ] **2.7 Endurecimiento de `config.toml` (Auth):** `enable_signup = false`; definir `[auth.sessions]` coherente con el refresh de 7 días (ADR-009); `minimum_password_length ≥ 8` + `password_requirements`. *(Hallazgos C-01, C-02, C-03)*
 
-## SPRINT 8: Módulo de Acceso (Terminal)
+**✅ DoD:** suite pgTAP de RLS verde · ningún rol puede leer/escribir fuera de su política · `mutation_uuid` rechaza duplicados en test · columnas/ENUM de step-up presentes en tipos TS · `config.toml` endurecido revisado.
 
-*Objetivo: Pantalla de Login y asignación inicial.*
+**🔗 Dependencias:** Sprint 1 cerrado (deuda incluida), Sprint 0 (CI valida la migración).
 
-* [ ] **8.1 Interfaz de Login:** Flujo normal (PIN/Contraseña) y flujo de emergencia.
-* [ ] **8.2 Validación de Galleta:** Comprobación del fingerprint del terminal contra la BD.
-* [ ] **8.3 Estado de Espera:** Pantalla `estado_1` (esperando asignación de vehículo/rol).
+**⚠️ Riesgos:** *RLS demasiado restrictivo rompe Realtime* (mitigación: 2.4 explícito y test E2E de suscripción). *Elegir mal el patrón de idempotencia* (mitigación: ADR razonado antes de codificar). *Alterar un ENUM en uso requiere `ADD VALUE`* (no recrear el tipo; `ADD VALUE` no es transaccional en versiones antiguas, validar en CI).
 
-## SPRINT 9: Módulo de Flota (Doc-8)
+**🧪 Testing:** pgTAP por tabla y rol (acceso permitido/denegado); test de inserción duplicada con mismo `mutation_uuid`; test de suscripción Realtime con usuario `authenticated`.
 
-*Objetivo: Puesta en marcha del vehículo.*
+**📦 Entregables:** migración(es) `2026..._rls_policies.sql`, `2026..._stepup_idempotency.sql`, ADR-012 de idempotencia, `config.toml` actualizado, tests pgTAP.
 
-* [ ] **9.1 Check-in de Vehículo:** Selección de matrícula y validación del estado operativo.
-* [ ] **9.2 Checklist Inicial:** Formulario de `km_inicio` y firma de apertura del Doc-8.
-* [ ] **9.3 Reporte de Averías:** Formulario Doc-7 con gestión de imágenes offline (Blob).
+---
 
-## SPRINT 10: Módulos Operativos (Clínico y Logística)
+# Sprint 3 — Lógica de Servidor I: RPCs core + Triggers *(AMPLIADO)*
 
-*Objetivo: Vistas de la operativa diaria.*
+**🎯 Objetivo:** implementar las reglas de negocio atómicas y los disparadores de integridad en el backend.
 
-* [ ] **10.1 Gestión de Inventario:** Gasto de material (Doc-6) con UI optimista.
-* [ ] **10.2 Listas de Pacientes (Filiación/PSA):** Integración con Supabase Realtime para actualizar la sala de espera.
-* [ ] **10.3 Informes Clínicos:** Formularios Doc-2/Doc-3 integrados con la cola offline.
+**📋 Tareas**
 
-## SPRINT 11: Módulo DRP y Coordinación
+- [ ] **3.1 RPCs de autenticación/galletas:** `rpc_revocar_y_reemitir_galleta` (con step-up), `rpc_transferir_galleta`, `rpc_solicitar_desbloqueo`, `rpc_aprobar_desbloqueo`, `rpc_rechazar_desbloqueo`.
+- [ ] **3.2 RPCs de vehículos y flota:** `rpc_alta_vehiculo` (inserta `locations` con `location_id = matrícula`), `rpc_baja_vehiculo` (*guard*: rechazar si tiene DRP activo).
+- [ ] **3.3 RPCs de inventario:** `rpc_ajuste_manual_stock`, base de gasto/deducción con idempotencia (usa el patrón del Sprint 2.6).
+- [ ] **3.4 Tabla + trigger Checklist360:** crear `doc_checklist360` (ausente hoy) y `trg_checklist_genera_doc7` + `trg_doc7_cierre_evaluar_condicion` (recalcula `condicion_tecnica`). *(Hallazgo G-03)*
+- [ ] **3.5 Triggers de integridad:** `trg_validar_km_inicio` (odómetro: `km_fin >= km_inicio`), `trg_audit_cambio_rol`, `trg_audit_galleta_emitida/revocada`, `trg_purgar_plantillas_al_archivar`.
 
-*Objetivo: El panel de control de emergencias masivas.*
+**✅ DoD:** cada RPC tiene test pgTAP de caso feliz + cada error documentado en `error_handling.md` · `rpc_baja_vehiculo` bloquea con DRP activo · trigger de odómetro rechaza retroceso de km · Checklist360 genera Doc-7 automáticamente.
 
-* [ ] **11.1 Creación/Gestión DRP:** Panel de coordinación para crear, asignar recursos y cancelar.
-* [ ] **11.2 Visor GPS:** `visor_seguimiento_operativo` con la lógica de *pings*.
+**🔗 Dependencias:** Sprint 2 (RLS, step-up, idempotencia).
 
-## SPRINT 12: PWA, Ops y Salida a Producción
+**⚠️ Riesgos:** *Condiciones de carrera en inventario/DRP* (mitigación: `SELECT ... FOR UPDATE` + tests de concurrencia). *RPC sin `SECURITY DEFINER` o sin `search_path` fijado* (riesgo de escalada — revisar cada función).
 
-*Objetivo: Convertir la app web en una PWA offline.*
+**🧪 Testing:** pgTAP de RPCs (incluye intentos no autorizados y step-up fallido); test de trigger Checklist360→Doc-7; test de concurrencia en baja de vehículo.
 
-* [ ] **12.1 Service Worker:** Configuración de `vite-plugin-pwa` (Cache First para el App Shell).
-* [ ] **12.2 Configuración Push API:** Suscripción a notificaciones críticas (Alertas Doc-11).
-* [ ] **12.3 Hardening del Bundle:** Split de *chunks* (<800KB) e instalación de Sentry.
-* [ ] **12.4 Testing Final:** Ejecutar los *Runbooks* y pruebas de estrés de la cola offline.
+**📦 Entregables:** migraciones de RPCs/triggers, `doc_checklist360`, suite pgTAP, tabla de errores RPC actualizada.
+
+---
+
+# Sprint 4 — Lógica de Servidor II: Edge Functions + Crons *(AMPLIADO)*
+
+**🎯 Objetivo:** procesos que requieren privilegios de `service_role` o ejecución programada.
+
+**📋 Tareas**
+
+- [ ] **4.1 Gestión de empleados:** `ef-alta-empleado` (crea `auth.users` + `fichas_empleados`), `ef-baja-empleado` (desactiva, revoca JWT y galletas; con step-up), `ef_reset_password` (ADR-004), `rpc_cambiar_rol`.
+- [ ] **4.2 Sesiones y emergencia:** `ef_generar_token_emergencia`, `ef-consumir-pin`, `ef_logout`, `ef_revocar_sesion_usuario`, `ef-renovar-offline-session` (ADR-009).
+- [ ] **4.3 RPCs/EF de DRP:** `cancelar_drp` (transacción completa + `FOR UPDATE`), `rpc_asignar_mochila_a_drp`, triggers `trg_descuadre_libera_drp_retenido` / `trg_descuadre_notificar_bandeja`.
+- [ ] **4.4 Crons de mantenimiento:** `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl` (caducidad de tránsitos), expiración de `sesiones_emergencia`.
+- [ ] **4.5 Crons de RGPD y métricas:** `ef-cron-rgpd` + `rpc_solicitar_borrado_rgpd` / `rpc_procesar_borrado_rgpd` (**anonimización**, no `DELETE`, por los `RESTRICT` — *Hallazgo E-11*), `ef-cron-refresh-dashboard`.
+- [ ] **4.6 Doc-12 → cuadrante:** trigger `trg_doc12_aprobada_a_cuadrante` (inyecta turnos al aprobar vacaciones).
+
+**✅ DoD:** todas las EF desplegables localmente · `ef-baja-empleado` revoca acceso de forma verificable · RGPD anonimiza sin violar FKs · crons programados y probados con disparo manual.
+
+**🔗 Dependencias:** Sprint 3 (RPCs/triggers base), Sprint 2 (step-up).
+
+**⚠️ Riesgos:** *Secretos de service_role mal gestionados* (mitigación: Sprint 0.3). *RGPD que rompe integridad* (mitigación: estrategia de anonimización probada). *Crons que solapan* (idempotencia + locks).
+
+**🧪 Testing:** tests de integración de cada EF (alta→login→baja); test de anonimización RGPD que verifica que las referencias siguen íntegras; disparo manual de cada cron.
+
+**📦 Entregables:** `supabase/functions/*`, migraciones de triggers DRP/Doc-12, definición de crons, tests de integración.
+
+---
+
+# Sprint 5 — Scaffolding y Arquitectura Frontend
+
+**🎯 Objetivo:** estructura del proyecto Vite + React + TS y estilos base, lista para construir módulos.
+
+**📋 Tareas**
+
+- [ ] **5.1 Setup base:** Vite + React + TypeScript (strict).
+- [ ] **5.2 Estructura de carpetas:** `components`, `hooks`, `lib`, `modules`, `stores`, `types`.
+- [ ] **5.3 Tailwind y diseño:** paleta WCAG AA en `tailwind.config.js` + clases tipográficas (importar tokens de `05_interfaz_y_desarrollo/cloude_desing`).
+- [ ] **5.4 Cliente Supabase:** `src/lib/supabase.ts` (singleton) leyendo claves de `.env`.
+- [ ] **5.5 CI frontend:** extender el pipeline (build + lint + `tsc`) — engancha con Sprint 0.
+
+**✅ DoD:** `npm run build` y `npm run dev` funcionan · tipos importados desde `supabase.ts` · CI de frontend verde · ratios de contraste de la paleta documentados (ADR-003).
+
+**🔗 Dependencias:** Sprint 0 (CI), Sprint 4 (tipos definitivos tras todas las migraciones del backend).
+
+**⚠️ Riesgos:** *Deriva entre tipos TS y BD* (mitigación: regeneración en CI). *Presupuesto de bundle* (vigilar desde el inicio: 3 MB total / 800 KB por ruta).
+
+**🧪 Testing:** smoke test de arranque + un test de render del shell vacío.
+
+**📦 Entregables:** proyecto Vite scaffolded, `tailwind.config.js`, `src/lib/supabase.ts`, CI extendido.
+
+---
+
+# Sprint 6 — El Motor Offline (Zustand + IndexedDB)
+
+**🎯 Objetivo:** la capa de persistencia local y la cola de mutaciones offline idempotente.
+
+**📋 Tareas**
+
+- [ ] **6.1 Setup IndexedDB:** `idb-keyval` + adaptador del middleware `persist` de Zustand (ADR-001).
+- [ ] **6.2 Stores con caché offline:** `useInventarioStore` (solo lectura, sin persist de escritura — ADR-001 §4), `useBandejasStore`/`useGlobalStore` (caché IndexedDB como *fallback* de Realtime).
+- [ ] **6.3 Auth local (`useAuthStore` en sessionStorage; `useTerminalStore` en IndexedDB):** sesión, JWT activo, *silent refresh* (ADR-009), `tipoGalleta`/`id_terminal` en `useTerminalStore` (enmienda de ADR-001).
+- [ ] **6.4 La cola (`useOfflineQueue`):** enqueue/dequeue/retry con `mutation_uuid` por mutación (patrón del Sprint 2.6); `refreshSession()` antes del primer batch al reconectar (ADR-009); las mutaciones **no** guardan el JWT, solo `ejecutorId`.
+
+**✅ DoD:** una mutación encolada offline se sincroniza al reconectar sin duplicar (idempotencia verificada) · JWT expirado se refresca; si el refresh falla, la cola persiste y muestra modal · `useAuthStore` no sobrevive al cierre de pestaña.
+
+**🔗 Dependencias:** Sprint 2.6 (idempotencia en BD), Sprint 3/4 (RPCs/EF que la cola invoca), Sprint 5 (scaffolding).
+
+**⚠️ Riesgos:** *`QuotaExceededError`* (mitigación: ADR-002, Blobs no Base64). *Pérdida de mutaciones* (mitigación: persistencia en IndexedDB hasta confirmación del servidor). *Jank del Main Thread* (mitigación: IndexedDB async, no localStorage).
+
+**🧪 Testing:** Vitest de enqueue/dequeue/retry e idempotencia; test de expiración de JWT; test de doble sync (no duplica).
+
+**📦 Entregables:** stores Zustand, `useOfflineQueue`, capa `idb-keyval`, tests de cola.
+
+---
+
+# Sprint 7 — Core UI y Componentes Base
+
+**🎯 Objetivo:** bloques de construcción visuales reutilizables y manejo de errores/estados.
+
+**📋 Tareas**
+
+- [ ] **7.1 Manejo de errores:** Toasts, `<ModalError />`, función `resolveRpcError()` (mapa código→string español, ADR-006).
+- [ ] **7.2 Loading states:** `<LoadingSkeleton />` y patrones de carga optimista.
+- [ ] **7.3 Layout principal:** App Shell con `<BlackColumn />`.
+- [ ] **7.4 Alertas globales:** `<Marquesina />`, `<BannerOffline />` (estado de conexión + nº de operaciones en cola).
+- [ ] **7.5 Accesibilidad base (ADR-003):** focus trap en modales, `aria-label` en iconos, `role="list"`/`listitem` en listas.
+
+**✅ DoD:** componentes en un catálogo navegable · `resolveRpcError` cubre todos los códigos de la tabla de errores · axe-core sin violaciones críticas en los componentes base.
+
+**🔗 Dependencias:** Sprints 5 y 6.
+
+**⚠️ Riesgos:** *Inconsistencia visual* (mitigación: design system de `cloude_desing`). *Accesibilidad como añadido tardío* (mitigación: 7.5 desde el inicio).
+
+**🧪 Testing:** Vitest de `resolveRpcError`; tests de render + axe-core de cada componente.
+
+**📦 Entregables:** librería de componentes base, `resolveRpcError`, App Shell.
+
+---
+
+# Sprint 8 — Módulo de Acceso (Terminal)
+
+**🎯 Objetivo:** pantalla de login (normal y emergencia) y asignación inicial.
+
+**📋 Tareas**
+
+- [ ] **8.1 Interfaz de login:** flujo normal (PIN/contraseña, verificación PBKDF2 local offline) y flujo de emergencia. Mensaje de recuperación vía RRHH (ADR-004), sin botón self-service.
+- [ ] **8.2 Validación de galleta:** *fingerprint* del terminal (SHA-256 canvas+userAgent+screen+timezone) contra `galletas_terminales`; botón "Invitado Operativo" condicionado a `tipoGalleta === 'permanente'`.
+- [ ] **8.3 Estado de espera (`estado_1`):** pantalla de espera de asignación de vehículo/rol.
+- [ ] **8.4 Step-up auth UI (ADR-010):** modal de PIN de confirmación para acciones críticas (consume columnas del Sprint 2.5).
+
+**✅ DoD:** login normal y de emergencia funcionan online y offline · galleta válida desbloquea el flujo · 3 intentos fallidos activan rate-limit (`pin_intentos_fallidos`) · step-up bloquea/permite según PIN.
+
+**🔗 Dependencias:** Sprints 4 (EF de auth), 6 (auth local), 7 (UI base).
+
+**⚠️ Riesgos:** *Fingerprint inestable entre navegadores* (mitigación: tolerancia + reemisión de galleta). *Login offline mal protegido* (mitigación: PBKDF2, no almacenar contraseña en claro).
+
+**🧪 Testing:** Playwright de login normal/emergencia/offline; test de rate-limit; test de step-up.
+
+**📦 Entregables:** módulo de acceso completo, pantalla `estado_1`, modal step-up.
+
+---
+
+# Sprint 9 — Módulo de Flota (Doc-8) + Storage de Imágenes
+
+**🎯 Objetivo:** puesta en marcha del vehículo y primer flujo con imágenes (que obliga a configurar Storage).
+
+**📋 Tareas**
+
+- [ ] **9.1 Check-in de vehículo:** selección de matrícula + validación de `estado_operativo`/`condicion_tecnica`.
+- [ ] **9.2 Checklist inicial + apertura Doc-8:** formulario de `km_inicio` y firma de apertura.
+- [ ] **9.3 Reporte de averías (Doc-7):** imágenes comprimidas en cliente (Canvas API → WebP ≤1200px, calidad 0.70) como **Blob** y subidas a Storage (ADR-002), nunca Base64.
+- [ ] **9.4 Configuración de Supabase Storage** *(Hallazgo G-05)*: crear bucket(s) (p. ej. `averias`, `firmas`), `config.toml` (`[storage.buckets...]`) y políticas RLS de Storage (lectura/escritura por rol). Definir el patrón reutilizable de subida desde la cola offline.
+
+**✅ DoD:** check-in valida estado del vehículo · Doc-8 se abre con `km_inicio` · imagen de Doc-7 se comprime, se encola offline y se sube como Blob al reconectar · bucket con políticas RLS probadas.
+
+**🔗 Dependencias:** Sprints 6 (cola offline para Blobs), 8 (sesión activa).
+
+**⚠️ Riesgos:** *Cuota de IndexedDB con Blobs grandes* (mitigación: compresión obligatoria). *Storage sin RLS = fuga de imágenes clínicas* (mitigación: 9.4 con políticas y tests).
+
+**🧪 Testing:** Playwright de check-in + Doc-8; test de subida de imagen offline→online; pgTAP/integración de políticas de Storage.
+
+**📦 Entregables:** módulos de flota y Doc-7, configuración de Storage + políticas, pipeline de compresión de imágenes.
+
+---
+
+# Sprint 10 — Módulos Operativos (Clínico y Logística)
+
+**🎯 Objetivo:** la operativa diaria: inventario, listas de pacientes en tiempo real e informes clínicos.
+
+**📋 Tareas**
+
+- [ ] **10.1 Gestión de inventario:** gasto de material (Doc-6) con UI optimista respaldada por la cola idempotente.
+- [ ] **10.2 Listas de pacientes (Filiación/PSA):** sala de espera con **Supabase Realtime** (consume las políticas `SELECT` del Sprint 2.4).
+- [ ] **10.3 Informes clínicos:** Doc-2/Doc-3 (y Doc-4/Doc-5) integrados con la cola offline; el redactor solo ve los suyos (RLS del Sprint 2.2).
+
+**✅ DoD:** gasto Doc-6 refleja stock optimista y reconcilia con servidor · la sala de espera se actualiza en vivo entre dos clientes · un informe clínico creado offline se sincroniza sin duplicar.
+
+**🔗 Dependencias:** Sprints 2.2/2.4 (RLS clínica + Realtime), 6 (cola), 9 (sesión de vehículo).
+
+**⚠️ Riesgos:** *Race conditions de inventario* (mitigación: RPC con `FOR UPDATE`, no confiar solo en optimista). *Realtime sin política SELECT = lista vacía* (cubierto en 2.4).
+
+**🧪 Testing:** Vitest de UI optimista; Playwright multi-cliente de Realtime; test de informe offline→online.
+
+**📦 Entregables:** módulos de inventario, salas de espera y informes clínicos.
+
+---
+
+# Sprint 11 — Módulo DRP y Coordinación
+
+**🎯 Objetivo:** el panel de control de emergencias masivas y el seguimiento operativo.
+
+**📋 Tareas**
+
+- [ ] **11.1 Creación/gestión DRP:** panel de coordinación para crear, asignar recursos (dotaciones, personal a pie, mochilas BKP) y cancelar (`cancelar_drp`, solo online — ADR-003).
+- [ ] **11.2 Visor GPS:** `visor_seguimiento_operativo` con lógica de *pings* (`lat`/`lng`/`gps_timestamp`).
+- [ ] **11.3 Estados retenidos:** UI de `Finalizado_Retenido` y resolución de descuadres que liberan el DRP (`trg_descuadre_libera_drp_retenido`).
+
+**✅ DoD:** crear/transicionar/cancelar DRP funciona con confirmación de servidor · un vehículo no puede estar en dos DRP a la vez (`uq_vehiculo_drp_activo`) · el visor pinta posiciones actualizadas.
+
+**🔗 Dependencias:** Sprints 4 (RPCs DRP), 10 (operativa base).
+
+**⚠️ Riesgos:** *Operación DRP intentada offline* (mitigación: ADR-003 — toast "requiere red", no encolar). *Carga de pings GPS* (mitigación: throttle + IndexedDB para visor).
+
+**🧪 Testing:** Playwright del ciclo DRP completo; pgTAP de invariante de vehículo único por DRP.
+
+**📦 Entregables:** panel DRP, visor GPS, gestión de estados retenidos.
+
+---
+
+# Sprint 12 — RRHH, Cuadrantes y Comunicación *(NUEVO — módulos antes huérfanos)*
+
+**🎯 Objetivo:** cubrir en frontend los dominios que ya existen en el esquema pero no estaban en el roadmap v1. *(Hallazgo P-04)*
+
+**📋 Tareas**
+
+- [ ] **12.1 Cuadrantes y turnos:** vistas de `cuadrante_turnos`/`patrones`/`grupos`; inyección de patrones; excepciones absolutas.
+- [ ] **12.2 Vacaciones (Doc-12):** flujo `doc_solicitudes_vacaciones` (Borrador→Pendiente→Aprobada/Denegada) con resolución de RRHH (alimenta `trg_doc12_aprobada_a_cuadrante`).
+- [ ] **12.3 Tablón de anuncios:** `tablon_anuncios` por secciones (normativas/protocolos/avisos), lectura en vivo.
+- [ ] **12.4 Bandeja de mensajes:** `mensajes_bandeja` (no_leido/leido) con caché offline.
+- [ ] **12.5 Avisos (Doc-11):** lista de `doc11_avisos` por nivel (informativo/aviso/crítico) + `rpc_marcar_aviso_leido`.
+- [ ] **12.6 System config / kill-switches y force-update:** UI de `system_config` (solo gerencia, con step-up) y comprobación de `versiones_cliente` (versión mínima).
+
+**✅ DoD:** RRHH aprueba vacaciones y se reflejan en el cuadrante · tablón y bandeja se actualizan en vivo · cambiar una clave de `system_config` exige step-up · una versión de cliente por debajo de la mínima fuerza actualización.
+
+**🔗 Dependencias:** Sprints 4 (triggers RRHH), 7 (UI base), 2.4 (Realtime).
+
+**⚠️ Riesgos:** *Permisos cruzados (quién ve/edita qué)* (mitigación: RBAC + RLS por rol). *Force-update mal calibrado bloquea terminales* (mitigación: ventana de gracia).
+
+**🧪 Testing:** Playwright de flujo de vacaciones→cuadrante; test de step-up en `system_config`; test de force-update.
+
+**📦 Entregables:** módulos de cuadrantes, vacaciones, tablón, bandeja, avisos y configuración.
+
+---
+
+# Sprint 13 — PWA, Push y Observabilidad *(antes Sprint 12)*
+
+**🎯 Objetivo:** convertir la web en PWA instalable con notificaciones críticas y observabilidad.
+
+**📋 Tareas**
+
+- [ ] **13.1 Service Worker:** `vite-plugin-pwa` (Cache First para el App Shell, Network First para datos).
+- [ ] **13.2 Install prompt condicional (ADR-003):** capturar `beforeinstallprompt`, mostrar chip no intrusivo según condiciones; persistir descarte en IndexedDB.
+- [ ] **13.3 Push API:** tabla `push_subscriptions` *(Hallazgo G-04)*, claves VAPID, suscripción y envío de avisos críticos (Doc-11).
+- [ ] **13.4 Observabilidad:** Sentry (errores + trazas), conectar con la Fase C de observabilidad ya especificada.
+- [ ] **13.5 Hardening del bundle:** split de chunks (<800 KB por ruta, <3 MB total), análisis de tamaño.
+
+**✅ DoD:** la app se instala como PWA y arranca offline · un aviso crítico llega como push · errores reportados a Sentry con contexto · bundle dentro de presupuesto.
+
+**🔗 Dependencias:** todos los módulos (12 incluido), tabla `push_subscriptions` migrada.
+
+**⚠️ Riesgos:** *SW cacheando datos sensibles* (mitigación: estrategia por tipo de recurso). *Push sin tabla = no hay dónde suscribir* (cubierto en 13.3).
+
+**🧪 Testing:** Playwright de instalación PWA y arranque offline; test de recepción de push; medición de bundle en CI.
+
+**📦 Entregables:** PWA funcional, migración `push_subscriptions`, integración Sentry, presupuesto de bundle verificado.
+
+---
+
+# Sprint 14 — Gate de Seguridad/RGPD, UAT y Salida a Producción *(NUEVO)*
+
+**🎯 Objetivo:** validación final de seguridad, cumplimiento y aceptación antes de producción. *(Hallazgo P-05)*
+
+**📋 Tareas**
+
+- [ ] **14.1 Revisión de seguridad:** auditoría completa de políticas RLS, `SECURITY DEFINER` + `search_path` en todas las RPCs, revisión de step-up, rate-limits.
+- [ ] **14.2 Checklist RGPD:** verificar anonimización (no `DELETE`), minimización de PII en JSONB clínico, flujo de borrado probado de extremo a extremo.
+- [ ] **14.3 Endurecimiento de producción:** `config.toml` de prod (CIDRs restringidos, `ssl_enforcement`, refresh 7d, signup off), procedimiento de timezone en hosted (ADR-005 / *Hallazgo C-05*).
+- [ ] **14.4 Auditoría de accesibilidad (ADR-003):** pasada axe-core global + revisión manual de contraste y focus.
+- [ ] **14.5 UAT y runbooks:** ejecutar los *Runbooks* (RB-01..RB-06), pruebas de estrés de la cola offline y reconexión masiva.
+- [ ] **14.6 Despliegue:** *promote* a producción, monitorización post-lanzamiento, plan de rollback.
+
+**✅ DoD:** sin hallazgos críticos de seguridad/RGPD/accesibilidad abiertos · runbooks ejecutados con éxito · prueba de estrés de cola superada · despliegue con rollback documentado.
+
+**🔗 Dependencias:** Sprints 1-13.
+
+**⚠️ Riesgos:** *Descubrir gaps tarde* (mitigado por esta hoja de ruta). *Migración de timezone en hosted* (procedimiento documentado en 14.3).
+
+**🧪 Testing:** suite completa (pgTAP + Vitest + Playwright + axe) verde en CI; pruebas de carga; ensayo de rollback.
+
+**📦 Entregables:** informe de seguridad/RGPD, `config.toml` de producción, checklist de accesibilidad, runbooks ejecutados, despliegue.
+
+---
+
+## Anexo A — Inventario de backend documentado (para dimensionar Sprints 3-4)
+
+**RPCs (~14):** `rpc_alta_vehiculo`, `rpc_baja_vehiculo`, `rpc_revocar_y_reemitir_galleta`, `rpc_transferir_galleta`, `rpc_solicitar_desbloqueo`, `rpc_aprobar_desbloqueo`, `rpc_rechazar_desbloqueo`, `rpc_ajuste_manual_stock`, `rpc_asignar_mochila_a_drp`, `rpc_cambiar_rol`, `rpc_marcar_aviso_leido`, `rpc_solicitar_borrado_rgpd`, `rpc_procesar_borrado_rgpd`, `cancelar_drp`.
+
+**Edge Functions (~14):** `ef-alta-empleado`, `ef-baja-empleado`, `ef_reset_password`, `ef-consumir-pin`, `ef_generar_token_emergencia`, `ef_logout`, `ef_revocar_sesion_usuario`, `ef-renovar-offline-session`, `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl`, `ef-cron-rgpd`, `ef-cron-refresh-dashboard`, `ef_cron_purge`.
+
+> ⚠️ Aparecen dos convenciones de nombres en la documentación (`ef-…` con guion y `ef_…` con guion bajo). **Acción (Sprint 0.4):** unificar a una sola convención y registrarla en la guía de nomenclatura.
+
+**Triggers (~12):** `trg_validar_km_inicio`, `trg_checklist_genera_doc7`, `trg_doc7_cierre_evaluar_condicion`, `trg_audit_cambio_rol`, `trg_audit_galleta_emitida`, `trg_audit_galleta_revocada`, `trg_descuadre_libera_drp_retenido`, `trg_descuadre_notificar_bandeja`, `trg_doc12_aprobada_a_cuadrante`, `trg_purgar_plantillas_al_archivar`, `trg_fichas_rol`, `trg_galleta_insert`.
+
+## Anexo B — ADRs pendientes de redactar
+
+- **ADR-011** — Convención de claves foráneas `id_nombre` (TEXT) vs `id_persona` (UUID). *(Hallazgo E-10)*
+- **ADR-012** — Patrón de idempotencia de la cola offline (`mutation_uuid` por tabla vs *ledger* central). *(Hallazgo G-02)*
+- **ADR-007 / ADR-008** — Reservados (ver `revisiones.md`).
