@@ -2,10 +2,9 @@
 .supabase/
 supabase/.temp/
 
-# Environment secrets
-.env
-.env.local
-.env.*.local
+# Environment secrets — ignorar todos los .env salvo el ejemplo
+.env*
+!.env.example
 
 # Node
 node_modules/

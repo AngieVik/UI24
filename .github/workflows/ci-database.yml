@@ -1,0 +1,72 @@
+name: CI — Base de datos
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-database-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    name: Reset + tipos sincronizados
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          # Usar latest durante el desarrollo. En producción, fijar a una versión
+          # concreta (p.ej. "1.200.3") para evitar falsos negativos en el diff de
+          # tipos cuando el CLI cambia el formato de salida (riesgo Sprint 0).
+          version: latest
+
+      # Cachear los metadatos del CLI y las imágenes Docker de Supabase
+      # reduce el tiempo de CI en ~50% tras la primera ejecución.
+      # El caché se invalida cuando cambia config.toml.
+      - name: Caché del CLI de Supabase
+        uses: actions/cache@v4
+        with:
+          path: ~/.supabase
+          key: supabase-cli-${{ hashFiles('supabase/config.toml') }}
+          restore-keys: |
+            supabase-cli-
+
+      - name: Iniciar Supabase local
+        run: supabase start
+
+      - name: Aplicar migraciones y seeds
+        # db reset aplica TODAS las migraciones y los seeds en orden.
+        # Si falla, significa que la migración no es reproducible → PR bloqueado.
+        run: supabase db reset
+
+      - name: Verificar tipos TypeScript sincronizados
+        run: |
+          supabase gen types typescript --local > /tmp/supabase_gen.ts
+
+          # DEUDA 1.D1: src/types/supabase.ts está actualmente en UTF-16LE.
+          # Hasta que se regenere en UTF-8 (tarea 1.D1), este diff fallará
+          # por diferencias de codificación. Eso es el comportamiento correcto:
+          # el CI fuerza a completar la deuda antes del Sprint 2.
+          #
+          # Para corregir: supabase gen types typescript --local > src/types/supabase.ts
+          if ! diff -q src/types/supabase.ts /tmp/supabase_gen.ts > /dev/null 2>&1; then
+            echo "❌ Los tipos TypeScript están desincronizados con el esquema."
+            echo ""
+            echo "   Ejecuta para sincronizar:"
+            echo "   supabase gen types typescript --local > src/types/supabase.ts"
+            echo ""
+            diff src/types/supabase.ts /tmp/supabase_gen.ts | head -80 || true
+            exit 1
+          fi
+          echo "✅ Tipos TypeScript sincronizados con el esquema."
+
+      - name: Detener Supabase
+        if: always()
+        run: supabase stop --no-backup
