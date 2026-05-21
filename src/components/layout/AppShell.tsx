@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { BlackColumn } from './BlackColumn'
 import { Header } from './Header'
+import { InstallChip } from './InstallChip'
 import { BannerOffline } from '@/components/feedback/BannerOffline'
 import { ToastContainer } from '@/components/feedback/ToastContainer'
 import { useBandejasStore } from '@/stores/useBandejasStore'
@@ -41,6 +42,7 @@ export function AppShell({
         </main>
       </div>
 
+      <InstallChip />
       <BannerOffline />
       <ToastContainer />
     </div>

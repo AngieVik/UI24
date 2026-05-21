@@ -383,6 +383,61 @@ export type Database = {
           },
         ]
       }
+      doc_checklist360: {
+        Row: {
+          cerrado: boolean
+          id_activacion: string
+          id_checklist: string
+          id_nombre_redactor: string
+          items_revisados: Json
+          matricula: string
+          timestamp_cierre: string | null
+          timestamp_inicio: string
+        }
+        Insert: {
+          cerrado?: boolean
+          id_activacion: string
+          id_checklist?: string
+          id_nombre_redactor: string
+          items_revisados?: Json
+          matricula: string
+          timestamp_cierre?: string | null
+          timestamp_inicio?: string
+        }
+        Update: {
+          cerrado?: boolean
+          id_activacion?: string
+          id_checklist?: string
+          id_nombre_redactor?: string
+          items_revisados?: Json
+          matricula?: string
+          timestamp_cierre?: string | null
+          timestamp_inicio?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_checklist360_id_activacion_fkey"
+            columns: ["id_activacion"]
+            isOneToOne: false
+            referencedRelation: "activaciones_vehiculo"
+            referencedColumns: ["id_activacion"]
+          },
+          {
+            foreignKeyName: "doc_checklist360_id_nombre_redactor_fkey"
+            columns: ["id_nombre_redactor"]
+            isOneToOne: false
+            referencedRelation: "fichas_empleados"
+            referencedColumns: ["id_nombre"]
+          },
+          {
+            foreignKeyName: "doc_checklist360_matricula_fkey"
+            columns: ["matricula"]
+            isOneToOne: false
+            referencedRelation: "vehiculos"
+            referencedColumns: ["matricula"]
+          },
+        ]
+      }
       doc_solicitudes_vacaciones: {
         Row: {
           created_at: string
@@ -1097,6 +1152,9 @@ export type Database = {
           id_nombre: string
           id_persona: string
           nombre_real: string
+          pin_stepup_hash: string | null
+          pin_stepup_salt: string | null
+          rgpd_suprimido_at: string | null
           rol: Database["public"]["Enums"]["rol_empleado"]
         }
         Insert: {
@@ -1108,6 +1166,9 @@ export type Database = {
           id_nombre: string
           id_persona?: string
           nombre_real: string
+          pin_stepup_hash?: string | null
+          pin_stepup_salt?: string | null
+          rgpd_suprimido_at?: string | null
           rol: Database["public"]["Enums"]["rol_empleado"]
         }
         Update: {
@@ -1119,6 +1180,9 @@ export type Database = {
           id_nombre?: string
           id_persona?: string
           nombre_real?: string
+          pin_stepup_hash?: string | null
+          pin_stepup_salt?: string | null
+          rgpd_suprimido_at?: string | null
           rol?: Database["public"]["Enums"]["rol_empleado"]
         }
         Relationships: []
@@ -1266,6 +1330,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "galletas_terminales_id_nombre_fkey"
+            columns: ["id_nombre"]
+            isOneToOne: false
+            referencedRelation: "fichas_empleados"
+            referencedColumns: ["id_nombre"]
+          },
+        ]
+      }
+      idempotency_keys: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id_nombre: string
+          mutation_uuid: string
+          resultado: Json | null
+          rpc_name: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id_nombre: string
+          mutation_uuid: string
+          resultado?: Json | null
+          rpc_name: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id_nombre?: string
+          mutation_uuid?: string
+          resultado?: Json | null
+          rpc_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idempotency_keys_id_nombre_fkey"
             columns: ["id_nombre"]
             isOneToOne: false
             referencedRelation: "fichas_empleados"
@@ -1630,6 +1729,44 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          id_nombre: string
+          p256dh: string
+          user_agent: string | null
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          id_nombre: string
+          p256dh: string
+          user_agent?: string | null
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          id_nombre?: string
+          p256dh?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_id_nombre_fkey"
+            columns: ["id_nombre"]
+            isOneToOne: false
+            referencedRelation: "fichas_empleados"
+            referencedColumns: ["id_nombre"]
+          },
+        ]
+      }
       queue_backup_sessions: {
         Row: {
           backup_key: string
@@ -1945,7 +2082,268 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      _verificar_stepup: {
+        Args: {
+          p_id_nombre: string
+          p_id_terminal?: string
+          p_stepup_hash: string
+        }
+        Returns: undefined
+      }
+      auth_id_nombre_actual: { Args: never; Returns: string }
+      auth_rol_actual: {
+        Args: never
+        Returns: Database["public"]["Enums"]["rol_empleado"]
+      }
+      f_funciones_sin_security_definer: {
+        Args: never
+        Returns: {
+          funcion: string
+          tipo_seguridad: string
+        }[]
+      }
+      f_tablas_sin_rls: {
+        Args: never
+        Returns: {
+          tabla: string
+        }[]
+      }
+      rpc_abrir_sesion_filiacion: {
+        Args: { p_id_drp?: string; p_mutation_uuid: string }
+        Returns: Json
+      }
+      rpc_actualizar_estado_paciente: {
+        Args: {
+          p_id_paciente: string
+          p_mutation_uuid: string
+          p_nuevo_estado: Database["public"]["Enums"]["estado_paciente_filiacion"]
+        }
+        Returns: Json
+      }
+      rpc_actualizar_gps: {
+        Args: { p_lat: number; p_lng: number; p_matricula: string }
+        Returns: undefined
+      }
+      rpc_admitir_paciente: {
+        Args: { p_datos?: Json; p_id_sesion: string; p_mutation_uuid: string }
+        Returns: Json
+      }
+      rpc_agregar_dotacion_drp: {
+        Args: { p_id_drp: string; p_matricula: string; p_mutation_uuid: string }
+        Returns: undefined
+      }
+      rpc_agregar_personal_pie_drp: {
+        Args: {
+          p_id_drp: string
+          p_id_nombre: string
+          p_mutation_uuid: string
+          p_zona?: string
+        }
+        Returns: undefined
+      }
+      rpc_ajuste_manual_stock: {
+        Args: {
+          p_cantidad_nueva: number
+          p_id_item: number
+          p_location_id: string
+          p_motivo?: string
+          p_mutation_uuid: string
+          p_subgrupo?: string
+        }
+        Returns: Json
+      }
+      rpc_alta_vehiculo: {
+        Args: {
+          p_matricula: string
+          p_nombre_location?: string
+          p_tipo: Database["public"]["Enums"]["tipo_vehiculo"]
+        }
+        Returns: Json
+      }
+      rpc_aprobar_desbloqueo: {
+        Args: { p_id_solicitud: string }
+        Returns: undefined
+      }
+      rpc_asignar_mochila_a_drp: {
+        Args: { p_id_drp: string; p_id_mochila: string }
+        Returns: undefined
+      }
+      rpc_baja_vehiculo: {
+        Args: { p_matricula: string; p_motivo?: string }
+        Returns: undefined
+      }
+      rpc_cambiar_rol: {
+        Args: {
+          p_id_nombre_target: string
+          p_rol_nuevo: Database["public"]["Enums"]["rol_empleado"]
+        }
+        Returns: undefined
+      }
+      rpc_cancelar_drp: {
+        Args: { p_id_drp: string; p_motivo?: string }
+        Returns: undefined
+      }
+      rpc_cancelar_push: { Args: { p_endpoint: string }; Returns: undefined }
+      rpc_cerrar_checklist: {
+        Args: {
+          p_id_checklist: string
+          p_items_revisados: Json
+          p_mutation_uuid: string
+        }
+        Returns: Json
+      }
+      rpc_cerrar_informe_svb: {
+        Args: {
+          p_datos_paciente?: Json
+          p_id_doc: string
+          p_mutation_uuid: string
+        }
+        Returns: Json
+      }
+      rpc_checkin_vehiculo: {
+        Args: {
+          p_carry?: string
+          p_km_inicio: number
+          p_matricula: string
+          p_mutation_uuid: string
+        }
+        Returns: Json
+      }
+      rpc_crear_drp: { Args: { p_mutation_uuid: string }; Returns: string }
+      rpc_crear_informe_svb: {
+        Args: {
+          p_datos_paciente?: Json
+          p_id_activacion: string
+          p_mutation_uuid: string
+        }
+        Returns: Json
+      }
+      rpc_deducir_material: {
+        Args: {
+          p_cantidad: number
+          p_id_activacion?: string
+          p_id_item: number
+          p_matricula: string
+          p_motivo?: string
+          p_mutation_uuid: string
+          p_subgrupo: string
+        }
+        Returns: Json
+      }
+      rpc_enviar_solicitud_vacaciones: {
+        Args: {
+          p_fecha_fin: string
+          p_fecha_inicio: string
+          p_mutation_uuid: string
+          p_observaciones?: string
+          p_periodo_anual: string
+          p_preferencia?: Database["public"]["Enums"]["preferencia_vacaciones"]
+        }
+        Returns: string
+      }
+      rpc_marcar_aviso_leido: {
+        Args: { p_id_aviso: string }
+        Returns: undefined
+      }
+      rpc_marcar_mensaje_leido: {
+        Args: { p_id_mensaje: string; p_mutation_uuid: string }
+        Returns: undefined
+      }
+      rpc_procesar_borrado_rgpd:
+        | {
+            Args: { p_id_nombre: string; p_issue_ref?: string }
+            Returns: undefined
+          }
+        | {
+            Args: { p_id_solicitud: string; p_notas?: string }
+            Returns: undefined
+          }
+      rpc_push_subs_para: {
+        Args: { p_id_nombre: string }
+        Returns: {
+          auth: string
+          endpoint: string
+          p256dh: string
+        }[]
+      }
+      rpc_rechazar_desbloqueo: {
+        Args: { p_id_solicitud: string; p_motivo?: string }
+        Returns: undefined
+      }
+      rpc_registrar_averia: {
+        Args: {
+          p_descripcion?: string
+          p_imagen_url?: string
+          p_matricula: string
+          p_mutation_uuid: string
+          p_nivel_criticidad: Database["public"]["Enums"]["nivel_criticidad"]
+          p_sistema_afectado: string
+        }
+        Returns: Json
+      }
+      rpc_resolver_descuadre: {
+        Args: {
+          p_id_descuadre: string
+          p_mutation_uuid: string
+          p_notas?: string
+          p_resolucion: string
+        }
+        Returns: undefined
+      }
+      rpc_resolver_solicitud_vacaciones: {
+        Args: {
+          p_decision: string
+          p_id_solicitud: string
+          p_mutation_uuid: string
+          p_notas?: string
+        }
+        Returns: undefined
+      }
+      rpc_revocar_y_reemitir_galleta: {
+        Args: {
+          p_expires_at?: string
+          p_id_nombre_target: string
+          p_id_terminal: string
+          p_stepup_hash: string
+          p_tipo_galleta: Database["public"]["Enums"]["tipo_galleta"]
+        }
+        Returns: Json
+      }
+      rpc_set_system_config: {
+        Args: { p_clave: string; p_valor: Json }
+        Returns: undefined
+      }
+      rpc_solicitar_borrado_rgpd:
+        | { Args: { p_mutation_uuid: string }; Returns: undefined }
+        | {
+            Args: {
+              p_identificador: string
+              p_motivo: string
+              p_tipo_solicitud: string
+            }
+            Returns: string
+          }
+      rpc_solicitar_desbloqueo: {
+        Args: { p_id_terminal: string; p_motivo: string }
+        Returns: string
+      }
+      rpc_suscribir_push: {
+        Args: {
+          p_auth: string
+          p_endpoint: string
+          p_p256dh: string
+          p_user_agent?: string
+        }
+        Returns: undefined
+      }
+      rpc_transferir_galleta: {
+        Args: { p_id_terminal_nuevo: string }
+        Returns: Json
+      }
+      rpc_transicionar_drp: {
+        Args: { p_accion: string; p_id_drp: string }
+        Returns: string
+      }
     }
     Enums: {
       condicion_tecnica:
@@ -2029,6 +2427,12 @@ export type Database = {
         | "baja_vehiculo"
         | "desbloqueo_aprobado"
         | "desbloqueo_rechazado"
+        | "step_up_exitoso"
+        | "step_up_fallido"
+        | "alta_vehiculo"
+        | "drp_cancelado"
+        | "rgpd_solicitud"
+        | "rgpd_supresion"
       tipo_galleta: "permanente" | "temporal"
       tipo_location: "base" | "almacen" | "punto_drp" | "vehiculo"
       tipo_movimiento_inventario:
@@ -2260,6 +2664,12 @@ export const Constants = {
         "baja_vehiculo",
         "desbloqueo_aprobado",
         "desbloqueo_rechazado",
+        "step_up_exitoso",
+        "step_up_fallido",
+        "alta_vehiculo",
+        "drp_cancelado",
+        "rgpd_solicitud",
+        "rgpd_supresion",
       ],
       tipo_galleta: ["permanente", "temporal"],
       tipo_location: ["base", "almacen", "punto_drp", "vehiculo"],

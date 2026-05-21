@@ -11,11 +11,20 @@ import { ChecklistScreen } from '@/components/flota/ChecklistScreen'
 import { InventarioScreen } from '@/components/operativa/InventarioScreen'
 import { SalaEsperaScreen } from '@/components/operativa/SalaEsperaScreen'
 import { InformesScreen } from '@/components/operativa/InformesScreen'
+import { DrpPanelScreen } from '@/components/drp/DrpPanelScreen'
+import { VisorGpsScreen } from '@/components/drp/VisorGpsScreen'
+import { AvisosScreen } from '@/components/rrhh/AvisosScreen'
+import { BandejaScreen } from '@/components/rrhh/BandejaScreen'
+import { TablonScreen } from '@/components/rrhh/TablonScreen'
+import { CuadranteScreen } from '@/components/rrhh/CuadranteScreen'
+import { VacacionesScreen } from '@/components/rrhh/VacacionesScreen'
+import { SystemConfigScreen } from '@/components/rrhh/SystemConfigScreen'
 
 export default function App() {
   const session = useAuthStore((s) => s.session)
   const setOnline = useGlobalStore((s) => s.setOnline)
   const [activeNav, setActiveNav] = useState('home')
+  const [drpActivoId] = useState<string | undefined>(undefined)
 
   const idActivacion = useActivacionStore((s) => s.id_activacion)
   const checklistCerrado = useActivacionStore((s) => s.checklistCerrado)
@@ -56,10 +65,18 @@ export default function App() {
 
   function renderContent() {
     switch (activeNav) {
-      case 'doc6':    return <InventarioScreen />
-      case 'drp_op':  return <SalaEsperaScreen />
-      case 'doc2':    return <InformesScreen />
-      default:        return <EstadoEspera />
+      case 'doc6':      return <InventarioScreen />
+      case 'drp_op':    return <SalaEsperaScreen />
+      case 'doc2':      return <InformesScreen />
+      case 'drp_panel': return <DrpPanelScreen />
+      case 'drp_visor': return <VisorGpsScreen idDrp={drpActivoId} />
+      case 'doc11':     return <AvisosScreen />
+      case 'doc13':     return <BandejaScreen />
+      case 'tablon':    return <TablonScreen />
+      case 'cuadrante': return <CuadranteScreen />
+      case 'vacaciones':return <VacacionesScreen />
+      case 'sistema':   return <SystemConfigScreen />
+      default:          return <EstadoEspera />
     }
   }
 

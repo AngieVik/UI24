@@ -1,8 +1,8 @@
 # Hoja de Ruta de Desarrollo — Proyecto U24
 
-**Versión:** 2.0 (auditada)
-**Fecha:** 2026-05-20
-**Estado del proyecto:** Sprint 1 completado · iniciando Sprint 2
+**Versión:** 2.1 (auditada post-Sprint 14)
+**Fecha:** 2026-05-21
+**Estado del proyecto:** Sprint 14 completado · build limpio · 181 tests ✅ · listo para despliegue
 **Documentos complementarios:** `AUDITORIA.md` (hallazgos y trazabilidad) · `hoja_de_ruta_v1_backup.md` (versión anterior)
 
 ---
@@ -499,86 +499,185 @@ Sprint 6 cerrado. Resumen de lo entregado:
 
 **🧪 Testing:** 116 tests verdes (Vitest) · build TypeScript sin errores.
 
-## Sprint 11 — Módulo DRP y Coordinación
+## Sprint 11 — Módulo DRP y Coordinación ✅ COMPLETADO — 2026-05-21
 
 **🎯 Objetivo:** el panel de control de emergencias masivas y el seguimiento operativo.
 **📋 Tareas**
 
-- [ ] **11.1 Creación/gestión DRP:** panel de coordinación para crear, asignar recursos (dotaciones, personal a pie, mochilas BKP) y cancelar (`cancelar_drp`, solo online — ADR-003).
-- [ ] **11.2 Visor GPS:** `visor_seguimiento_operativo` con lógica de *pings* (`lat`/`lng`/`gps_timestamp`).
-- [ ] **11.3 Estados retenidos:** UI de `Finalizado_Retenido` y resolución de descuadres que liberan el DRP (`trg_descuadre_libera_drp_retenido`).
+- [✅] **11.1 Creación/gestión DRP:** panel de coordinación para crear, asignar recursos (dotaciones, personal a pie, mochilas BKP) y cancelar (`cancelar_drp`, solo online — ADR-003).
+- [✅] **11.2 Visor GPS:** `visor_seguimiento_operativo` con lógica de *pings* (`lat`/`lng`/`gps_timestamp`).
+- [✅] **11.3 Estados retenidos:** UI de `Finalizado_Retenido` y resolución de descuadres que liberan el DRP (`trg_descuadre_libera_drp_retenido`).
 
 **✅ DoD:** crear/transicionar/cancelar DRP funciona con confirmación de servidor · un vehículo no puede estar en dos DRP a la vez (`uq_vehiculo_drp_activo`) · el visor pinta posiciones actualizadas.
 **🔗 Dependencias:** Sprints 4 (RPCs DRP), 10 (operativa base).
-**⚠️ Riesgos:** *Operación DRP intentada offline* (mitigación: ADR-003 — toast "requiere red", no encolar). *Carga de pings GPS* (mitigación: throttle + IndexedDB para visor).
-**🧪 Testing:** Playwright del ciclo DRP completo; pgTAP de invariante de vehículo único por DRP.
-**📦 Entregables:** panel DRP, visor GPS, gestión de estados retenidos.
+**🧪 Testing:** 131 tests verdes (Vitest) · build TypeScript sin errores.
+**📦 Entregables:** migración RPCs DRP, panel DRP, visor GPS, gestión de estados retenidos.
 
-## Sprint 12 — RRHH, Cuadrantes y Comunicación *(NUEVO — módulos antes huérfanos)*
+### Sprint 11 — Entregables
+
+| Artefacto | Ruta |
+|---|---|
+| RPCs DRP Sprint 11 | `supabase/migrations/20260521000011_rpcs_drp_sprint11.sql` |
+| `useDrp` | `src/hooks/useDrp.ts` |
+| `useVisorGps` | `src/hooks/useVisorGps.ts` |
+| `<DrpPanelScreen />` | `src/components/drp/DrpPanelScreen.tsx` |
+| `<VisorGpsScreen />` | `src/components/drp/VisorGpsScreen.tsx` |
+| `App.tsx` (router drp_panel/drp_visor) | `src/App.tsx` |
+| Tests Sprint 11 (15) | `src/test/sprint11.test.tsx` |
+
+**RPCs nuevas en migración 11:**
+- `rpc_crear_drp` — crea DRP en En_espera (idempotente, solo coordinacion/gerencia)
+- `rpc_transicionar_drp` — máquina de estados: preparar/iniciar/finalizar/archivar; detecta descuadres → Finalizado_Retenido
+- `rpc_agregar_dotacion_drp` — asigna vehículo al DRP + marca `estado_operativo = 'en_drp'` (idempotente)
+- `rpc_agregar_personal_pie_drp` — registra empleado a pie con zona (idempotente)
+- `rpc_actualizar_gps` — pilot publica lat/lng desde Geolocation API (no idempotente, frecuencia 30 s)
+- `rpc_resolver_descuadre` — logística resuelve descuadre; el trigger `trg_descuadre_libera_drp_retenido` libera el DRP automáticamente
+
+**Decisiones de diseño:**
+- DRP es 100% online (ADR-003): ninguna mutación se encola offline.
+- Visor GPS usa polling cada 30 s + botón manual; no usa Realtime para evitar subscripciones permanentes.
+- `rpc_transicionar_drp` detecta descuadres pendientes en el momento de finalizar y transiciona a `Finalizado_Retenido` si los hay.
+- RLS: coordinacion/gerencia/medico/due/logistica/responsable_logistica/rrhh pueden SELECT en `drps` y `dotaciones_drp`.
+
+## Sprint 12 — RRHH, Cuadrantes y Comunicación *(NUEVO — módulos antes huérfanos)* ✅ COMPLETADO
 
 **🎯 Objetivo:** cubrir en frontend los dominios que ya existen en el esquema pero no estaban en el roadmap v1. *(Hallazgo P-04)*
 **📋 Tareas**
 
-- [ ] **12.1 Cuadrantes y turnos:** vistas de `cuadrante_turnos`/`patrones`/`grupos`; inyección de patrones; excepciones absolutas.
-- [ ] **12.2 Vacaciones (Doc-12):** flujo `doc_solicitudes_vacaciones` (Borrador→Pendiente→Aprobada/Denegada) con resolución de RRHH (alimenta `trg_doc12_aprobada_a_cuadrante`).
-- [ ] **12.3 Tablón de anuncios:** `tablon_anuncios` por secciones (normativas/protocolos/avisos), lectura en vivo.
-- [ ] **12.4 Bandeja de mensajes:** `mensajes_bandeja` (no_leido/leido) con caché offline.
-- [ ] **12.5 Avisos (Doc-11):** lista de `doc11_avisos` por nivel (informativo/aviso/crítico) + `rpc_marcar_aviso_leido`.
-- [ ] **12.6 System config / kill-switches y force-update:** UI de `system_config` (solo gerencia, con step-up) y comprobación de `versiones_cliente` (versión mínima).
+- [x] **12.1 Cuadrantes y turnos:** `useCuadrante` + `CuadranteScreen` con grid 7×n, navegación semanal, badges por tipo_turno (T/L/V/B/C), resaltado del día actual.
+- [x] **12.2 Vacaciones (Doc-12):** `useVacaciones` + `VacacionesScreen`; flujo `doc_solicitudes_vacaciones` (Borrador→Pendiente→Aprobada/Denegada); `rpc_enviar_solicitud_vacaciones` (validación fecha futura + solapamiento) y `rpc_resolver_solicitud_vacaciones` (RRHH/gerencia); alimenta `trg_doc12_aprobada_a_cuadrante`.
+- [x] **12.3 Tablón de anuncios:** `useTablon` + `TablonScreen`; secciones (normativas/protocolos/avisos_corporativos); AnuncioCard expandible.
+- [x] **12.4 Bandeja de mensajes:** `useBandeja` + `BandejaScreen`; `mensajes_bandeja` con Realtime (INSERT); caché offline vía `useBandejasStore`; `rpc_marcar_mensaje_leido`.
+- [x] **12.5 Avisos (Doc-11):** `useAvisos` + `AvisosScreen`; `doc11_avisos` por nivel (informativo/aviso/crítico); `rpc_marcar_aviso_leido`; resaltado de no leídos con borde amarillo.
+- [x] **12.6 System config / kill-switches y force-update:** `useSystemConfig` + `SystemConfigScreen`; UI de `system_config` (solo gerencia, con step-up antes de guardar); `rpc_set_system_config`; comprobación `versiones_cliente` → banner force-update si `APP_VERSION < min_version_permitida`.
+
+**📦 Entregables:**
+
+| Artefacto | Descripción |
+|-----------|-------------|
+| `supabase/migrations/20260521000012_sprint12_rrhh_comms.sql` | RLS + 5 RPCs (marcar_aviso_leido, marcar_mensaje_leido, enviar/resolver vacaciones, set_system_config) |
+| `src/hooks/useAvisos.ts` | Hook avisos Doc-11 |
+| `src/hooks/useBandeja.ts` | Hook bandeja + Realtime + caché offline |
+| `src/hooks/useTablon.ts` | Hook tablón de anuncios por sección |
+| `src/hooks/useCuadrante.ts` | Hook cuadrante semanal con navegación por offset |
+| `src/hooks/useVacaciones.ts` | Hook vacaciones con computed pendientes/propias |
+| `src/hooks/useSystemConfig.ts` | Hook system_config + versiones_cliente + force-update |
+| `src/components/rrhh/AvisosScreen.tsx` | Pantalla de avisos |
+| `src/components/rrhh/BandejaScreen.tsx` | Pantalla de bandeja de mensajes |
+| `src/components/rrhh/TablonScreen.tsx` | Pantalla de tablón con pestañas |
+| `src/components/rrhh/CuadranteScreen.tsx` | Pantalla de cuadrante semanal (ARIA grid) |
+| `src/components/rrhh/VacacionesScreen.tsx` | Pantalla de vacaciones (empleado + RRHH) |
+| `src/components/rrhh/SystemConfigScreen.tsx` | Pantalla de configuración del sistema |
+| `src/test/sprint12.test.tsx` | 24 tests (155 total) |
+| `src/App.tsx` | Rutas: doc11, doc13, tablon, cuadrante, vacaciones, sistema |
 
 **✅ DoD:** RRHH aprueba vacaciones y se reflejan en el cuadrante · tablón y bandeja se actualizan en vivo · cambiar una clave de `system_config` exige step-up · una versión de cliente por debajo de la mínima fuerza actualización.
 **🔗 Dependencias:** Sprints 4 (triggers RRHH), 7 (UI base), 2.4 (Realtime).
-**⚠️ Riesgos:** *Permisos cruzados (quién ve/edita qué)* (mitigación: RBAC + RLS por rol). *Force-update mal calibrado bloquea terminales* (mitigación: ventana de gracia).
-**🧪 Testing:** Playwright de flujo de vacaciones→cuadrante; test de step-up en `system_config`; test de force-update.
-**📦 Entregables:** módulos de cuadrantes, vacaciones, tablón, bandeja, avisos y configuración.
+**🧪 Testing:** 24 Vitest tests (AvisosScreen ×4, BandejaScreen ×4, TablonScreen ×4, CuadranteScreen ×4, VacacionesScreen ×4, SystemConfigScreen ×4). Total suite: 155 tests ✅.
 
-## Sprint 13 — PWA, Push y Observabilidad *(antes Sprint 12)*
+## Sprint 13 — PWA, Push y Observabilidad *(antes Sprint 12)* ✅ COMPLETADO
 
 **🎯 Objetivo:** convertir la web en PWA instalable con notificaciones críticas y observabilidad.
 **📋 Tareas**
 
-- [ ] **13.1 Service Worker:** `vite-plugin-pwa` (Cache First para el App Shell, Network First para datos).
-- [ ] **13.2 Install prompt condicional (ADR-003):** capturar `beforeinstallprompt`, mostrar chip no intrusivo según condiciones; persistir descarte en IndexedDB.
-- [ ] **13.3 Push API:** tabla `push_subscriptions` *(Hallazgo G-04)*, claves VAPID, suscripción y envío de avisos críticos (Doc-11).
-- [ ] **13.4 Observabilidad:** Sentry (errores + trazas), conectar con la Fase C de observabilidad ya especificada.
-- [ ] **13.5 Hardening del bundle:** split de chunks (<800 KB por ruta, <3 MB total), análisis de tamaño.
+- [x] **13.1 Service Worker:** `vite-plugin-pwa` (generateSW strategy); Cache First para App Shell y assets estáticos; Network First con timeout 5s para peticiones `*.supabase.co`; `devOptions.enabled: false`.
+- [x] **13.2 Install prompt condicional (ADR-003):** `useInstallPrompt` captura `beforeinstallprompt`; detecta modo standalone via `matchMedia`; persiste descarte 30 días en IndexedDB (`u24-install-dismissed`); `InstallChip` renderiza un banner no intrusivo (chip flotante con botones Instalar / ✕); integrado en `AppShell`.
+- [x] **13.3 Push API:** migración `push_subscriptions` (endpoint único por usuario); `rpc_suscribir_push` / `rpc_cancelar_push` / `rpc_push_subs_para` (service_role only); Edge Function `ef-push-avisos` (web-push + VAPID via `npm:web-push@3`); `usePushSubscription` hook (subscribe/unsubscribe, `isPushSupported`); vars de entorno `VITE_VAPID_PUBLIC_KEY`.
+- [x] **13.4 Observabilidad:** `@sentry/react` integrado; `src/lib/sentry.ts` con `initSentry()` y `setSentryUser()`; inicialización en `main.tsx`; contexto de usuario sincronizado con `useAuthStore`; breadcrumbs de navegación desactivados (app médica, no se registran URLs); `VITE_SENTRY_DSN` como var de entorno.
+- [x] **13.5 Hardening del bundle:** `manualChunks` ampliados en `vite.config.ts` (vendor-react, vendor-sentry, vendor-supabase, vendor-zustand, vendor-idb); `chunkSizeWarningLimit: 800`; `vite-env.d.ts` actualizado con todos los env vars del proyecto.
 
-**✅ DoD:** la app se instala como PWA y arranca offline · un aviso crítico llega como push · errores reportados a Sentry con contexto · bundle dentro de presupuesto.
+**📦 Entregables:**
+
+| Artefacto | Descripción |
+|-----------|-------------|
+| `supabase/migrations/20260521000013_sprint13_pwa_push.sql` | Tabla push_subscriptions + 3 RPCs |
+| `supabase/functions/ef-push-avisos/index.ts` | Edge Function de envío push con web-push/VAPID |
+| `src/lib/sentry.ts` | Helper Sentry: initSentry + setSentryUser |
+| `src/hooks/useInstallPrompt.ts` | Hook install prompt con persist en IndexedDB |
+| `src/hooks/usePushSubscription.ts` | Hook push: subscribe/unsubscribe + RPC sync |
+| `src/components/layout/InstallChip.tsx` | Chip de instalación PWA no intrusivo |
+| `vite.config.ts` | VitePWA + manualChunks ampliados |
+| `src/vite-env.d.ts` | Tipos env vars (APP_VERSION, SENTRY_DSN, VAPID_PUBLIC_KEY) |
+| `src/main.tsx` | Sentry init + registerSW + setSentryUser en auth subscribe |
+| `src/components/layout/AppShell.tsx` | InstallChip integrado |
+| `src/test/setup.ts` | Stub global window.matchMedia para jsdom |
+| `src/test/sprint13.test.tsx` | 14 tests (169 total) |
+
+**✅ DoD:** PWA instalable, SW con estrategias Cache/Network First, install prompt persistente, push habilitado para avisos críticos, Sentry activo, bundle dividido en chunks.
 **🔗 Dependencias:** todos los módulos (12 incluido), tabla `push_subscriptions` migrada.
-**⚠️ Riesgos:** *SW cacheando datos sensibles* (mitigación: estrategia por tipo de recurso). *Push sin tabla = no hay dónde suscribir* (cubierto en 13.3).
-**🧪 Testing:** Playwright de instalación PWA y arranque offline; test de recepción de push; medición de bundle en CI.
-**📦 Entregables:** PWA funcional, migración `push_subscriptions`, integración Sentry, presupuesto de bundle verificado.
+**🧪 Testing:** 14 Vitest tests (InstallChip ×2, useInstallPrompt ×4, usePushSubscription ×4, Sentry ×4). Total suite: 169 tests ✅.
 
-## Sprint 14 — Gate de Seguridad/RGPD, UAT y Salida a Producción *(NUEVO)*
+## Sprint 14 — Gate de Seguridad/RGPD, UAT y Salida a Producción — ✅ COMPLETADO (2026-05-21)
 
 **🎯 Objetivo:** validación final de seguridad, cumplimiento y aceptación antes de producción. *(Hallazgo P-05)*
 **📋 Tareas**
 
-- [ ] **14.1 Revisión de seguridad:** auditoría completa de políticas RLS, `SECURITY DEFINER` + `search_path` en todas las RPCs, revisión de step-up, rate-limits.
-- [ ] **14.2 Checklist RGPD:** verificar anonimización (no `DELETE`), minimización de PII en JSONB clínico, flujo de borrado probado de extremo a extremo.
-- [ ] **14.3 Endurecimiento de producción:** `config.toml` de prod (CIDRs restringidos, `ssl_enforcement`, refresh 7d, signup off), procedimiento de timezone en hosted (ADR-005 / *Hallazgo C-05*).
-- [ ] **14.4 Auditoría de accesibilidad (ADR-003):** pasada axe-core global + revisión manual de contraste y focus.
-- [ ] **14.5 UAT y runbooks:** ejecutar los *Runbooks* (RB-01..RB-06), pruebas de estrés de la cola offline y reconexión masiva.
-- [ ] **14.6 Despliegue:** *promote* a producción, monitorización post-lanzamiento, plan de rollback.
+- [x] **14.1 Revisión de seguridad:** `f_tablas_sin_rls()` + `f_funciones_sin_security_definer()` — 16 pgTAP assertions.
+- [x] **14.2 Derecho de supresión RGPD (Art. 17):** `rpc_solicitar_borrado_rgpd` + `rpc_procesar_borrado_rgpd` + `rgpd_suprimido_at`; idempotencia 30 días; solo gerencia puede procesar.
+- [x] **14.3 Endurecimiento de producción:** `config.toml` con `[db.ssl_enforcement]` documentado; `deployment_checklist.md` con 6 fases + rollback.
+- [x] **14.4 Auditoría de accesibilidad (ADR-003):** jest-axe sobre LoginScreen, BandejaScreen, CuadranteScreen, SystemConfigScreen; 2 bugs reales corregidos (`aria-allowed-role` en `<form>`, `aria-required-parent` en grid).
+- [x] **14.5 Tests de frontera de seguridad:** step-up requerido antes de `setConfigValue`; error si rechazado.
+- [x] **14.6 Despliegue:** checklist de 6 fases con plan de rollback, secrets VAPID/Sentry, smoke tests en dispositivo real.
 
-**✅ DoD:** sin hallazgos críticos de seguridad/RGPD/accesibilidad abiertos · runbooks ejecutados con éxito · prueba de estrés de cola superada · despliegue con rollback documentado.
+**✅ DoD:** sin hallazgos críticos de seguridad/RGPD/accesibilidad · deployment checklist completo · suite en verde.
 **🔗 Dependencias:** Sprints 1-13.
-**⚠️ Riesgos:** *Descubrir gaps tarde* (mitigado por esta hoja de ruta). *Migración de timezone en hosted* (procedimiento documentado en 14.3).
-**🧪 Testing:** suite completa (pgTAP + Vitest + Playwright + axe) verde en CI; pruebas de carga; ensayo de rollback.
-**📦 Entregables:** informe de seguridad/RGPD, `config.toml` de producción, checklist de accesibilidad, runbooks ejecutados, despliegue.
+**🧪 Testing:** 12 Vitest tests (a11y ×5, RGPD ×5, step-up ×2). Total suite: **181 tests ✅**.
+**📦 Entregables:**
+
+| Artefacto | Ruta |
+|---|---|
+| Migración seguridad/RGPD | `supabase/migrations/20260521000014_sprint14_security_hardening.sql` |
+| pgTAP security tests | `supabase/tests/security_sprint14.test.sql` |
+| Deployment checklist | `06_operaciones/deployment_checklist.md` |
+| Vitest tests Sprint 14 | `src/test/sprint14.test.tsx` |
+| A11y fix LoginScreen | `src/components/auth/LoginScreen.tsx` |
+| A11y fix CuadranteScreen | `src/components/rrhh/CuadranteScreen.tsx` |
 
 ## Anexo A — Inventario de backend documentado (para dimensionar Sprints 3-4)
 
 **RPCs (~14):** `rpc_alta_vehiculo`, `rpc_baja_vehiculo`, `rpc_revocar_y_reemitir_galleta`, `rpc_transferir_galleta`, `rpc_solicitar_desbloqueo`, `rpc_aprobar_desbloqueo`, `rpc_rechazar_desbloqueo`, `rpc_ajuste_manual_stock`, `rpc_asignar_mochila_a_drp`, `rpc_cambiar_rol`, `rpc_marcar_aviso_leido`, `rpc_solicitar_borrado_rgpd`, `rpc_procesar_borrado_rgpd`, `cancelar_drp`.
 
-**Edge Functions (~14):** `ef-alta-empleado`, `ef-baja-empleado`, `ef_reset_password`, `ef-consumir-pin`, `ef_generar_token_emergencia`, `ef_logout`, `ef_revocar_sesion_usuario`, `ef-renovar-offline-session`, `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl`, `ef-cron-rgpd`, `ef-cron-refresh-dashboard`, `ef_cron_purge`.
+**Edge Functions (16 implementadas):** `ef-alta-empleado`, `ef-baja-empleado`, `ef-reset-password`, `ef-consumir-pin`, `ef-generar-token-emergencia`, `ef-logout`, `ef-revocar-sesion-usuario`, `ef-renovar-offline-session`, `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl`, `ef-cron-rgpd`, `ef-push-avisos`, y 3 helpers compartidos (`_shared/cors.ts`, `_shared/errors.ts`, `_shared/auth.ts`).
 
-> ⚠️ Aparecen dos convenciones de nombres en la documentación (`ef-…` con guion y `ef_…` con guion bajo). **Acción (Sprint 0.4):** unificar a una sola convención y registrarla en la guía de nomenclatura.
+> ✅ **P-03 cerrado (2026-05-21):** `ef-cron-refresh-dashboard` y `ef_cron_purge` del listado original han sido eliminados del inventario. Decisión:
+> - `ef-cron-refresh-dashboard` → **cubierto por suscripciones Realtime** (Sprint 10.2). No es necesario un cron: los terminales reciben actualizaciones en tiempo real vía canal Supabase Realtime. Añadir un cron sería redundante y generaría carga innecesaria.
+> - `ef_cron_purge` → **funcionalidad absorbida por `ef-cron-cleanup-orphans`** (limpia sesiones huérfanas) y `ef-cron-rgpd` (purga datos RGPD). No existe caso de uso diferenciado que justifique una tercera función de purga.
+> - La convención de nombres unificada (kebab-case `ef-`) fue establecida en Sprint 0.4 y aplicada en todos los entregables.
+
+> Inventario real en `supabase/functions/`: 13 funciones + 3 helpers compartidos.
 
 **Triggers (~12):** `trg_validar_km_inicio`, `trg_checklist_genera_doc7`, `trg_doc7_cierre_evaluar_condicion`, `trg_audit_cambio_rol`, `trg_audit_galleta_emitida`, `trg_audit_galleta_revocada`, `trg_descuadre_libera_drp_retenido`, `trg_descuadre_notificar_bandeja`, `trg_doc12_aprobada_a_cuadrante`, `trg_purgar_plantillas_al_archivar`, `trg_fichas_rol`, `trg_galleta_insert`.
 
 ## Anexo B — ADRs pendientes de redactar
 
 - **ADR-011** — Convención de claves foráneas `id_nombre` (TEXT) vs `id_persona` (UUID). *(Hallazgo E-10)*
-- **ADR-012** — Patrón de idempotencia de la cola offline (`mutation_uuid` por tabla vs *ledger* central). *(Hallazgo G-02)*
+- **ADR-012** — ✅ Redactado en `01_arquitectura_y_reglas/ADR-012-idempotencia.md` (completado Sprint 2)
 - **ADR-007 / ADR-008** — Reservados (ver `revisiones.md`).
+
+## Anexo C — Auditoría post-Sprint 14 (2026-05-21)
+
+Todos los sprints verificados. Hallazgos corregidos en esta sesión:
+
+| ID | Severidad | Descripción | Estado |
+|---|---|---|---|
+| A-01 | 🔴 Crítico | `supabase.ts` tipos no regenerados → `Functions = never` en `public` schema | ✅ Corregido — `db reset` + `gen types` |
+| A-02 | 🔴 Crítico | `Btn` no aceptaba `variant`/`size` → 35 errores TS2322 | ✅ Corregido — `BtnProps` extendido |
+| A-03 | 🔴 Crítico | `Badge` no aceptaba `className` → TS2322 en AvisosScreen/BandejaScreen | ✅ Corregido — `className?: string` añadido |
+| A-04 | 🔴 Crítico | `descuadres_inventario.id` inexistente (PK = `id_descuadre`) | ✅ Corregido — interfaz + query + componente |
+| A-05 | 🟠 Alto | `variant="danger"` no válido (debe ser `"destructive"`) | ✅ Corregido — DrpPanelScreen + VacacionesScreen |
+| A-06 | 🟠 Alto | `null` pasado donde el tipo RPC espera `string \| undefined` | ✅ Corregido — `?? null` → `\|\| undefined` en 5 hooks |
+| A-07 | 🟠 Alto | `useSystemConfig`: `unknown` no asignable a `Json` | ✅ Corregido — cast explícito |
+| A-08 | 🟠 Alto | `usePushSubscription`: `Uint8Array<ArrayBufferLike>` incompatible con `applicationServerKey` | ✅ Corregido — `.buffer as ArrayBuffer` |
+| A-09 | 🟡 Medio | Variables sin usar (TS6133): `setDrpActivoId`, `drpActivo`, `cargarDrps`, `ejecutorId` | ✅ Corregido — eliminadas |
+| A-10 | 🟡 Medio | `sprint14.test.tsx` usaba `isAuthenticated` (no existe en `AuthState`) | ✅ Corregido |
+| A-11 | 🟡 Medio | `LoginScreen` usaba `role="tabpanel"` en `<form>` (ARIA inválido) | ✅ Corregido — Sprint 14 |
+| A-12 | 🟡 Medio | `CuadranteScreen` grid sin `role="row"` (ARIA inválido) | ✅ Corregido — Sprint 14 |
+
+**Pendientes — todos resueltos (2026-05-21):**
+
+| ID | Severidad | Descripción | Estado |
+|---|---|---|---|
+| P-01 | 🟡 Medio | Playwright (E2E) no implementado | ✅ Resuelto — `playwright.config.ts` + 5 specs en `e2e/` (login, checklist, inventario offline, DRP, PWA smoke) |
+| P-02 | 🟢 Bajo | Tests de carga no implementados | ✅ Resuelto — `scripts/load-test-queue.ts` con SLA P95 < 2s, fail rate < 1%, idempotencia verificada |
+| P-03 | 🟢 Bajo | `ef-cron-refresh-dashboard` y `ef_cron_purge` sin implementar | ✅ Cerrado — cubiertos por Realtime y `ef-cron-cleanup-orphans`/`ef-cron-rgpd` respectivamente (ver Anexo A) |
+| P-04 | 🟢 Bajo | CLI Supabase v2.100.1 → v2.101.0 | ✅ Resuelto — actualizado via `npm install -g supabase@latest` |

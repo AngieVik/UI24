@@ -253,6 +253,14 @@
   .btn--ghost:hover:not(:disabled) { background: var(--bg-muted); color: var(--fg-1); }
   .btn--destructive                { background: var(--u24-black); color: var(--crit); border-color: var(--u24-black); }
   .btn--destructive:hover:not(:disabled) { background: var(--u24-column-hover); }
+  /* variant aliases */
+  .btn--primary                   { background: var(--u24-black); color: #fff; border-color: var(--u24-black); }
+  .btn--secondary                 { background: transparent; color: var(--fg-2); border-color: var(--border-2); }
+  .btn--secondary:hover:not(:disabled) { background: var(--bg-muted); color: var(--fg-1); }
+  /* size modifiers */
+  .btn--sm   { font-size: 11px; padding: 3px 8px; }
+  .btn--md   { font-size: 13px; padding: 6px 12px; }
+  .btn--lg   { font-size: 15px; padding: 8px 16px; }
 
   /* Badges */
   .badge              { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--r-sm); font-family: var(--font-cmd); font-weight: 700; font-size: 11px; letter-spacing: .02em; line-height: 1.4; }

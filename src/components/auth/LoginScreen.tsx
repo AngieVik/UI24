@@ -50,12 +50,10 @@ export function LoginScreen() {
       </div>
 
       {tab === 'normal' && (
+        <div id="panel-normal" role="tabpanel" aria-label="Formulario de acceso normal">
         <form
-          id="panel-normal"
-          role="tabpanel"
           className="login__form"
           onSubmit={handleNormal}
-          aria-label="Formulario de acceso normal"
         >
           <label className="login__label">
             Identificador
@@ -99,15 +97,14 @@ export function LoginScreen() {
             </p>
           )}
         </form>
+        </div>
       )}
 
       {tab === 'emergencia' && (
+        <div id="panel-emergencia" role="tabpanel" aria-label="Formulario de acceso de emergencia">
         <form
-          id="panel-emergencia"
-          role="tabpanel"
           className="login__form"
           onSubmit={handleEmergencia}
-          aria-label="Formulario de acceso de emergencia"
         >
           <p className="login__info">
             Introduce tu identificador y el PIN de 6 dígitos proporcionado por coordinación.
@@ -159,6 +156,7 @@ export function LoginScreen() {
             Si no tienes PIN, contacta con coordinación o RRHH.
           </p>
         </form>
+        </div>
       )}
     </div>
   )
