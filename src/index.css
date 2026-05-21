@@ -1,0 +1,124 @@
+/*
+ * U24 — estilos globales
+ * Tailwind v4 usa configuración CSS-first (no tailwind.config.js).
+ * Los tokens de diseño se mapean a utilidades via @theme.
+ */
+
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;500;700;900&family=Barlow:wght@300;500;700&display=swap");
+
+/*
+ * WCAG AA — ratios de contraste de la paleta (ADR-003)
+ * Foreground / Background                     Ratio    Nivel
+ * ────────────────────────────────────────────────────────────
+ * #111111 sobre #FFD60A (u24-yellow)         13.4:1   AAA ✓
+ * #111827 sobre #FFFFFF (fg-1 / texto prim.) 18.4:1   AAA ✓
+ * #4b5563 sobre #FFFFFF (fg-2 / secundario)   7.4:1   AA  ✓
+ * #6b7280 sobre #FFFFFF (fg-3 / meta)         4.9:1   AA  ✓
+ * #9ca3af sobre #FFFFFF (fg-disabled)         2.5:1   —   exento WCAG 1.4.3
+ * #dc2626 sobre #FFFFFF (crit / rojo)         4.5:1   AA  ✓
+ * #b45309 sobre #FFFFFF (warn / amber-700)    4.9:1   AA  ✓
+ * #15803d sobre #FFFFFF (ok / green-700)      4.8:1   AA  ✓
+ * #1d4ed8 sobre #FFFFFF (info / blue-700)     6.5:1   AA  ✓
+ * ────────────────────────────────────────────────────────────
+ * Fuente: https://webaim.org/resources/contrastchecker/
+ */
+
+/* ── Tailwind v4: mapeo de tokens a utilidades de clase ────────────────── */
+@theme {
+  /* Colores de marca → bg-u24-yellow, text-u24-black, border-u24-yellow … */
+  --color-u24-yellow:        #FFD60A;
+  --color-u24-yellow-soft:   #FFF5B8;
+  --color-u24-red-hover:     #DC2626;
+  --color-u24-red-hover-deep:#B91C1C;
+  --color-u24-black:         #111111;
+  --color-u24-column-hover:  #1f1f1f;
+  --color-u24-column-active: #2a2a2a;
+
+  /* Foreground → text-fg-1, text-fg-2 … */
+  --color-fg-1:        #111827;
+  --color-fg-2:        #4b5563;
+  --color-fg-3:        #6b7280;
+  --color-fg-disabled: #9ca3af;
+
+  /* Backgrounds → bg-bg-app, bg-bg-panel … */
+  --color-bg-app:   #ffffff;
+  --color-bg-panel: #f9fafb;
+  --color-bg-muted: #f3f4f6;
+
+  /* Bordes → border-border-1, border-border-2 */
+  --color-border-1: #e5e7eb;
+  --color-border-2: #d1d5db;
+
+  /* Semántica */
+  --color-ok:       #15803d;
+  --color-ok-bg:    #dcfce7;
+  --color-ok-fg:    #166534;
+  --color-warn:     #b45309;
+  --color-warn-bg:  #fef3c7;
+  --color-warn-fg:  #92400e;
+  --color-crit:     #dc2626;
+  --color-crit-bg:  #fee2e2;
+  --color-crit-fg:  #991b1b;
+  --color-info:     #1d4ed8;
+  --color-info-bg:  #dbeafe;
+  --color-info-fg:  #1e40af;
+
+  /* Tipografías → font-cmd, font-body */
+  --font-cmd:  "Barlow Condensed", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+}
+
+/* ── Variables CSS directas para uso en CSS plano (no Tailwind) ─────────── */
+:root {
+  --col-w:    52px;
+  --header-h: 52px;
+
+  --shadow-1:     0 1px 2px rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.04);
+  --shadow-2:     0 4px 12px rgba(0,0,0,.08);
+  --shadow-modal: 0 24px 64px rgba(0,0,0,.18);
+  --ring-focus:   0 0 0 2px #ffffff, 0 0 0 4px #3b82f6;
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────────────── */
+.dark, :root[data-theme="dark"] {
+  --color-fg-1:     #f9fafb;
+  --color-fg-2:     #d1d5db;
+  --color-fg-3:     #9ca3af;
+  --color-bg-app:   #09090b;
+  --color-bg-panel: #18181b;
+  --color-bg-muted: #27272a;
+  --color-border-1: #27272a;
+  --color-border-2: #3f3f46;
+}
+
+/* ── Estilos base globales ──────────────────────────────────────────────── */
+@layer base {
+  html, body {
+    font-family: var(--font-cmd);
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 1.35;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-cmd);
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--ring-focus);
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: #FFD60A;
+    color: #000;
+  }
+}

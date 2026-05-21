@@ -76,46 +76,40 @@ jobs:
           [ $FAIL -eq 0 ] && echo "✅ Todas las migraciones siguen la convención." || exit 1
 
   # --------------------------------------------------------------------------
-  # 3. Frontend: lint + formato + tipos (activo a partir del Sprint 5)
+  # 3. Frontend: build + lint + formato + tipos + tests (Sprint 5+)
   # --------------------------------------------------------------------------
   frontend:
-    name: Frontend (lint + prettier + tsc)
+    name: Frontend (build + lint + prettier + tsc + vitest)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Comprobar si el proyecto frontend está inicializado
-        id: check_pkg
-        run: |
-          if [ -f "package.json" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "ℹ️  package.json no existe todavía (se creará en Sprint 5). Skipping."
-          fi
-
       - name: Setup Node.js
-        if: steps.check_pkg.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
       - name: Instalar dependencias
-        if: steps.check_pkg.outputs.exists == 'true'
         run: npm ci
 
       - name: ESLint
-        if: steps.check_pkg.outputs.exists == 'true'
         run: npm run lint
 
       - name: Prettier (verificar formato)
-        if: steps.check_pkg.outputs.exists == 'true'
         run: npm run format:check
 
-      - name: TypeScript (sin emitir)
-        if: steps.check_pkg.outputs.exists == 'true'
+      - name: TypeScript (verificar tipos)
         run: npm run typecheck
+
+      - name: Tests unitarios
+        run: npm test
+
+      - name: Build de producción
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: http://localhost:54321
+          VITE_SUPABASE_ANON_KEY: placeholder-ci-key
