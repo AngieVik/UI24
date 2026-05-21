@@ -11,7 +11,12 @@
       "Bash(npm install *)",
       "Bash(dir D:\\\\Proyectos\\\\UI24)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "mcp__Desktop_Commander__list_directory",
+      "mcp__Desktop_Commander__get_file_info",
+      "mcp__Desktop_Commander__start_process",
+      "mcp__Desktop_Commander__read_process_output",
+      "mcp__Desktop_Commander__read_file"
     ]
   }
 }
