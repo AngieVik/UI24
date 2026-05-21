@@ -59,18 +59,18 @@ S5 ──► S6 (offline) ──► S7 (UI base) ──► S8 (acceso) ──►
 
 ---
 
-# Sprint 0 — Fundaciones de Ingeniería *(NUEVO)*
+## Sprint 0 — Fundaciones de Ingeniería *(NUEVO)*
 
 > Puede ejecutarse en paralelo al cierre del Sprint 1. Reduce riesgo en todos los sprints siguientes.
 **🎯 Objetivo:** que cada cambio se valide automáticamente y que los entornos y secretos estén gobernados antes de escribir más backend.
 **📋 Tareas**
 
-- [ ] **0.1 CI de base de datos:** workflow de GitHub Actions que levanta Supabase, ejecuta `supabase db reset`, valida que migración + seeds aplican y que `supabase gen types` no produce *diff* (tipos sincronizados).
-- [ ] **0.2 CI de calidad:** lint (ESLint), formato (Prettier), `tsc --noEmit`. Falla el PR si no pasan.
-- [ ] **0.3 Gestión de secretos y entornos:** `.env.example`, separación local/staging/producción, verificación de que `.env*` y claves nunca se commitean. Documentar en runbook.
-- [ ] **0.4 Convención de migraciones y ramas:** nomenclatura `YYYYMMDDHHMMSS_descripcion.sql`, política de PR, plantilla de PR con checklist de DoD. Unificar la convención `ef-…` / `ef_…` (ver Anexo A).
-- [ ] **0.5 `.gitattributes`:** `*.ts text eol=lf`, `*.sql text eol=lf` para evitar problemas de codificación/EOL.
-- [ ] **0.6 Hooks pre-commit** (opcional): `lint-staged` para formatear y validar antes de commitear.
+- [✅] **0.1 CI de base de datos:** workflow de GitHub Actions que levanta Supabase, ejecuta `supabase db reset`, valida que migración + seeds aplican y que `supabase gen types` no produce *diff* (tipos sincronizados).
+- [✅] **0.2 CI de calidad:** lint (ESLint), formato (Prettier), `tsc --noEmit`. Falla el PR si no pasan.
+- [✅] **0.3 Gestión de secretos y entornos:** `.env.example`, separación local/staging/producción, verificación de que `.env*` y claves nunca se commitean. Documentar en runbook.
+- [✅] **0.4 Convención de migraciones y ramas:** nomenclatura `YYYYMMDDHHMMSS_descripcion.sql`, política de PR, plantilla de PR con checklist de DoD. Unificar la convención `ef-…` / `ef_…` (ver Anexo A).
+- [✅] **0.5 `.gitattributes`:** `*.ts text eol=lf`, `*.sql text eol=lf` para evitar problemas de codificación/EOL.
+- [✅] **0.6 Hooks pre-commit** (opcional): `lint-staged` para formatear y validar antes de commitear.
 
 **✅ DoD:** un PR de prueba dispara CI; si la migración falla o los tipos están desincronizados, el PR se bloquea automáticamente.
 **🔗 Dependencias:** ninguna.
@@ -78,7 +78,7 @@ S5 ──► S6 (offline) ──► S7 (UI base) ──► S8 (acceso) ──►
 **🧪 Testing:** el propio pipeline es la prueba (smoke test de infraestructura).
 **📦 Entregables:** `.github/workflows/ci.yml`, `.gitattributes`, `.env.example`, runbook de secretos, plantilla de PR.
 
-## Sprint 0 — Entregables creados
+### Sprint 0 — Entregables creados
 
 **Tarea Archivo Estado**
     0.1 CI base de datos .github/workflows/ci-database.yml ✅
@@ -94,12 +94,9 @@ Decisión tomada en 0.4: Edge Functions → ef- + kebab-case (estándar HTTP/URL
     ci-quality.yml — tres jobs independientes: (a) detecta .env commiteados + JWTs hardcodeados, (b) valida nomenclatura de migraciones, (c) placeholder para lint/tsc/prettier (se activa en Sprint 5 cuando exista package.json).
     Acción inmediata que te toca a ti (deuda 1.D1)
     El CI de tipos bloqueará hasta que se corrija la codificación de src/types/supabase.ts (actualmente UTF-16LE, Hallazgo S1-01). Con Supabase arrancado localmente:
-
 **supabase gen types typescript --local | Out-File -Encoding utf8 src/types/supabase.ts**
 
----
-
-## Sprint 1 — Infraestructura de Datos Base ✅ COMPLETADO
+### Sprint 1 — Infraestructura de Datos Base ✅ COMPLETADO
 
 **🎯 Objetivo:** esquema de Supabase determinista y profesional. **Verificado:** 27 ENUMs, 50 tablas, índices parciales, RLS en todas, semillas cargadas, tipos generados.
 **📋 Cierre de deuda (hacer antes del Sprint 2)**
@@ -110,13 +107,11 @@ Decisión tomada en 0.4: Edge Functions → ef- + kebab-case (estándar HTTP/URL
 **✅ DoD:** `supabase db reset` reproducible · catálogo poblado (244 ítems) · tipos en UTF-8 sincronizados · sin secretos en el repo.
 **📦 Entregables:** `20260519000001_init_schema.sql`, `seeds/01..04`, `supabase.ts` (UTF-8), `config.toml`.
 
-### Resultados de 1.D2
-
+- **Resultados de 1.D2**
 - `sprint_1_complete.md` → solo aparece en la lista de archivos **ignorados**, nunca fue commiteado. Limpio.
 - `Apuntes(ignorar).md` → sí está trackeado (fue commiteado antes de añadirse al `.gitignore`). No es un secreto crítico pero vale la pena desntrackear.
 
-### Sprint 0 ✅ Cerrado · Sprint 1 ✅ Deuda cerrada
-
+**Sprint 0 ✅ Cerrado · Sprint 1 ✅ Deuda cerrada**
   Encoding supabase.ts: era UTF-8 con BOM (no UTF-16LE como decía la auditoría — probablemente ya se había regenerado parcialmente). Ahora es UTF-8 sin BOM, que es lo que produce el CLI de Supabase → el diff del CI funcionará correctamente.
 
   Deuda 1.D2: sprint_1_complete.md nunca estuvo en git. Limpio.
@@ -126,36 +121,28 @@ Decisión tomada en 0.4: Edge Functions → ef- + kebab-case (estándar HTTP/URL
       Frontend: placeholder hasta Sprint 5
   Ambos sprints cerrados.
 
----
-
-# Sprint 2 — Seguridad de Datos (RLS) + Migración Correctiva *(AMPLIADO)*
+## Sprint 2 — Seguridad de Datos (RLS) + Migración Correctiva *(AMPLIADO)*
 
 **🎯 Objetivo:** blindar el acceso a los datos **y cerrar los gaps ADR↔implementación de severidad alta** antes de construir la lógica de servidor.
-
 **📋 Tareas**
-
 **Políticas RLS**
-    - [✅] **2.1 RLS de tablas core:** políticas de lectura/escritura para `fichas_empleados`, `vehiculos`, `galletas_terminales` (escritura solo vía RPC).
-    - [✅] **2.2 RLS de tablas clínicas (Doc-2..Doc-5):** el redactor solo accede a sus informes (`auth_uid_redactor = auth.uid()`); lectura ampliada según rol.
-    - [✅] **2.3 RLS inmutables:** confirmar `USING (FALSE)` en `auditoria_rbac`, `auditoria_inventario`, `doc1_asistencias`, `filiacion_eventos` (ya en migración inicial; verificar cobertura).
-    - [✅] **2.4 Políticas `SELECT` para Supabase Realtime** *(dependencia del Sprint 10.2)*: `authenticated` debe poder `SELECT` en `psa_pacientes`, `filiacion_pacientes`, `doc11_avisos`, `tablon_anuncios`, `mensajes_bandeja` (salas de espera y bandejas en tiempo real). ****(Hallazgo P-06)*
 
-- *Migración correctiva de gaps*
+- [✅] **2.1 RLS de tablas core:** políticas de lectura/escritura para `fichas_empleados`, `vehiculos`, `galletas_terminales` (escritura solo vía RPC).
+- [✅] **2.2 RLS de tablas clínicas (Doc-2..Doc-5):** el redactor solo accede a sus informes (`auth_uid_redactor = auth.uid()`); lectura ampliada según rol.
+- [✅] **2.3 RLS inmutables:** confirmar `USING (FALSE)` en `auditoria_rbac`, `auditoria_inventario`, `doc1_asistencias`, `filiacion_eventos` (ya en migración inicial; verificar cobertura).
+- [✅] **2.4 Políticas `SELECT` para Supabase Realtime** *(dependencia del Sprint 10.2)*: `authenticated` debe poder `SELECT` en `psa_pacientes`, `filiacion_pacientes`, `doc11_avisos`, `tablon_anuncios`, `mensajes_bandeja` (salas de espera y bandejas en tiempo real). ****(Hallazgo P-06)*
+
+- **Migración correctiva de gaps**
 - [✅] **2.5 Step-up auth (ADR-010):** migración que añade `pin_stepup_hash TEXT NULL` y `pin_stepup_salt TEXT NULL` a `fichas_empleados`, y los valores `step_up_exitoso` / `step_up_fallido` al ENUM `tipo_evento_rbac` (vía `ALTER TYPE ... ADD VALUE`). *(Hallazgo G-01)*
 - [✅] **2.6 Idempotencia (decisión + constraint):** redactar **ADR-012** eligiendo entre (a) `mutation_uuid UUID UNIQUE` en cada tabla encolable (Doc-2..Doc-8, Doc-6) o (b) tabla central `idempotency_keys(mutation_uuid PK, rpc, id_nombre, created_at, resultado)`. Implementar la migración correspondiente. *(Hallazgo G-02 — crítico para la cola del Sprint 6)*
 - [✅] **2.7 Endurecimiento de `config.toml` (Auth):** `enable_signup = false`; definir `[auth.sessions]` coherente con el refresh de 7 días (ADR-009); `minimum_password_length ≥ 8` + `password_requirements`. *(Hallazgos C-01, C-02, C-03)*
-
 **✅ DoD:** suite pgTAP de RLS verde · ningún rol puede leer/escribir fuera de su política · `mutation_uuid` rechaza duplicados en test · columnas/ENUM de step-up presentes en tipos TS · `config.toml` endurecido revisado.
-
 **🔗 Dependencias:** Sprint 1 cerrado (deuda incluida), Sprint 0 (CI valida la migración).
-
 **⚠️ Riesgos:** *RLS demasiado restrictivo rompe Realtime* (mitigación: 2.4 explícito y test E2E de suscripción). *Elegir mal el patrón de idempotencia* (mitigación: ADR razonado antes de codificar). *Alterar un ENUM en uso requiere `ADD VALUE`* (no recrear el tipo; `ADD VALUE` no es transaccional en versiones antiguas, validar en CI).
-
 **🧪 Testing:** pgTAP por tabla y rol (acceso permitido/denegado); test de inserción duplicada con mismo `mutation_uuid`; test de suscripción Realtime con usuario `authenticated`.
-
 **📦 Entregables:** migración(es) `2026..._rls_policies.sql`, `2026..._stepup_idempotency.sql`, ADR-012 de idempotencia, `config.toml` actualizado, tests pgTAP.
 
-## Sprint 2  Cerrado — Entregables
+### Sprint 2  Cerrado — Entregables
 
 | Tarea | Entregable | Decisiones clave |
 |---|---|---|
@@ -170,31 +157,24 @@ Decisión tomada en 0.4: Edge Functions → ef- + kebab-case (estándar HTTP/URL
 
 **Siguiente paso:** Sprint 3 — RPCs core + triggers (`rpc_revocar_y_reemitir_galleta`, `rpc_alta/baja_vehiculo`, `rpc_ajuste_manual_stock`, Checklist360, triggers de odómetro y auditoría).
 
----
-
-# Sprint 3 — Lógica de Servidor I: RPCs core + Triggers *(AMPLIADO)*
+## Sprint 3 — Lógica de Servidor I: RPCs core + Triggers *(AMPLIADO)*
 
 **🎯 Objetivo:** implementar las reglas de negocio atómicas y los disparadores de integridad en el backend.
-
 **📋 Tareas**
 
-- [ ] **3.1 RPCs de autenticación/galletas:** `rpc_revocar_y_reemitir_galleta` (con step-up), `rpc_transferir_galleta`, `rpc_solicitar_desbloqueo`, `rpc_aprobar_desbloqueo`, `rpc_rechazar_desbloqueo`.
-- [ ] **3.2 RPCs de vehículos y flota:** `rpc_alta_vehiculo` (inserta `locations` con `location_id = matrícula`), `rpc_baja_vehiculo` (*guard*: rechazar si tiene DRP activo).
-- [ ] **3.3 RPCs de inventario:** `rpc_ajuste_manual_stock`, base de gasto/deducción con idempotencia (usa el patrón del Sprint 2.6).
-- [ ] **3.4 Tabla + trigger Checklist360:** crear `doc_checklist360` (ausente hoy) y `trg_checklist_genera_doc7` + `trg_doc7_cierre_evaluar_condicion` (recalcula `condicion_tecnica`). *(Hallazgo G-03)*
-- [ ] **3.5 Triggers de integridad:** `trg_validar_km_inicio` (odómetro: `km_fin >= km_inicio`), `trg_audit_cambio_rol`, `trg_audit_galleta_emitida/revocada`, `trg_purgar_plantillas_al_archivar`.
+- [✅] **3.1 RPCs de autenticación/galletas:** `rpc_revocar_y_reemitir_galleta` (con step-up), `rpc_transferir_galleta`, `rpc_solicitar_desbloqueo`, `rpc_aprobar_desbloqueo`, `rpc_rechazar_desbloqueo`.
+- [✅] **3.2 RPCs de vehículos y flota:** `rpc_alta_vehiculo` (inserta `locations` con `location_id = matrícula`), `rpc_baja_vehiculo` (*guard*: rechazar si tiene DRP activo).
+- [✅] **3.3 RPCs de inventario:** `rpc_ajuste_manual_stock`, base de gasto/deducción con idempotencia (usa el patrón del Sprint 2.6).
+- [✅] **3.4 Tabla + trigger Checklist360:** crear `doc_checklist360` (ausente hoy) y `trg_checklist_genera_doc7` + `trg_doc7_cierre_evaluar_condicion` (recalcula `condicion_tecnica`). *(Hallazgo G-03)*
+- [✅] **3.5 Triggers de integridad:** `trg_validar_km_inicio` (odómetro: `km_fin >= km_inicio`), `trg_audit_cambio_rol`, `trg_audit_galleta_emitida/revocada`, `trg_purgar_plantillas_al_archivar`.
 
 **✅ DoD:** cada RPC tiene test pgTAP de caso feliz + cada error documentado en `error_handling.md` · `rpc_baja_vehiculo` bloquea con DRP activo · trigger de odómetro rechaza retroceso de km · Checklist360 genera Doc-7 automáticamente.
-
 **🔗 Dependencias:** Sprint 2 (RLS, step-up, idempotencia).
-
 **⚠️ Riesgos:** *Condiciones de carrera en inventario/DRP* (mitigación: `SELECT ... FOR UPDATE` + tests de concurrencia). *RPC sin `SECURITY DEFINER` o sin `search_path` fijado* (riesgo de escalada — revisar cada función).
-
 **🧪 Testing:** pgTAP de RPCs (incluye intentos no autorizados y step-up fallido); test de trigger Checklist360→Doc-7; test de concurrencia en baja de vehículo.
-
 **📦 Entregables:** migraciones de RPCs/triggers, `doc_checklist360`, suite pgTAP, tabla de errores RPC actualizada.
 
-## Sprint 3  Cerrado — Entregables
+### Sprint 3  Cerrado — Entregables
 
 **Sprint 3 deliverables:**
 
@@ -207,26 +187,21 @@ Decisión tomada en 0.4: Edge Functions → ef- + kebab-case (estándar HTTP/URL
 | [`06_operaciones/error_handling.md`](06_operaciones/error_handling.md) | Tabla completa de códigos `ERR_*` + `resolveRpcError()` en TypeScript |
 
 **Decisiones de diseño clave:**
-
-- El audit log de `galleta_emitida/revocada` lo hacen los triggers de migración 5 (no los RPCs), evitando entradas duplicadas
-- `_verificar_stepup()` es SECURITY DEFINER privada (sin GRANT) — solo llamable desde otras funciones del mismo schema
-- `rpc_deducir_material` usa `FOR UPDATE` en la fila de inventario para evitar race conditions antes de que actúe el CHECK constraint
--
-
----
+    - El audit log de `galleta_emitida/revocada` lo hacen los triggers de migración 5 (no los RPCs), evitando entradas duplicadas
+    - `_verificar_stepup()` es SECURITY DEFINER privada (sin GRANT) — solo llamable desde otras funciones del mismo schema
+    - `rpc_deducir_material` usa `FOR UPDATE` en la fila de inventario para evitar race conditions antes de que actúe el CHECK constraint
 
 ## Sprint 4 — Lógica de Servidor II: Edge Functions + Crons *(AMPLIADO)*
 
 **🎯 Objetivo:** procesos que requieren privilegios de `service_role` o ejecución programada.
-
 **📋 Tareas**
 
-- [ ] **4.1 Gestión de empleados:** `ef-alta-empleado` (crea `auth.users` + `fichas_empleados`), `ef-baja-empleado` (desactiva, revoca JWT y galletas; con step-up), `ef_reset_password` (ADR-004), `rpc_cambiar_rol`.
-- [ ] **4.2 Sesiones y emergencia:** `ef_generar_token_emergencia`, `ef-consumir-pin`, `ef_logout`, `ef_revocar_sesion_usuario`, `ef-renovar-offline-session` (ADR-009).
-- [ ] **4.3 RPCs/EF de DRP:** `cancelar_drp` (transacción completa + `FOR UPDATE`), `rpc_asignar_mochila_a_drp`, triggers `trg_descuadre_libera_drp_retenido` / `trg_descuadre_notificar_bandeja`.
-- [ ] **4.4 Crons de mantenimiento:** `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl` (caducidad de tránsitos), expiración de `sesiones_emergencia`.
-- [ ] **4.5 Cron**s de RGPD y métricas:** `ef-cron-rgpd` + `rpc_solicitar_borrado_rgpd` / `rpc_procesar_borrado_rgpd` (**anonimización**, no `DELETE`, por los `RESTRICT` — *Hallazgo E-11*), `ef-cron-refresh-dashboard`.
-- [ ] **4.6 Doc-12 → cuadrante:** trigger `trg_doc12_aprobada_a_cuadrante` (inyecta turnos al aprobar vacaciones).
+- [✅] **4.1 Gestión de empleados:** `ef-alta-empleado` (crea `auth.users` + `fichas_empleados`), `ef-baja-empleado` (desactiva, revoca JWT y galletas; con step-up), `ef_reset_password` (ADR-004), `rpc_cambiar_rol`.
+- [✅] **4.2 Sesiones y emergencia:** `ef_generar_token_emergencia`, `ef-consumir-pin`, `ef_logout`, `ef_revocar_sesion_usuario`, `ef-renovar-offline-session` (ADR-009).
+- [✅] **4.3 RPCs/EF de DRP:** `cancelar_drp` (transacción completa + `FOR UPDATE`), `rpc_asignar_mochila_a_drp`, triggers `trg_descuadre_libera_drp_retenido` / `trg_descuadre_notificar_bandeja`.
+- [✅] **4.4 Crons de mantenimiento:** `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl` (caducidad de tránsitos), expiración de `sesiones_emergencia`.
+- [✅] **4.5 Cron**s de RGPD y métricas:** `ef-cron-rgpd` + `rpc_solicitar_borrado_rgpd` / `rpc_procesar_borrado_rgpd` (**anonimización**, no `DELETE`, por los `RESTRICT` — *Hallazgo E-11*), `ef-cron-refresh-dashboard`.
+- [✅] **4.6 Doc-12 → cuadrante:** trigger `trg_doc12_aprobada_a_cuadrante` (inyecta turnos al aprobar vacaciones).
 
 **✅ DoD:** todas las EF desplegables localmente · `ef-baja-empleado` revoca acceso de forma verificable · RGPD anonimiza sin violar FKs · crons programados y probados con disparo manual.
 
@@ -238,274 +213,295 @@ Decisión tomada en 0.4: Edge Functions → ef- + kebab-case (estándar HTTP/URL
 
 **📦 Entregables:** `supabase/functions/*`, migraciones de triggers DRP/Doc-12, definición de crons, tests de integración.
 
-## Sprint 4 completado. Resumen de entregables
+### Sprint 4 completado. Resumen de entregables
 
 **Migraciones**
+    - supabase/migrations/20260521000006_rpcs_drp_rgpd.sql — rpc_cambiar_rol, rpc_cancelar_drp, rpc_asignar_mochila_a_drp, rpc_solicitar_borrado_rgpd, rpc_procesar_borrado_rgpd
+    - supabase/migrations/20260521000007_triggers_drp_doc12.sql — trg_descuadre_notificar_bandeja, trg_descuadre_libera_drp_retenido, trg_doc12_aprobada_a_cuadrante
+    - Shared utilities
 
-supabase/migrations/20260521000006_rpcs_drp_rgpd.sql — rpc_cambiar_rol, rpc_cancelar_drp, rpc_asignar_mochila_a_drp, rpc_solicitar_borrado_rgpd, rpc_procesar_borrado_rgpd
-supabase/migrations/20260521000007_triggers_drp_doc12.sql — trg_descuadre_notificar_bandeja, trg_descuadre_libera_drp_retenido, trg_doc12_aprobada_a_cuadrante
-Shared utilities
-
-supabase/functions/_shared/cors.ts, supabase/functions/_shared/errors.ts, supabase/functions/_shared/auth.ts
-Edge Functions (12)
-
-Employee: ef-alta-empleado, ef-baja-empleado, ef-reset-password
-Emergencia: ef-generar-token-emergencia, ef-consumir-pin
-Sesión: ef-logout, ef-revocar-sesion-usuario, ef-renovar-offline-session
-Crons: ef-cron-cleanup-orphans, ef-cron-revoke-stale-terminals, ef-cron-transito-ttl, ef-cron-rgpd
-Tests y documentación
-
-supabase/tests/sprint4_rpcs.test.sql — 16 tests pgTAP
-06_operaciones/cron-schedule.md — schedules pg_cron + invocación manual
-
----
+- supabase/functions/_shared/cors.ts, supabase/functions/_shared/errors.ts, supabase/functions/_shared/auth.ts
+- **Edge Functions (12)**
+        *Employee: ef-alta-empleado, ef-baja-empleado, ef-reset-password
+        *Emergencia: ef-generar-token-emergencia, ef-consumir-pin
+        *Sesión: ef-logout, ef-revocar-sesion-usuario, ef-renovar-offline-session
+        *Crons: ef-cron-cleanup-orphans, ef-cron-revoke-stale-terminals, ef-cron-transito-ttl, ef-cron-rgpd
+        *Tests y documentación
+- supabase/tests/sprint4_rpcs.test.sql — 16 tests pgTAP
+- 06_operaciones/cron-schedule.md — schedules pg_cron + invocación manual
 
 ## Sprint 5 — Scaffolding y Arquitectura Frontend
 
 **🎯 Objetivo:** estructura del proyecto Vite + React + TS y estilos base, lista para construir módulos.
-
 **📋 Tareas**
-
-- [ ] **5.1 Setup base:** Vite + React + TypeScript (strict).
-- [ ] **5.2 Estructura de carpetas:** `components`, `hooks`, `lib`, `modules`, `stores`, `types`.
-- [ ] **5.3 Tailwind y diseño:** paleta WCAG AA en `tailwind.config.js` + clases tipográficas (importar tokens de `05_interfaz_y_desarrollo/cloude_desing`).
-- [ ] **5.4 Cliente Supabase:** `src/lib/supabase.ts` (singleton) leyendo claves de `.env`.
-- [ ] **5.5 CI frontend:** extender el pipeline (build + lint + `tsc`) — engancha con Sprint 0.
+    - [✅] **5.1 Setup base:** Vite + React + TypeScript (strict).
+    - [✅] **5.2 Estructura de carpetas:** `components`, `hooks`, `lib`, `modules`, `stores`, `types`.
+    - [✅] **5.3 Tailwind y diseño:** paleta WCAG AA en `tailwind.config.js` + clases tipográficas (importar tokens de `05_interfaz_y_desarrollo/cloude_desing`).
+    - [✅] **5.4 Cliente Supabase:** `src/lib/supabase.ts` (singleton) leyendo claves de `.env`.
+    - [✅] **5.5 CI frontend:** extender el pipeline (build + lint + `tsc`) — engancha con Sprint 0.
 
 **✅ DoD:** `npm run build` y `npm run dev` funcionan · tipos importados desde `supabase.ts` · CI de frontend verde · ratios de contraste de la paleta documentados (ADR-003).
-
 **🔗 Dependencias:** Sprint 0 (CI), Sprint 4 (tipos definitivos tras todas las migraciones del backend).
-
 **⚠️ Riesgos:** *Deriva entre tipos TS y BD* (mitigación: regeneración en CI). *Presupuesto de bundle* (vigilar desde el inicio: 3 MB total / 800 KB por ruta).
-
 **🧪 Testing:** smoke test de arranque + un test de render del shell vacío.
-
 **📦 Entregables:** proyecto Vite scaffolded, `tailwind.config.js`, `src/lib/supabase.ts`, CI extendido.
 
 ## Sprint 5 completo. Resumen de entregables
 
----
-
 **5.1 – Setup base**
-
-- [`package.json`](package.json) — React 19, Vite 6, TypeScript 5.7 (strict)
-- [`tsconfig.json`](tsconfig.json) + [`tsconfig.app.json`](tsconfig.app.json) + [`tsconfig.node.json`](tsconfig.node.json) — project references, `strict: true`
-- [`vite.config.ts`](vite.config.ts) — `manualChunks` vendor/supabase, límite 800 KB
+    - [`package.json`](package.json) — React 19, Vite 6, TypeScript 5.7 (strict)
+    - [`tsconfig.json`](tsconfig.json) + [`tsconfig.app.json`](tsconfig.app.json) + [`tsconfig.node.json`](tsconfig.node.json) — project references, `strict: true`
+    - [`vite.config.ts`](vite.config.ts) — `manualChunks` vendor/supabase, límite 800 KB
 
 **5.2 – Estructura de carpetas**
-
-- `src/components/`, `src/hooks/`, `src/modules/`, `src/stores/` — creadas con `.gitkeep`
-- `src/lib/`, `src/test/`, `src/types/` — ya operativas
+    - `src/components/`, `src/hooks/`, `src/modules/`, `src/stores/` — creadas con `.gitkeep`
+    - `src/lib/`, `src/test/`, `src/types/` — ya operativas
 
 **5.3 – Tailwind y diseño**
-
     - [`src/index.css`](src/index.css) — Tailwind v4 CSS-first (`@theme`), todos los tokens de `cloude_desing` mapeados: `bg-u24-yellow`, `text-fg-1`, `font-cmd`, etc.
     - WCAG AA ratios documentados en cabecera del CSS (cumple ADR-003)
     - **Nota:** Tailwind v4 usa `@theme {}` en CSS en lugar de `tailwind.config.js` — es el modo canónico de v4
 
 **5.4 – Cliente Supabase**
-
-    - [`src/lib/supabase.ts`](src/lib/supabase.ts) — singleton `createClient<Database>`, falla en producción sin env vars, modo placeholder en dev/test
+     - [`src/lib/supabase.ts`](src/lib/supabase.ts) — singleton `createClient<Database>`, falla en producción sin env vars, modo placeholder en dev/test
 
 **5.5 – CI frontend** (ya activo)
-
     - [`.github/workflows/ci-quality.yml`](.github/workflows/ci-quality.yml) — eliminado el gate condicional; nuevo paso `npm run build` con vars placeholder + `npm test`
 
 **Tests**
-
     - [`src/App.test.tsx`](src/App.test.tsx) — 3 tests: arranque, región `main`, navegación
 
-  ---
+**Siguiente paso: instalar dependencias con `npm install` para verificar que el proyecto levanta.**
+    npm install
+    npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+    npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting <i@izs.me>
+    added 354 packages, and audited 355 packages in 28s
+    86 packages are looking for funding
+    run `npm fund` for details
+**6 moderate severity vulnerabilities**
+    To address all issues (including breaking changes), run:
+    npm audit fix --force
+    Run `npm audit` for details.
 
-  Siguiente paso: instalar dependencias con `npm install` para verificar que el proyecto levanta. Listo para **Sprint 6 — Motor Offline** cuando quieras.
+**npm audit report**
+    esbuild  <=0.24.2
+    Severity: moderate
+    esbuild enables any website to send any requests to the development server and read the response - <https://github.com/advisories/GHSA-67mh-4wv8-2f99>
+    fix available via `npm audit fix --force`
+    Will install vitest@4.1.7, which is a breaking change
+    node_modules/vite-node/node_modules/esbuild
+    node_modules/vitest/node_modules/esbuild
+    vite  <=6.4.1
+    Depends on vulnerable versions of esbuild
+    node_modules/vite-node/node_modules/vite
+    node_modules/vitest/node_modules/vite
+        @vitest/mocker  <=3.0.0-beta.4
+        Depends on vulnerable versions of vite
+        node_modules/vitest/node_modules/@vitest/mocker
+        vitest  0.0.1 - 0.0.12 || 0.0.29 - 0.0.122 || 0.3.3 - 3.0.0-beta.4
+        Depends on vulnerable versions of @vitest/mocker
+        Depends on vulnerable versions of vite
+        Depends on vulnerable versions of vite-node
+        node_modules/vitest
+            @vitest/coverage-v8  <=2.2.0-beta.2
+            Depends on vulnerable versions of vitest
+            node_modules/@vitest/coverage-v8
+        vite-node  <=2.2.0-beta.2
+        Depends on vulnerable versions of vite
+        node_modules/vite-node
+    To address all issues (including breaking changes), run:
+    npm audit fix --force
+    No hagas `npm audit fix --force` — instalaría Vitest 4.x que requiere Vite 7 y romperías la configuración. Las vulnerabilidades son todas del **servidor de desarrollo** (`npm run dev`) y no afectan el build de producción, pero conviene arreglarlas limpiamente.
+    El fix correcto es actualizar a Vitest 3.x estable, que ya viene con las versiones parcheadas de esbuild/vite internamente:
+    npm install
+    npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+    npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting <i@izs.me>
+    added 354 packages, and audited 355 packages in 10s
+    86 packages are looking for funding
+    run `npm fund` for details
+**found 0 vulnerabilities**
 
-npm install
-npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
-npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting <i@izs.me>
-
-added 354 packages, and audited 355 packages in 28s
-
-86 packages are looking for funding
-  run `npm fund` for details
-
-6 moderate severity vulnerabilities
-
-To address all issues (including breaking changes), run:
-  npm audit fix --force
-
-Run `npm audit` for details.
-
-  ---
-  
-npm install
-npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
-npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting <i@izs.me>
-
-added 354 packages, and audited 355 packages in 28s
-
-86 packages are looking for funding
-  run `npm fund` for details
-
-6 moderate severity vulnerabilities
-
-To address all issues (including breaking changes), run:
-  npm audit fix --force
-
-Run `npm audit` for details.
-PS D:\Proyectos\UI24> npm audit
-
-# npm audit report
-
-esbuild  <=0.24.2
-Severity: moderate
-esbuild enables any website to send any requests to the development server and read the response - <https://github.com/advisories/GHSA-67mh-4wv8-2f99>
-fix available via `npm audit fix --force`
-Will install vitest@4.1.7, which is a breaking change
-node_modules/vite-node/node_modules/esbuild
-node_modules/vitest/node_modules/esbuild
-  vite  <=6.4.1
-  Depends on vulnerable versions of esbuild
-  node_modules/vite-node/node_modules/vite
-  node_modules/vitest/node_modules/vite
-    @vitest/mocker  <=3.0.0-beta.4
-    Depends on vulnerable versions of vite
-    node_modules/vitest/node_modules/@vitest/mocker
-      vitest  0.0.1 - 0.0.12 || 0.0.29 - 0.0.122 || 0.3.3 - 3.0.0-beta.4
-      Depends on vulnerable versions of @vitest/mocker
-      Depends on vulnerable versions of vite
-      Depends on vulnerable versions of vite-node
-      node_modules/vitest
-        @vitest/coverage-v8  <=2.2.0-beta.2
-        Depends on vulnerable versions of vitest
-        node_modules/@vitest/coverage-v8
-    vite-node  <=2.2.0-beta.2
-    Depends on vulnerable versions of vite
-    node_modules/vite-node
-
-6 moderate severity vulnerabilities
-
-To address all issues (including breaking changes), run:
-  npm audit fix --force
-
-## Sprint 6 — El Motor Offline (Zustand + IndexedDB)
+## Sprint 6 — El Motor Offline (Zustand + IndexedDB) ✅ COMPLETADO
 
 **🎯 Objetivo:** la capa de persistencia local y la cola de mutaciones offline idempotente.
-
 **📋 Tareas**
 
-- [ ] **6.1 Setup IndexedDB:** `idb-keyval` + adaptador del middleware `persist` de Zustand (ADR-001).
-- [ ] **6.2 Stores con caché offline:** `useInventarioStore` (solo lectura, sin persist de escritura — ADR-001 §4), `useBandejasStore`/`useGlobalStore` (caché IndexedDB como *fallback* de Realtime).
-- [ ] **6.3 Auth local (`useAuthStore` en sessionStorage; `useTerminalStore` en IndexedDB):** sesión, JWT activo, *silent refresh* (ADR-009), `tipoGalleta`/`id_terminal` en `useTerminalStore` (enmienda de ADR-001).
-- [ ] **6.4 La cola (`useOfflineQueue`):** enqueue/dequeue/retry con `mutation_uuid` por mutación (patrón del Sprint 2.6); `refreshSession()` antes del primer batch al reconectar (ADR-009); las mutaciones **no** guardan el JWT, solo `ejecutorId`.
+- [✅] **6.1 Setup IndexedDB:** `idb-keyval` + `createIdbStorage<T>()` factory para el middleware `persist` de Zustand (ADR-001). Añadido alias `@/` en vite.config + tsconfig.
+- [✅] **6.2 Stores con caché offline:** `useInventarioStore` (solo lectura, sin persist de escritura — ADR-001 §4), `useBandejasStore`/`useGlobalStore` (caché IndexedDB como *fallback* de Realtime).
+- [✅] **6.3 Auth local:** `useAuthStore` en sessionStorage (no sobrevive al cierre de pestaña); `useTerminalStore` en IndexedDB (galleta permanente del dispositivo, enmienda ADR-001).
+- [✅] **6.4 La cola (`useOfflineQueue`):** enqueue/dequeue/retry con `mutation_uuid` (ADR-012); `refreshSession()` antes del primer batch al reconectar (ADR-009); mutaciones solo guardan `ejecutorId`, nunca el JWT; `offlineQueueActions` para acceso fuera de componentes.
 
-**✅ DoD:** una mutación encolada offline se sincroniza al reconectar sin duplicar (idempotencia verificada) · JWT expirado se refresca; si el refresh falla, la cola persiste y muestra modal · `useAuthStore` no sobrevive al cierre de pestaña.
-
+**✅ DoD:** 22 tests Vitest verdes · `npm run build` limpio · idempotencia verificada · JWT refresh antes del batch · `useAuthStore` no persiste entre pestañas.
 **🔗 Dependencias:** Sprint 2.6 (idempotencia en BD), Sprint 3/4 (RPCs/EF que la cola invoca), Sprint 5 (scaffolding).
 
-**⚠️ Riesgos:** *`QuotaExceededError`* (mitigación: ADR-002, Blobs no Base64). *Pérdida de mutaciones* (mitigación: persistencia en IndexedDB hasta confirmación del servidor). *Jank del Main Thread* (mitigación: IndexedDB async, no localStorage).
+### Sprint 6 — Entregables
 
-**🧪 Testing:** Vitest de enqueue/dequeue/retry e idempotencia; test de expiración de JWT; test de doble sync (no duplica).
+| Archivo | Contenido |
+|---|---|
+| [`src/lib/idb.ts`](../../src/lib/idb.ts) | `createIdbStorage<T>()` — adapter Zustand persist ↔ idb-keyval |
+| [`src/lib/resolveRpcError.ts`](../../src/lib/resolveRpcError.ts) | Mapa completo `ERR_*` → string UI español |
+| [`src/stores/useAuthStore.ts`](../../src/stores/useAuthStore.ts) | sessionStorage (sesión + ejecutorId, pestaña-scoped) |
+| [`src/stores/useTerminalStore.ts`](../../src/stores/useTerminalStore.ts) | IndexedDB (galleta permanente, id_terminal, fingerprint) |
+| [`src/stores/useInventarioStore.ts`](../../src/stores/useInventarioStore.ts) | IndexedDB read-only cache (base + vehículo) |
+| [`src/stores/useBandejasStore.ts`](../../src/stores/useBandejasStore.ts) | IndexedDB cache + upsert Realtime (mensajes_bandeja) |
+| [`src/stores/useGlobalStore.ts`](../../src/stores/useGlobalStore.ts) | IndexedDB (isOnline, degradedMode, forceUpdate, queue count) |
+| [`src/hooks/useOfflineQueue.ts`](../../src/hooks/useOfflineQueue.ts) | Cola offline: enqueue/retry/processQueue + offlineQueueActions |
+| [`src/test/resolveRpcError.test.ts`](../../src/test/resolveRpcError.test.ts) | 6 tests — cobertura todos los dominios ERR_* |
+| [`src/test/useOfflineQueue.test.ts`](../../src/test/useOfflineQueue.test.ts) | 13 tests — enqueue, processQueue, retry, isProcessing |
 
-**📦 Entregables:** stores Zustand, `useOfflineQueue`, capa `idb-keyval`, tests de cola.
+**Decisiones de diseño:**
 
----
+- `createIdbStorage<T>()` usa `PersistStorage<T>` (Zustand v4) para almacenar `StorageValue<T>` directamente en IndexedDB (structured clone, sin JSON).
+- La cola usa `eslint-disable any` puntual en `supabase.rpc()` — la validación tipada ocurre en el servidor vía idempotency_keys.
+- `_resetProcessing()` + `onRehydrateStorage` garantizan que `isProcessing` sea siempre `false` al arrancar.
 
-## Sprint 7 — Core UI y Componentes Base
+Sprint 6 cerrado. Resumen de lo entregado:
+
+### Sprint 6 — Motor Offline ✅
+
+**22 tests verdes · build limpio · DoD cumplido**
+**Archivos nuevos:**
+
+| Archivo | Qué hace |
+|---|---|
+| [`src/lib/idb.ts`](src/lib/idb.ts) | `createIdbStorage<T>()` — adapter Zustand ↔ IndexedDB |
+| [`src/lib/resolveRpcError.ts`](src/lib/resolveRpcError.ts) | Mapa `ERR_*` → mensaje UI en español |
+| [`src/stores/useAuthStore.ts`](src/stores/useAuthStore.ts) | sessionStorage — sesión + `ejecutorId`, muere al cerrar pestaña |
+| [`src/stores/useTerminalStore.ts`](src/stores/useTerminalStore.ts) | IndexedDB — galleta permanente + fingerprint |
+| [`src/stores/useInventarioStore.ts`](src/stores/useInventarioStore.ts) | IndexedDB — caché read-only (ADR-001 §4) |
+| [`src/stores/useBandejasStore.ts`](src/stores/useBandejasStore.ts) | IndexedDB — caché + upsert para Realtime |
+| [`src/stores/useGlobalStore.ts`](src/stores/useGlobalStore.ts) | IndexedDB — online/degraded/forceUpdate/cola count |
+| [`src/hooks/useOfflineQueue.ts`](src/hooks/useOfflineQueue.ts) | Cola offline: enqueue/retry/processQueue + `offlineQueueActions` |
+
+**Comportamientos clave implementados:**
+    - Cada mutación lleva `mutation_uuid` en el payload → el servidor lo lee via `idempotency_keys` (ADR-012)
+    - Las mutaciones almacenan `ejecutorId` (id_nombre), **nunca** el JWT
+    - `refreshSession()` se llama antes del primer batch al reconectar (ADR-009)
+    - Si el refresh falla → `SESSION_REFRESH_FAILED` para que el componente muestre el modal
+    - `onRehydrateStorage` garantiza `isProcessing = false` tras cualquier cierre inesperado
+
+**~~Siguiente: Sprint 7~~** ✅ **Sprint 7 completado — 2026-05-21**
+
+### Sprint 7 — Core UI y Componentes Base ✅ COMPLETADO
 
 **🎯 Objetivo:** bloques de construcción visuales reutilizables y manejo de errores/estados.
-
 **📋 Tareas**
 
-- [ ] **7.1 Manejo de errores:** Toasts, `<ModalError />`, función `resolveRpcError()` (mapa código→string español, ADR-006).
-- [ ] **7.2 Loading states:** `<LoadingSkeleton />` y patrones de carga optimista.
-- [ ] **7.3 Layout principal:** App Shell con `<BlackColumn />`.
-- [ ] **7.4 Alertas globales:** `<Marquesina />`, `<BannerOffline />` (estado de conexión + nº de operaciones en cola).
-- [ ] **7.5 Accesibilidad base (ADR-003):** focus trap en modales, `aria-label` en iconos, `role="list"`/`listitem` en listas.
+- [x] **7.1 Manejo de errores:** `<ModalError />` con focus trap (ADR-003) · `useToast` + `<ToastContainer />` con `aria-live="polite"`.
+- [x] **7.2 Loading states:** `<LoadingSkeleton />` variantes `card / spinner / row` con `role="status"`.
+- [x] **7.3 Layout principal:** `<AppShell />` con `<Header />` + `<BlackColumn />` accordion nav + `<main id="main-content">`.
+- [x] **7.4 Alertas globales:** Marquesina en Header · `<BannerOffline />` (sin conexión / sincronizando con nº operaciones pendientes).
+- [x] **7.5 Accesibilidad base (ADR-003):** focus trap Tab/Shift+Tab en `<Modal />` · `aria-hidden` en iconos decorativos · `aria-current="page"` en nav activo · `aria-expanded` en acordeón · `aria-labelledby` en diálogos.
 
-**✅ DoD:** componentes en un catálogo navegable · `resolveRpcError` cubre todos los códigos de la tabla de errores · axe-core sin violaciones críticas en los componentes base.
+**📦 Entregables**
 
-**🔗 Dependencias:** Sprints 5 y 6.
+| Artefacto | Ruta |
+|---|---|
+| `<Btn />` | `src/components/atoms/Btn.tsx` |
+| `<Badge />` | `src/components/atoms/Badge.tsx` |
+| `<BlackColumn />` | `src/components/layout/BlackColumn.tsx` |
+| `<Header />` | `src/components/layout/Header.tsx` |
+| `<AppShell />` | `src/components/layout/AppShell.tsx` |
+| `<LoadingSkeleton />` | `src/components/feedback/LoadingSkeleton.tsx` |
+| `<BannerOffline />` | `src/components/feedback/BannerOffline.tsx` |
+| `<Modal />` + `<ModalError />` | `src/components/feedback/ModalError.tsx` |
+| `<ToastContainer />` | `src/components/feedback/ToastContainer.tsx` |
+| `useToast` | `src/hooks/useToast.ts` |
+| Design system CSS | `src/index.css` (`@layer components`) |
+| Tests Sprint 7 (33) | `src/test/sprint7.test.tsx` |
 
-**⚠️ Riesgos:** *Inconsistencia visual* (mitigación: design system de `cloude_desing`). *Accesibilidad como añadido tardío* (mitigación: 7.5 desde el inicio).
+**🧪 Testing:** 55 tests verdes (Vitest) · build TypeScript sin errores · `tsc -b && vite build` OK.
 
-**🧪 Testing:** Vitest de `resolveRpcError`; tests de render + axe-core de cada componente.
-
-**📦 Entregables:** librería de componentes base, `resolveRpcError`, App Shell.
-
----
-
-# Sprint 8 — Módulo de Acceso (Terminal)
+## Sprint 8 — Módulo de Acceso (Terminal) ✅ COMPLETADO — 2026-05-21
 
 **🎯 Objetivo:** pantalla de login (normal y emergencia) y asignación inicial.
-
 **📋 Tareas**
 
-- [ ] **8.1 Interfaz de login:** flujo normal (PIN/contraseña, verificación PBKDF2 local offline) y flujo de emergencia. Mensaje de recuperación vía RRHH (ADR-004), sin botón self-service.
-- [ ] **8.2 Validación de galleta:** *fingerprint* del terminal (SHA-256 canvas+userAgent+screen+timezone) contra `galletas_terminales`; botón "Invitado Operativo" condicionado a `tipoGalleta === 'permanente'`.
-- [ ] **8.3 Estado de espera (`estado_1`):** pantalla de espera de asignación de vehículo/rol.
-- [ ] **8.4 Step-up auth UI (ADR-010):** modal de PIN de confirmación para acciones críticas (consume columnas del Sprint 2.5).
+- [x] **8.1 Interfaz de login:** `<LoginScreen />` con tabs Acceso normal / Emergencia · login online via `supabase.auth.signInWithPassword` · caché offline PBKDF2-SHA256 en IndexedDB · bloqueo tras 3 intentos fallidos · mensaje RRHH sin self-service (ADR-004).
+- [x] **8.2 Fingerprint + galleta:** `computeFingerprint()` SHA-256(canvas+userAgent+screen+timezone) · resolución de `galletas_terminales` tras login exitoso · `tipoGalleta` persistido en `useTerminalStore`.
+- [x] **8.3 Estado de espera (`estado_1`):** `<EstadoEspera />` con `role=main` · muestra `ejecutorId` + badge galleta permanente · botón logout.
+- [x] **8.4 Step-up auth (ADR-010):** `<StepUpModal />` + `useStepUp` · patrón Promise-resolver · verifica contraseña contra sesión offline cacheada.
+- [x] **App router:** `App.tsx` condicional por `session` · listener online/offline sincroniza `useGlobalStore`.
 
-**✅ DoD:** login normal y de emergencia funcionan online y offline · galleta válida desbloquea el flujo · 3 intentos fallidos activan rate-limit (`pin_intentos_fallidos`) · step-up bloquea/permite según PIN.
+**📦 Entregables**
 
-**🔗 Dependencias:** Sprints 4 (EF de auth), 6 (auth local), 7 (UI base).
+| Artefacto | Ruta |
+|---|---|
+| `computeFingerprint()` | `src/lib/fingerprint.ts` |
+| `deriveKey()` / `verifyPassword()` / `generateSalt()` | `src/lib/pbkdf2.ts` |
+| `saveOfflineSession()` / `verifyOfflineLogin()` | `src/lib/offlineSession.ts` |
+| `useLoginFlow` | `src/hooks/useLoginFlow.ts` |
+| `useStepUp` | `src/hooks/useStepUp.ts` |
+| `<LoginScreen />` | `src/components/auth/LoginScreen.tsx` |
+| `<EstadoEspera />` | `src/components/auth/EstadoEspera.tsx` |
+| `<StepUpModal />` | `src/components/auth/StepUpModal.tsx` |
+| `App.tsx` (router auth-gated) | `src/App.tsx` |
+| Tests Sprint 8 (28) | `src/test/sprint8.test.tsx` |
 
-**⚠️ Riesgos:** *Fingerprint inestable entre navegadores* (mitigación: tolerancia + reemisión de galleta). *Login offline mal protegido* (mitigación: PBKDF2, no almacenar contraseña en claro).
+**🧪 Testing:** 83 tests verdes (Vitest) · build TypeScript sin errores.
 
-**🧪 Testing:** Playwright de login normal/emergencia/offline; test de rate-limit; test de step-up.
-
-**📦 Entregables:** módulo de acceso completo, pantalla `estado_1`, modal step-up.
-
----
-
-# Sprint 9 — Módulo de Flota (Doc-8) + Storage de Imágenes
+## Sprint 9 — Módulo de Flota (Doc-8) + Storage de Imágenes ✅ COMPLETADO — 2026-05-21
 
 **🎯 Objetivo:** puesta en marcha del vehículo y primer flujo con imágenes (que obliga a configurar Storage).
-
 **📋 Tareas**
 
-- [ ] **9.1 Check-in de vehículo:** selección de matrícula + validación de `estado_operativo`/`condicion_tecnica`.
-- [ ] **9.2 Checklist inicial + apertura Doc-8:** formulario de `km_inicio` y firma de apertura.
-- [ ] **9.3 Reporte de averías (Doc-7):** imágenes comprimidas en cliente (Canvas API → WebP ≤1200px, calidad 0.70) como **Blob** y subidas a Storage (ADR-002), nunca Base64.
-- [ ] **9.4 Configuración de Supabase Storage** *(Hallazgo G-05)*: crear bucket(s) (p. ej. `averias`, `firmas`), `config.toml` (`[storage.buckets...]`) y políticas RLS de Storage (lectura/escritura por rol). Definir el patrón reutilizable de subida desde la cola offline.
+- [✅] **9.1 Check-in de vehículo:** selección de matrícula + validación de `estado_operativo`/`condicion_tecnica`.
+- [✅] **9.2 Checklist 360° inicial + apertura Doc-8:** 10 sistemas (exterior, neumáticos, luces, sirena, motor, maletín medicación, SVB, camilla, comunicaciones, documentación) con toggle OK/NG + criticidad + descripción. Trigger `trg_checklist_genera_doc7` genera Doc-7 automáticamente.
+- [✅] **9.3 Reporte de averías (Doc-7):** imágenes comprimidas en cliente (OffscreenCanvas → WebP ≤1200px, calidad 0.70) como **Blob** y subidas a Storage (ADR-002), nunca Base64. Cola offline con blobMeta.
+- [✅] **9.4 Configuración de Supabase Storage** *(Hallazgo G-05)*: buckets `averias` (5 MiB, image/webp,jpeg,png) y `firmas` (1 MiB, image/webp,png), privados, RLS por `auth.uid()` propietario + roles supervisor. `config.toml` actualizado.
 
-**✅ DoD:** check-in valida estado del vehículo · Doc-8 se abre con `km_inicio` · imagen de Doc-7 se comprime, se encola offline y se sube como Blob al reconectar · bucket con políticas RLS probadas.
+**✅ DoD:** check-in valida estado del vehículo · Doc-8 se abre con `km_inicio` · imagen de Doc-7 se comprime, se encola offline y se sube como Blob al reconectar · bucket con políticas RLS · App.tsx enruta por estado de activación.
+**📦 Entregables**
 
-**🔗 Dependencias:** Sprints 6 (cola offline para Blobs), 8 (sesión activa).
+| Artefacto | Ruta |
+|---|---|
+| RPC `rpc_checkin_vehiculo` | `supabase/migrations/20260521000008_rpcs_flota_doc8.sql` |
+| RPC `rpc_cerrar_checklist` | ídem |
+| RPC `rpc_registrar_averia` | ídem |
+| Storage RLS | `supabase/migrations/20260521000009_storage_rls.sql` |
+| `useCheckin` | `src/hooks/useCheckin.ts` |
+| `useChecklist` | `src/hooks/useChecklist.ts` |
+| `useDoc7` | `src/hooks/useDoc7.ts` |
+| `compressImage` | `src/lib/imageCompressor.ts` |
+| `blobStorage` | `src/lib/blobStorage.ts` |
+| `useActivacionStore` | `src/stores/useActivacionStore.ts` |
+| `<VehiclePickerScreen />` | `src/components/flota/VehiclePickerScreen.tsx` |
+| `<ChecklistScreen />` | `src/components/flota/ChecklistScreen.tsx` |
+| `<Doc7Form />` | `src/components/flota/Doc7Form.tsx` |
+| `App.tsx` (router flota) | `src/App.tsx` |
+| Tests Sprint 9 (21) | `src/test/sprint9.test.tsx` |
 
-**⚠️ Riesgos:** *Cuota de IndexedDB con Blobs grandes* (mitigación: compresión obligatoria). *Storage sin RLS = fuga de imágenes clínicas* (mitigación: 9.4 con políticas y tests).
+**🧪 Testing:** 104 tests verdes (Vitest) · build TypeScript sin errores.
 
-**🧪 Testing:** Playwright de check-in + Doc-8; test de subida de imagen offline→online; pgTAP/integración de políticas de Storage.
-
-**📦 Entregables:** módulos de flota y Doc-7, configuración de Storage + políticas, pipeline de compresión de imágenes.
-
----
-
-# Sprint 10 — Módulos Operativos (Clínico y Logística)
+## Sprint 10 — Módulos Operativos (Clínico y Logística) ✅ COMPLETADO — 2026-05-21
 
 **🎯 Objetivo:** la operativa diaria: inventario, listas de pacientes en tiempo real e informes clínicos.
-
 **📋 Tareas**
 
-- [ ] **10.1 Gestión de inventario:** gasto de material (Doc-6) con UI optimista respaldada por la cola idempotente.
-- [ ] **10.2 Listas de pacientes (Filiación/PSA):** sala de espera con **Supabase Realtime** (consume las políticas `SELECT` del Sprint 2.4).
-- [ ] **10.3 Informes clínicos:** Doc-2/Doc-3 (y Doc-4/Doc-5) integrados con la cola offline; el redactor solo ve los suyos (RLS del Sprint 2.2).
+- [✅] **10.1 Gestión de inventario:** gasto de material (Doc-6) con UI optimista + rollback + cola offline. `useInventario` carga `inventario_vehiculo JOIN catalogo_items`, actualiza stock_real optimistamente antes del RPC y lo revierte si falla.
+- [✅] **10.2 Listas de pacientes (Filiación/PSA):** sala de espera con Supabase Realtime. `useFiliacion` abre sesiones via `rpc_abrir_sesion_filiacion`, suscribe a `filiacion_pacientes` por canal dedicado, admite pacientes y gestiona transiciones de estado. Muestra aviso si offline.
+- [✅] **10.3 Informes clínicos:** Doc-2 SVB offline-capable. `useInformes` crea/lista/cierra informes via `rpc_crear_informe_svb` / `rpc_cerrar_informe_svb` (encolables offline). Formulario con campos básicos de paciente (nombre, edad, motivo, tratamiento, destino, observaciones).
 
-**✅ DoD:** gasto Doc-6 refleja stock optimista y reconcilia con servidor · la sala de espera se actualiza en vivo entre dos clientes · un informe clínico creado offline se sincroniza sin duplicar.
+**✅ DoD:** deducción Doc-6 refleja stock optimista y encola offline · sala de espera actualiza en Realtime · informe clínico creado offline se encola y sincroniza.
+**📦 Entregables**
 
-**🔗 Dependencias:** Sprints 2.2/2.4 (RLS clínica + Realtime), 6 (cola), 9 (sesión de vehículo).
+| Artefacto | Ruta |
+|---|---|
+| RPCs filiación + informes | `supabase/migrations/20260521000010_rpcs_operativa.sql` |
+| `useInventario` | `src/hooks/useInventario.ts` |
+| `useFiliacion` | `src/hooks/useFiliacion.ts` |
+| `useInformes` | `src/hooks/useInformes.ts` |
+| `<InventarioScreen />` | `src/components/operativa/InventarioScreen.tsx` |
+| `<SalaEsperaScreen />` | `src/components/operativa/SalaEsperaScreen.tsx` |
+| `<InformesScreen />` | `src/components/operativa/InformesScreen.tsx` |
+| `App.tsx` (router doc6/drp_op/doc2) | `src/App.tsx` |
+| Tests Sprint 10 (12) | `src/test/sprint10.test.tsx` |
 
-**⚠️ Riesgos:** *Race conditions de inventario* (mitigación: RPC con `FOR UPDATE`, no confiar solo en optimista). *Realtime sin política SELECT = lista vacía* (cubierto en 2.4).
+**🧪 Testing:** 116 tests verdes (Vitest) · build TypeScript sin errores.
 
-**🧪 Testing:** Vitest de UI optimista; Playwright multi-cliente de Realtime; test de informe offline→online.
-
-**📦 Entregables:** módulos de inventario, salas de espera y informes clínicos.
-
----
-
-# Sprint 11 — Módulo DRP y Coordinación
+## Sprint 11 — Módulo DRP y Coordinación
 
 **🎯 Objetivo:** el panel de control de emergencias masivas y el seguimiento operativo.
-
 **📋 Tareas**
 
 - [ ] **11.1 Creación/gestión DRP:** panel de coordinación para crear, asignar recursos (dotaciones, personal a pie, mochilas BKP) y cancelar (`cancelar_drp`, solo online — ADR-003).
@@ -513,21 +509,14 @@ To address all issues (including breaking changes), run:
 - [ ] **11.3 Estados retenidos:** UI de `Finalizado_Retenido` y resolución de descuadres que liberan el DRP (`trg_descuadre_libera_drp_retenido`).
 
 **✅ DoD:** crear/transicionar/cancelar DRP funciona con confirmación de servidor · un vehículo no puede estar en dos DRP a la vez (`uq_vehiculo_drp_activo`) · el visor pinta posiciones actualizadas.
-
 **🔗 Dependencias:** Sprints 4 (RPCs DRP), 10 (operativa base).
-
 **⚠️ Riesgos:** *Operación DRP intentada offline* (mitigación: ADR-003 — toast "requiere red", no encolar). *Carga de pings GPS* (mitigación: throttle + IndexedDB para visor).
-
 **🧪 Testing:** Playwright del ciclo DRP completo; pgTAP de invariante de vehículo único por DRP.
-
 **📦 Entregables:** panel DRP, visor GPS, gestión de estados retenidos.
 
----
-
-# Sprint 12 — RRHH, Cuadrantes y Comunicación *(NUEVO — módulos antes huérfanos)*
+## Sprint 12 — RRHH, Cuadrantes y Comunicación *(NUEVO — módulos antes huérfanos)*
 
 **🎯 Objetivo:** cubrir en frontend los dominios que ya existen en el esquema pero no estaban en el roadmap v1. *(Hallazgo P-04)*
-
 **📋 Tareas**
 
 - [ ] **12.1 Cuadrantes y turnos:** vistas de `cuadrante_turnos`/`patrones`/`grupos`; inyección de patrones; excepciones absolutas.
@@ -538,21 +527,14 @@ To address all issues (including breaking changes), run:
 - [ ] **12.6 System config / kill-switches y force-update:** UI de `system_config` (solo gerencia, con step-up) y comprobación de `versiones_cliente` (versión mínima).
 
 **✅ DoD:** RRHH aprueba vacaciones y se reflejan en el cuadrante · tablón y bandeja se actualizan en vivo · cambiar una clave de `system_config` exige step-up · una versión de cliente por debajo de la mínima fuerza actualización.
-
 **🔗 Dependencias:** Sprints 4 (triggers RRHH), 7 (UI base), 2.4 (Realtime).
-
 **⚠️ Riesgos:** *Permisos cruzados (quién ve/edita qué)* (mitigación: RBAC + RLS por rol). *Force-update mal calibrado bloquea terminales* (mitigación: ventana de gracia).
-
 **🧪 Testing:** Playwright de flujo de vacaciones→cuadrante; test de step-up en `system_config`; test de force-update.
-
 **📦 Entregables:** módulos de cuadrantes, vacaciones, tablón, bandeja, avisos y configuración.
 
----
-
-# Sprint 13 — PWA, Push y Observabilidad *(antes Sprint 12)*
+## Sprint 13 — PWA, Push y Observabilidad *(antes Sprint 12)*
 
 **🎯 Objetivo:** convertir la web en PWA instalable con notificaciones críticas y observabilidad.
-
 **📋 Tareas**
 
 - [ ] **13.1 Service Worker:** `vite-plugin-pwa` (Cache First para el App Shell, Network First para datos).
@@ -562,21 +544,14 @@ To address all issues (including breaking changes), run:
 - [ ] **13.5 Hardening del bundle:** split de chunks (<800 KB por ruta, <3 MB total), análisis de tamaño.
 
 **✅ DoD:** la app se instala como PWA y arranca offline · un aviso crítico llega como push · errores reportados a Sentry con contexto · bundle dentro de presupuesto.
-
 **🔗 Dependencias:** todos los módulos (12 incluido), tabla `push_subscriptions` migrada.
-
 **⚠️ Riesgos:** *SW cacheando datos sensibles* (mitigación: estrategia por tipo de recurso). *Push sin tabla = no hay dónde suscribir* (cubierto en 13.3).
-
 **🧪 Testing:** Playwright de instalación PWA y arranque offline; test de recepción de push; medición de bundle en CI.
-
 **📦 Entregables:** PWA funcional, migración `push_subscriptions`, integración Sentry, presupuesto de bundle verificado.
 
----
-
-# Sprint 14 — Gate de Seguridad/RGPD, UAT y Salida a Producción *(NUEVO)*
+## Sprint 14 — Gate de Seguridad/RGPD, UAT y Salida a Producción *(NUEVO)*
 
 **🎯 Objetivo:** validación final de seguridad, cumplimiento y aceptación antes de producción. *(Hallazgo P-05)*
-
 **📋 Tareas**
 
 - [ ] **14.1 Revisión de seguridad:** auditoría completa de políticas RLS, `SECURITY DEFINER` + `search_path` en todas las RPCs, revisión de step-up, rate-limits.
@@ -587,16 +562,10 @@ To address all issues (including breaking changes), run:
 - [ ] **14.6 Despliegue:** *promote* a producción, monitorización post-lanzamiento, plan de rollback.
 
 **✅ DoD:** sin hallazgos críticos de seguridad/RGPD/accesibilidad abiertos · runbooks ejecutados con éxito · prueba de estrés de cola superada · despliegue con rollback documentado.
-
 **🔗 Dependencias:** Sprints 1-13.
-
 **⚠️ Riesgos:** *Descubrir gaps tarde* (mitigado por esta hoja de ruta). *Migración de timezone en hosted* (procedimiento documentado en 14.3).
-
 **🧪 Testing:** suite completa (pgTAP + Vitest + Playwright + axe) verde en CI; pruebas de carga; ensayo de rollback.
-
 **📦 Entregables:** informe de seguridad/RGPD, `config.toml` de producción, checklist de accesibilidad, runbooks ejecutados, despliegue.
-
----
 
 ## Anexo A — Inventario de backend documentado (para dimensionar Sprints 3-4)
 
