@@ -1,35 +1,96 @@
+import { ArrowLeft, Inbox } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+
 interface HeaderProps {
-  marquesinaText?: string
+  ticker?: string
   unreadCount?: number
-  onMailClick?: () => void
+  showBack?: boolean
+  onBack?: () => void
+  onOpenInbox?: () => void
 }
 
-export function Header({ marquesinaText, unreadCount = 0, onMailClick }: HeaderProps) {
+export function Header({
+  ticker,
+  unreadCount = 0,
+  showBack = false,
+  onBack,
+  onOpenInbox,
+}: HeaderProps) {
   return (
-    <header className="hd" role="banner">
-      <span className="hd__logo" aria-label="U24 Servicios Sanitarios">
-        U24
-      </span>
-
-      {marquesinaText && (
-        <div className="hd__ticker" aria-live="polite" aria-atomic="true">
-          {marquesinaText}
-        </div>
-      )}
-
-      <div className="hd__actions">
-        <button
-          className={`hd__icon${unreadCount > 0 ? ' hd__icon--unread' : ''}`}
-          aria-label={
-            unreadCount > 0
-              ? `Bandeja de mensajes — ${unreadCount} sin leer`
-              : 'Bandeja de mensajes'
-          }
-          onClick={onMailClick}
+    <header
+      role="banner"
+      className="flex h-[var(--header-h)] shrink-0 items-center gap-4 border-b border-border bg-u24-black px-3 text-white"
+    >
+      {/* Logo + lockup */}
+      <div className="flex shrink-0 items-center gap-2 font-display tracking-tight">
+        <span
+          aria-hidden="true"
+          className="grid size-6 place-items-center rounded-sm bg-u24-yellow text-u24-black font-black"
         >
-          <i className="ti ti-mail" aria-hidden="true" />
-          {unreadCount > 0 && <span className="hd__dot" aria-hidden="true" />}
-        </button>
+          U
+        </span>
+        <span className="hidden text-sm font-bold leading-none text-white sm:inline">
+          Control operativo U24
+        </span>
+      </div>
+
+      {/* Ticker / marquesina */}
+      <div className="relative flex-1 overflow-hidden">
+        {ticker && (
+          <div className="flex animate-[marquee_60s_linear_infinite] whitespace-nowrap text-sm font-medium text-zinc-200 hover:[animation-play-state:paused] motion-reduce:animate-none">
+            <span className="px-6">{ticker}</span>
+            <span className="px-6" aria-hidden="true">{ticker}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Acciones globales */}
+      <div className="flex shrink-0 items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Bandejas"
+              onClick={onOpenInbox}
+              className={cn(
+                'relative grid size-9 place-items-center rounded-md text-zinc-300 transition-colors hover:bg-u24-column-hover hover:text-white',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-u24-black',
+                unreadCount > 0 && 'text-u24-yellow',
+              )}
+            >
+              <Inbox aria-hidden="true" className="size-[18px]" strokeWidth={2} />
+              {unreadCount > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="absolute right-1 top-1 size-2 rounded-full bg-u24-yellow"
+                />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            Bandejas{unreadCount > 0 ? ` · ${unreadCount} sin leer` : ''}
+          </TooltipContent>
+        </Tooltip>
+
+        {showBack && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Atrás"
+                onClick={onBack}
+                className={cn(
+                  'grid size-9 place-items-center rounded-md text-zinc-300 transition-colors hover:bg-u24-column-hover hover:text-white',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-u24-black',
+                )}
+              >
+                <ArrowLeft aria-hidden="true" className="size-[18px]" strokeWidth={2} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Atrás</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </header>
   )

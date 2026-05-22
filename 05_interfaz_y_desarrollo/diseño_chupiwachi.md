@@ -14,6 +14,7 @@
 
 ## Índice
 
+0. [Directiva técnica — shadcn/ui es el sistema de UI completo](#0-directiva-técnica--shadcnui-es-el-sistema-de-ui-completo)
 1. [Dirección estética](#1-dirección-estética)
 2. [Tokens — paleta de color (light + dark)](#2-tokens--paleta-de-color-light--dark)
 3. [Tokens — tipografía](#3-tokens--tipografía)
@@ -27,7 +28,59 @@
 11. [Patrones recurrentes](#11-patrones-recurrentes)
 12. [Accesibilidad (A11y)](#12-accesibilidad-a11y)
 13. [Modo oscuro — reglas de inversión](#13-modo-oscuro--reglas-de-inversión)
-14. [Changelog de diseño](#14-changelog-de-diseño)
+14. [Patrón obligatorio de formularios — React Hook Form + Zod](#14-patrón-obligatorio-de-formularios--react-hook-form--zod)
+15. [Changelog de diseño](#15-changelog-de-diseño)
+
+---
+
+## 0. Directiva técnica — shadcn/ui es el sistema de UI completo
+
+Esta sección clarifica el alcance de shadcn/ui en U24 (directiva del producto,
+2026-05-22): **no es una capa tipográfica, es la única librería de componentes
+del proyecto**. Toda primitiva interactiva del sistema debe provenir de shadcn,
+que a su vez se apoya en Radix UI (lógica + accesibilidad headless) y Tailwind
+v4 (estilado).
+
+### 0.1 Justificación arquitectónica
+
+| Pilar del stack | Compatibilidad con shadcn/ui |
+| --- | --- |
+| **React 19** | Radix está adaptado a React 19 (eliminación de `forwardRef` por `ref` como prop estándar). |
+| **Vite + bundle ≤ 800 KB** | Radix es modular. Vite hace tree-shaking real — solo se empaqueta el `@radix-ui/react-select` si lo usamos. |
+| **Tailwind v4 CSS-first** | shadcn genera componentes que residen físicamente en `src/components/ui/` y consumen nuestras CSS variables sin colisiones de empaquetado. |
+| **TanStack Query** | Forma parte del stack obligatorio (`rules.md §7`) y es compatible con `Data Table` de shadcn. |
+| **React Hook Form + Zod** | El `Form` de shadcn está integrado con RHF y Zod por defecto — es el patrón obligatorio para todos los formularios del proyecto. |
+
+### 0.2 Política de adopción
+
+1. **CLI obligatoria**. Los componentes se instalan con
+   `npx shadcn@latest add <nombre>`. La copia manual está prohibida. La CLI:
+   - Lee `components.json` y respeta el alias `@/`.
+   - Instala los `@radix-ui/react-*` necesarios automáticamente.
+   - Añade dependencias periféricas (cmdk, date-fns, react-day-picker, recharts)
+     solo cuando hacen falta.
+   - Genera el código fuente en `src/components/ui/` para que tengamos control
+     absoluto y podamos mutarlo a nuestra paleta sin tocar `node_modules`.
+2. **No envolver shadcn** salvo cuando sea necesario aplicar variantes
+   específicas de U24 (ej. `Badge` con variantes semánticas extra). En ese
+   caso, modificamos directamente el archivo fuente generado, no creamos un
+   wrapper adicional.
+3. **Política de uso por categoría** (referencia `_docs/shadcn/docs/components/`):
+
+   | Categoría | Componentes a usar | Cuándo |
+   | --- | --- | --- |
+   | Overlays | `Dialog`, `AlertDialog`, `Sheet`, `Popover`, `HoverCard` | Modales (estándar/destructivo), drawers móvil, popovers contextuales. |
+   | Navegación | `NavigationMenu`, `Tabs`, `ScrollArea` | Header (eventual), módulos con sub-paneles, scroll independiente de columnas. |
+   | Datos | `DataTable` (con `@tanstack/react-table`), `Card`, `Charts` (sobre Recharts) | Listas densas (inventario, cuadrante), métricas, paneles. |
+   | Formularios | `Form` + RHF + Zod, `Input`, `Select`, `Combobox` (cmdk), `Checkbox`, `RadioGroup`, `Switch`, `Slider`, `DatePicker` | Toda entrada de datos. |
+   | Feedback | `Toast`/`Sonner`, `Skeleton`, `Alert`, `Badge` | Notificaciones, loading, badges semánticos. |
+   | Misc | `Separator`, `Tooltip`, `Avatar`, `Button` | Utilidades. |
+
+4. **Excepciones documentadas**: si un componente necesita un comportamiento
+   que shadcn no provee de fábrica (ej. la barra vertical amarilla de 3 px del
+   ítem activo del `BlackColumn`, o el ticker con animación marquee), se
+   añade la capa de personalización directamente en el archivo fuente
+   generado y se registra aquí en la sección 14 (changelog).
 
 ---
 
@@ -460,22 +513,39 @@ Leyenda:
 
 ### 8.1 Primitives shadcn (`src/components/ui/`)
 
-| Componente | Estado | Notas |
-| --- | --- | --- |
-| `Button` | ⬜ | Variantes: `default`, `secondary`, `outline`, `ghost`, `destructive`. Tamaños: `sm`, `default`, `lg`, `icon`. |
-| `Card`, `CardHeader`, `CardTitle`, `CardContent`, `CardFooter` | ⬜ | |
-| `Badge` | ⬜ | Variantes semánticas: `default`, `secondary`, `ok`, `warn`, `crit`, `info`, `accent`. |
-| `Input` | ⬜ | |
-| `Label` | ⬜ | |
-| `Dialog` (con `Trigger`, `Content`, `Header`, `Title`, `Description`, `Footer`, `Close`) | ⬜ | Modal estándar. |
-| `Sheet` | ⬜ | Drawer para móvil. |
-| `Separator` | ⬜ | Para `sep` del `black_column`. |
-| `Tooltip` | ⬜ | Hover en `black_column`. |
-| `ScrollArea` | ⬜ | Tablas y listas con scroll. |
-| `Table` | ⬜ | Para `PanelPersonal`, inventario, etc. |
-| `ButtonGroup` (custom, basado en shadcn pattern) | ⬜ | Para agrupar acciones. |
-| `Skeleton` | ⬜ | Loading skeletons. |
-| `Toast`/`Sonner` | ⬜ | Notificaciones. |
+Todos se instalan con `npx shadcn@latest add <nombre>`. Las personalizaciones
+U24 (paleta, variantes semánticas extra) se aplican editando el archivo fuente
+generado.
+
+| Componente | Comando CLI | Estado | Personalización U24 |
+| --- | --- | --- | --- |
+| `Button` | `add button` | ⬜ | `destructive` apunta a `--destructive` (rojo `#DC2626`). Focus ring siempre amarillo. |
+| `Card` (+ Header/Title/Description/Content/Footer) | `add card` | ⬜ | Padding interno `p-4`. Radius `--radius` (6 px). |
+| `Badge` | `add badge` | ⬜ | Variantes extra: `ok`, `warn`, `crit`, `info`, `accent` (ver §9.3). |
+| `Input` | `add input` | ⬜ | Sin cambio (default shadcn). |
+| `Label` | `add label` | ⬜ | Sin cambio. |
+| `Form` (RHF + Zod) | `add form` | ⬜ | Patrón obligatorio para TODOS los formularios. |
+| `Dialog` | `add dialog` | ⬜ | Overlay `bg-black/60 backdrop-blur-[2px]`. |
+| `AlertDialog` | `add alert-dialog` | ⬜ | Para confirmaciones destructivas (Doc-7 cerrar, eliminar, etc.). |
+| `Sheet` | `add sheet` | ⬜ | Drawer móvil (<640 px) y modal-ligero. |
+| `Popover` | `add popover` | ⬜ | Tooltips ricos, selectores. |
+| `Tooltip` | `add tooltip` | ⬜ | Hover en `BlackColumn` (delay 350 ms). |
+| `NavigationMenu` | `add navigation-menu` | ⬜ | Si el header crece, futura nav. |
+| `Tabs` | `add tabs` | ⬜ | Sub-paneles dentro de un Screen (e.g. Cuadrante por semana/mes). |
+| `ScrollArea` | `add scroll-area` | ⬜ | Scroll independiente del main y de cualquier columna lateral. |
+| `Separator` | `add separator` | ⬜ | `sep` del BlackColumn, divisores en cards. |
+| `Table` (+ DataTable pattern) | `add table` + `add data-table` | ⬜ | Listas densas. `DataTable` usa `@tanstack/react-table`. |
+| `Skeleton` | `add skeleton` | ⬜ | Estados de carga. |
+| `Sonner` | `add sonner` | ⬜ | Toaster oficial recomendado por shadcn. |
+| `Avatar` | `add avatar` | ⬜ | Iniciales en `PanelPersonal`. |
+| `Select` | `add select` | ⬜ | Selectores de estado_operativo, condicion_tecnica, etc. |
+| `Checkbox` | `add checkbox` | ⬜ | Doc-Checklist360. |
+| `RadioGroup` | `add radio-group` | ⬜ | Toggle Gasolinera/Base en repostaje. |
+| `Switch` | `add switch` | ⬜ | Toggles binarios (system_config). |
+| `Combobox` | `add combobox` | ⬜ | Buscador de fichas de empleado, vehículos. |
+| `DatePicker` | `add date-picker` | ⬜ | Fechas en Doc-2/3, Doc-12 vacaciones. |
+| `Calendar` | `add calendar` | ⬜ | Necesario por DatePicker; también para Cuadrante. |
+| `ButtonGroup` | `add button-group` | ⬜ | Agrupación de acciones (obligatorio por rules.md §1). |
 
 ### 8.2 Chasis (`src/components/layout/`)
 
@@ -807,7 +877,77 @@ Estrategia: clase `dark` en `<html>` (compatible con shadcn). El
 
 ---
 
-## 14. Changelog de diseño
+## 14. Patrón obligatorio de formularios — React Hook Form + Zod
+
+Todo formulario del proyecto usa `Form` de shadcn (RHF) con esquema Zod. No
+hay excepciones — ni siquiera el login.
+
+### 15.1 Estructura canónica
+
+```tsx
+'use client'
+
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import {
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+const schema = z.object({
+  identificador: z.string().min(1, 'Identificador requerido'),
+  password:      z.string().min(8, 'Mínimo 8 caracteres'),
+})
+type Schema = z.infer<typeof schema>
+
+export function LoginForm() {
+  const form = useForm<Schema>({
+    resolver: zodResolver(schema),
+    defaultValues: { identificador: '', password: '' },
+  })
+
+  async function onSubmit(values: Schema) {
+    // …
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+        <FormField
+          control={form.control}
+          name="identificador"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Identificador</FormLabel>
+              <FormControl><Input autoComplete="username" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {/* …password… */}
+        <Button type="submit" className="w-full">Login</Button>
+      </form>
+    </Form>
+  )
+}
+```
+
+### 15.2 Reglas
+
+- Mensajes de error en español, sentence case, sin punto final.
+- `FormMessage` se renderiza siempre (aunque vacío) para no causar saltos de
+  layout al aparecer el error.
+- Esquemas Zod viven junto al formulario (no en archivos sueltos), salvo
+  cuando se reutilizan en varias pantallas — entonces a `src/lib/schemas/`.
+- Validación on blur por defecto. Validación on submit obligatoria.
+- Sincronía con tipos de Supabase: usar `z.infer<typeof schema>` y verificar
+  que coincide con el tipo de la fila/RPC.
+
+---
+
+## 15. Changelog de diseño
 
 Cada vez que se toque un componente o token, se añade una entrada aquí
 con fecha, autor (Claude o humano), archivos tocados y resumen del cambio.
@@ -820,16 +960,39 @@ con fecha, autor (Claude o humano), archivos tocados y resumen del cambio.
 frontend en `src/` no implementaba `rules.md` v2.1 ni `mapeo_visual_ui.md`.
 Esta sesión cierra Fase A — chasis correcto + sistema de tokens.
 
-**Archivos creados/modificados**:
-- `05_interfaz_y_desarrollo/diseño_chupiwachi.md` ← este documento (nuevo).
-- `src/index.css` ← reorden de @imports (fix warning Vite postcss).
+**Decisiones tomadas en esta sesión** (confirmadas por la usuaria):
 
-**Pendiente en esta sesión** (siguiendo el plan A1–A8):
-- Limpieza de `package.json` (quitar Tabler, añadir lucide + shadcn deps).
-- Reescritura de `index.css` con tokens light/dark.
-- Creación de primitives shadcn en `src/components/ui/`.
-- Reescritura de `App.tsx` con dos estados.
-- Reescritura de `LoginScreen`, `AppShell`, `BlackColumn`, `Header`.
-- Creación de `VisualInfoHome`.
-- Endurecimiento de `useLoginFlow` para login online obligatorio.
-- Verificación con `npm run dev` y validación visual con `admin/12345678`.
+1. `diseño_chupiwachi.md` queda como fuente de verdad de implementación visual.
+2. **shadcn/ui es la única librería de componentes** — no solo tipografía.
+   Cubre overlays, navegación, datos, formularios y feedback. Radix UI por
+   debajo de forma implícita. Justificación arquitectónica en §0.
+3. **Instalación vía CLI exclusivamente** (`npx shadcn@latest init` y
+   `npx shadcn@latest add <componente>`). La copia manual queda prohibida.
+4. **Borrado completo de los Screens feature** existentes (Inventario, DRP,
+   Cuadrante, Vacaciones, etc.) — se reescribirán de cero en Fase B con
+   primitivas shadcn y tokens U24. Se conserva temporalmente la lógica de
+   `useDrp`, `useInventario`, `useCuadrante` mientras se evalúa caso a caso.
+5. Formularios obligatoriamente con `Form` shadcn (RHF + Zod). Ver §14.
+6. Iconografía exclusivamente lucide-react. Tabler queda fuera.
+
+**Archivos creados/modificados**:
+- `05_interfaz_y_desarrollo/diseño_chupiwachi.md` ← este documento.
+- `src/index.css` ← reorden de `@import` (fix warning Vite postcss).
+
+**Pendiente en esta sesión** (Fase A):
+- Añadir `baseUrl` y `paths` al `tsconfig.json` raíz (requisito shadcn CLI).
+- Borrar `src/components/{flota,operativa,drp,rrhh}/`, `src/components/atoms/`,
+  `src/components/auth/EstadoEspera.tsx`.
+- Quitar `@tabler/icons-webfont` del `package.json`.
+- Borrar el import de `@tabler/icons-webfont` de `src/index.css`.
+- Ejecutar `npx shadcn@latest init` y `npx shadcn@latest add` para los
+  primitives críticos (button, card, badge, input, label, form, dialog,
+  sheet, separator, tooltip, sonner, skeleton, avatar, scroll-area).
+- Reescribir `src/index.css` con `@theme` extendido para tokens U24.
+- Crear `src/lib/utils.ts` con `cn()` (generado por shadcn init).
+- Crear `src/components/theme-provider.tsx` (light/dark).
+- Reescribir `App.tsx` con dos estados.
+- Reescribir `LoginScreen`, `AppShell`, `BlackColumn`, `Header`.
+- Crear `VisualInfoHome`.
+- Endurecer `useLoginFlow` para login online obligatorio.
+- Verificar con `npm run dev` y `admin/12345678`.

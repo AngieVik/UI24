@@ -4,8 +4,18 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { useTerminalStore } from '@/stores/useTerminalStore'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { computeFingerprint } from '@/lib/fingerprint'
-import { saveOfflineSession, verifyOfflineLogin } from '@/lib/offlineSession'
+import { saveOfflineSession } from '@/lib/offlineSession'
 
+/**
+ * Flujo de login del terminal — ÚNICO entry point al estado_1.
+ *
+ * Reglas duras (rules.md §1 + §3, decisión 2026-05-22):
+ *   - Login normal: ONLINE OBLIGATORIO. Sin red → bloqueado.
+ *   - Login emergencia: ONLINE OBLIGATORIO. Sin red → bloqueado.
+ *   - La sesión offline (PBKDF2) NO sirve para el primer login. Solo se usa
+ *     para `checkin_interno` (re-autenticación dentro de la sesión activa),
+ *     que vive en otro hook.
+ */
 export interface LoginFlowState {
   isLoading: boolean
   error: string | null
@@ -32,7 +42,6 @@ export function useLoginFlow() {
   }
 
   async function resolveGalleta(fingerprint: string) {
-    if (!isOnline) return
     const { data: galleta } = await supabase
       .from('galletas_terminales')
       .select('id_terminal, tipo')
@@ -48,27 +57,23 @@ export function useLoginFlow() {
   }
 
   async function loginNormal(id_nombre: string, password: string): Promise<boolean> {
+    if (!isOnline) {
+      return handleFailure('Sin conexión. El acceso al terminal requiere red.')
+    }
     setState((s) => ({ ...s, isLoading: true, error: null }))
 
     try {
-      if (isOnline) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: `${id_nombre}@u24.com`,
-          password,
-        })
-        if (error || !data.session) {
-          return handleFailure('Credenciales incorrectas. Verifica tu identificador y contraseña.')
-        }
-        // Cachear sesión offline tras login exitoso
-        await saveOfflineSession(id_nombre, password)
-        useAuthStore.getState().setSession(data.session)
-      } else {
-        const ok = await verifyOfflineLogin(id_nombre, password)
-        if (!ok) {
-          return handleFailure('Credenciales incorrectas o sesión sin conexión expirada.')
-        }
-        // Sesión cacheada en useAuthStore desde el último login online
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: `${id_nombre}@u24.com`,
+        password,
+      })
+      if (error || !data.session) {
+        return handleFailure('Credenciales incorrectas. Verifica tu identificador y contraseña.')
       }
+
+      // Cacheamos la sesión offline (PBKDF2) solo para futuros checkin_interno
+      await saveOfflineSession(id_nombre, password)
+      useAuthStore.getState().setSession(data.session)
 
       const fingerprint = await computeFingerprint()
       await resolveGalleta(fingerprint)
@@ -82,11 +87,7 @@ export function useLoginFlow() {
 
   async function loginEmergencia(id_nombre: string, pin: string): Promise<boolean> {
     if (!isOnline) {
-      setState((s) => ({
-        ...s,
-        error: 'El acceso de emergencia requiere conexión a internet.',
-      }))
-      return false
+      return handleFailure('El acceso de emergencia requiere conexión a internet.')
     }
     setState((s) => ({ ...s, isLoading: true, error: null }))
 

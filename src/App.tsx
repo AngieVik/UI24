@@ -1,91 +1,92 @@
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useGlobalStore } from '@/stores/useGlobalStore'
-import { useActivacionStore } from '@/stores/useActivacionStore'
 import { LoginScreen } from '@/components/auth/LoginScreen'
-import { EstadoEspera } from '@/components/auth/EstadoEspera'
-import { StepUpModal } from '@/components/auth/StepUpModal'
 import { AppShell } from '@/components/layout/AppShell'
-import { VehiclePickerScreen } from '@/components/flota/VehiclePickerScreen'
-import { ChecklistScreen } from '@/components/flota/ChecklistScreen'
-import { InventarioScreen } from '@/components/operativa/InventarioScreen'
-import { SalaEsperaScreen } from '@/components/operativa/SalaEsperaScreen'
-import { InformesScreen } from '@/components/operativa/InformesScreen'
-import { DrpPanelScreen } from '@/components/drp/DrpPanelScreen'
-import { VisorGpsScreen } from '@/components/drp/VisorGpsScreen'
-import { AvisosScreen } from '@/components/rrhh/AvisosScreen'
-import { BandejaScreen } from '@/components/rrhh/BandejaScreen'
-import { TablonScreen } from '@/components/rrhh/TablonScreen'
-import { CuadranteScreen } from '@/components/rrhh/CuadranteScreen'
-import { VacacionesScreen } from '@/components/rrhh/VacacionesScreen'
-import { SystemConfigScreen } from '@/components/rrhh/SystemConfigScreen'
+import { VisualInfoHome } from '@/components/layout/VisualInfoHome'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 
+/**
+ * Punto de entrada de la app. Solo dos estados:
+ *
+ *   estado_0 — sin sesión → <LoginScreen />
+ *   estado_1 — con sesión → <AppShell> con routing state-based
+ *
+ * El check-in operativo (selección de vehículo / inicio de turno) NO es un
+ * gate del estado_1: vive como una ruta interna ("activeNav === 'checkin'").
+ * Spec: mapeo_visual_ui.md §1 + diseño_chupiwachi.md §6.
+ */
 export default function App() {
-  const session = useAuthStore((s) => s.session)
+  const session   = useAuthStore((s) => s.session)
   const setOnline = useGlobalStore((s) => s.setOnline)
-  const [activeNav, setActiveNav] = useState('home')
-  const [drpActivoId] = useState<string | undefined>(undefined)
 
-  const idActivacion = useActivacionStore((s) => s.id_activacion)
-  const checklistCerrado = useActivacionStore((s) => s.checklistCerrado)
+  // Routing state-based — siguiendo el árbol del BlackColumn.
+  const [activeNav, setActiveNav] = useState('home')
 
   useEffect(() => {
-    const handleOnline = () => setOnline(true)
-    const handleOffline = () => setOnline(false)
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
+    const onlineHandler  = () => setOnline(true)
+    const offlineHandler = () => setOnline(false)
+    window.addEventListener('online', onlineHandler)
+    window.addEventListener('offline', offlineHandler)
     setOnline(navigator.onLine)
     return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', onlineHandler)
+      window.removeEventListener('offline', offlineHandler)
     }
   }, [setOnline])
 
+  // estado_0
   if (!session) {
     return <LoginScreen />
   }
 
-  if (!idActivacion) {
-    return (
-      <>
-        <VehiclePickerScreen />
-        <StepUpModal />
-      </>
-    )
-  }
-
-  if (!checklistCerrado) {
-    return (
-      <>
-        <ChecklistScreen />
-        <StepUpModal />
-      </>
-    )
-  }
-
-  function renderContent() {
-    switch (activeNav) {
-      case 'doc6':      return <InventarioScreen />
-      case 'drp_op':    return <SalaEsperaScreen />
-      case 'doc2':      return <InformesScreen />
-      case 'drp_panel': return <DrpPanelScreen />
-      case 'drp_visor': return <VisorGpsScreen idDrp={drpActivoId} />
-      case 'doc11':     return <AvisosScreen />
-      case 'doc13':     return <BandejaScreen />
-      case 'tablon':    return <TablonScreen />
-      case 'cuadrante': return <CuadranteScreen />
-      case 'vacaciones':return <VacacionesScreen />
-      case 'sistema':   return <SystemConfigScreen />
-      default:          return <EstadoEspera />
-    }
-  }
+  // estado_1
+  const showBack = activeNav !== 'home'
+  const handleBack = () => setActiveNav('home')
 
   return (
-    <>
-      <AppShell activeNav={activeNav} onNavSelect={setActiveNav}>
-        {renderContent()}
-      </AppShell>
-      <StepUpModal />
-    </>
+    <AppShell
+      activeNav={activeNav}
+      onNavSelect={setActiveNav}
+      showBack={showBack}
+      onBack={handleBack}
+      ticker="Tablón · sistema en reconstrucción · Fase A completada · home_area activo con shadcn + lucide + tokens U24."
+    >
+      {renderRoute(activeNav, () => setActiveNav('checkin'))}
+    </AppShell>
+  )
+}
+
+function renderRoute(activeNav: string, goCheckin: () => void) {
+  if (activeNav === 'home') {
+    return <VisualInfoHome onGoCheckin={goCheckin} />
+  }
+  return <RoutePlaceholder activeNav={activeNav} />
+}
+
+/* ─── Placeholder honesto para rutas aún sin implementar (Fase B) ─── */
+function RoutePlaceholder({ activeNav }: { activeNav: string }) {
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="font-display text-lg">Ruta: {activeNav}</CardTitle>
+          <Badge variant="outline">Fase B — pendiente</Badge>
+        </CardHeader>
+        <CardContent className="space-y-2 font-body text-sm font-light text-muted-foreground">
+          <p>
+            Esta vista forma parte del terminal y está documentada en{' '}
+            <code className="font-medium text-foreground">mapeo_visual_ui.md §3</code>,
+            pero todavía no está reconstruida con shadcn/ui + tokens U24.
+          </p>
+          <p>
+            Se implementará en la <strong>Fase B</strong> tras validar el chasis,
+            siguiendo el orden del documento{' '}
+            <code className="font-medium text-foreground">diseño_chupiwachi.md §8</code>.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
