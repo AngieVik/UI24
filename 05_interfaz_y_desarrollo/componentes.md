@@ -561,10 +561,10 @@ supabase.channel('system').on('system', { event: 'disconnect' }, () => {
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Posición:** fijo debajo del header negro, encima del contenido.
-- **Color:** `bg-amber-50 border-b border-amber-300` con texto `text-amber-800`.
-- **Ícono:** `ti-wifi-off` (Tabler Icons).
-- **Texto contador:** "Última sincronización: hace X min" — calculado desde
+* **Posición:** fijo debajo del header negro, encima del contenido.
+* **Color:** `bg-amber-50 border-b border-amber-300` con texto `text-amber-800`.
+* **Ícono:** `ti-wifi-off` (Tabler Icons).
+* **Texto contador:** "Última sincronización: hace X min" — calculado desde
   `useOfflineQueue.getState().lastSuccessfulDrainAt` (timestamp del último vaciado exitoso).
 
 ```typescript
@@ -646,12 +646,10 @@ en `procesarCola()` cuando `pendingCount` llega a 0 sin errores.
 
 ---
 
-## Paleta de colores — ratios WCAG 2.1 AA verificados (U-04)
+## Paleta de colores
 
 > Referencia canónica de colores del sistema. Fuente de verdad CSS:
-> `05_interfaz_y_desarrollo/cloude_desing/colors_and_type.css`.
-> Todos los valores tienen ratio de contraste verificado según WCAG 2.1 nivel AA
-> (mínimo 4.5:1 para texto normal, 3:1 para texto grande ≥18px / ≥14px bold).
+01_arquitectura_y_reglas\rules.md §1. Todos los componentes deben usar exclusivamente estos tokens de color.
 
 ### Tokens de marca — los únicos colores de marca permitidos
 
@@ -801,6 +799,7 @@ Todos los botones tienen **fondo `#111111` (negro único)**. No hay botones de c
 1. **Iconos sin texto:** todos los iconos Tabler que actúan como controles únicos requieren
    `aria-label` explícito. Sistema de iconos: **Tabler Icons (outline) únicamente** — no mezclar
    con otros sets ni con emojis.
+
    ```tsx
    <button aria-label="Cerrar modal"><IconX size={18} aria-hidden="true" /></button>
    ```
@@ -966,9 +965,11 @@ export function useKeyboardShortcuts() {
    las tablets de ambulancia no deben disparar atajos por accidente.
 4. **Documentación en la UI:** un modal de ayuda (`Alt + ?`) muestra la tabla completa.
    El modal se abre con:
+
    ```typescript
    case '?': if (e.altKey) { e.preventDefault(); openHelpShortcuts() }; break
    ```
+
 5. **Sin atajos en `estado_0`:** el hook solo se monta cuando `useTerminalStore.estado === 'estado_1'`.
 
 #### Visibilidad del atajo en tooltips
@@ -980,4 +981,5 @@ Los controles con atajo asociado muestran el atajo entre paréntesis en el `titl
   <IconInbox size={20} aria-hidden="true" />
 </button>
 ```
+
    ❌ Prohibido `border-l-4` (borde acento de color) — anti-patrón explícito del design system.

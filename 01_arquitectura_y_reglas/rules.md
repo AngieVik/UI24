@@ -2,22 +2,22 @@
 
 **Directiva principal:** Este documento es la única fuente de verdad para la arquitectura, diseño UI/UX y seguridad estructural del proyecto U24. La complacencia está prohibida. Cualquier desviación de estas reglas resultará en el rechazo inmediato del Pull Request.
 
-## 1. Sistema tipográfico estricto
+## U24 Design System
 
-El tono de la aplicación es médico, profesional y de misión crítica. Se prohíben las jerarquías visuales desordenadas o tamaños arbitrarios.
+ Sistema de diseño para **U24 Servicios Sanitarios** — El tono de la aplicación es clinico, profesional y de misión crítica para: servicios de emergencias médicas, ambulancias, dispositivos de riesgo previsible / DRP, logística de material sanitario, gestión de flota y RRHH.  
+ Se prohíben las jerarquías visuales desordenadas o tamaños arbitrarios. La consistencia es inquebrantable.
+
+### Sistema tipográfico estricto
 
 * **Familia única:** Barlow (Google Fonts). Dos cortes de la misma familia, prohibido cualquier otra fuente.
   * `Barlow Condensed`: UI de mando — navegación, etiquetas, matrículas, nombres de paciente, badges, ticker, alertas, black_column y cualquier elemento de control operativo.
   * `Barlow` (regular): cuerpos de formulario, descripciones largas y bloques de texto de más de 2 líneas.
-
 * **Pesos permitidos (Weights):**
   * `300` (Fino): Para metadatos, horas, fechas y descripciones secundarias.
   * `500` (Mediano): Para cuerpos de texto, formularios y datos de entrada del usuario.
   * `700` (Negrita): Para etiquetas de datos, nombres de pacientes, matrículas y navegación.
   * `900` (Grueso/Black): EXCLUSIVAMENTE para alertas críticas (Doc-11), roturas de stock o estados de emergencia.
-
-* **Capitalización (Sentence case estricto):** Todos los textos de la interfaz emplean el formato "Primera letra mayúscula, resto minúscula" (ej. "Paleta semántica", "En ruta", "Control operativo U24"). Las MAYÚSCULAS SOSTENIDAS están estrictamente restringidas a acrónimos (ej. DRP, PSA, ITV, UTC) y a botones de acción primaria destructiva como por ejemplo "ELIMINAR REGISTRO".
-
+* **Capitalización (Sentence case estricto):** Todos los textos de la interfaz emplean el formato "Primera letra mayúscula, resto minúscula" (ej. "Paleta semántica", "En ruta", "Control operativo U24"). Las MAYÚSCULAS SOSTENIDAS están estrictamente restringidas a acrónimos (ej. DRP, PSA, ITV, UTC).
 * **Configuración Tailwind v4:**
 
 ` ` `css
@@ -29,7 +29,7 @@ El tono de la aplicación es médico, profesional y de misión crítica. Se proh
 }
 ` ` `
 
-## 2. System de diseño, colores y componentes (UI Kit)
+### System de diseño, colores y componentes (UI Kit)
 
 La interfaz no tendrá secciones de diferentes estilos. La uniformidad visual es inquebrantable.
 
@@ -38,13 +38,30 @@ La interfaz no tendrá secciones de diferentes estilos. La uniformidad visual es
 * **Reglas de botones:**
   * **Uniformidad:** Todos los botones estándar serán del mismo color, tanto de fondo como de letra, manteniendo una estética seria y profesional (paddings pequeños, estilo `shadcn/ui` base).
   * **Agrupación:** Cuando existan múltiples acciones relacionadas en una misma vista, los botones estarán agrupados obligatoriamente utilizando el código de **Button Group** de `ui.shadcn.com`.
-  * **Destructivos:** Solo los botones de peligro crítico romperán la paleta base, utilizando el color rojo semántico y tipografía en MAYÚSCULAS (ej. ELIMINAR REGISTRO).
-* **Paleta cromática semántica:**
-  * `Base / Superficies`: Escala de grises neutrados (Zinc en Tailwind) adaptables a modo claro/oscuro.
-  * `Acción / Acento`: Amarillo técnico (`#facc15` / `yellow-400`).
-  * `Alertas / Estados`: Verde (Éxito), Ámbar (Aviso), Rojo (Crítico/Destructivo). Prohibido el uso de tonos azules decorativos.
+  * **Destructivos:** Solo los botones de peligro crítico romperán la paleta base, utilizando el color rojo para la tipografía.
+* **Paleta de colores:** Inspirada en la identidad visual de U24 Servicios Sanitarios, con un enfoque en tonos neutros para la base y colores vivos.
+  * Nucleo: `Negro Unico #111111, Blanco Puro #FFFFFF, Amarillo vivo #ffd60a, Rojo Hover #dc2626` Colores base para diferentes elementos de la interfaz.
+  * Escala de grises neutrados (Zinc en Tailwind): `zinc-900 #18181B, zinc-800 #27272A, zinc-700 #3f3f46, zinc-600 #52525b, zinc-500 #71717a, zinc-400 #9ca3af, zinc-300 #d4d4d8, zinc-200 #e5e7eb, zinc-150 #f4f4f5, zinc-100 #f4f4f5.` , adaptables a modo claro/oscuro,y otros elementos de la interfaz.
+  * Estados / Alertas: `green-700 #15803D, amber-700 #B45309, red-600 #dc2626` Colores semánticos, texto/icono sobre blanco, WCAG AA y otros elementos de estado.
+  * Superficies (light): `gray-50 #F9FAFB, gray-100 #F3F4F6, gray-200 #E5E7EB, gray-300 #D4D4D8` Superficies claras, tarjetas, fondos de formularios, y otros elementos.
+  * Superficies (dark): `gray-800 #1F2937, gray-700 #374151, gray-600 #4B5563, gray-500 #6B7280` Superficies oscuras, tarjetas, fondos de formularios, y otros elementos.
+  * Texto sobre oscuro: `gray-50 #F9FAFB, gray-100 #F3F4F6, gray-200 #E5E7EB, gray-300 #D4D4D8` Texto sobre oscuro, y otros elementos.
+  * Texto sobre blanco: `gray-900 #111827, gray-600 #4B5563, gray-500 #6B7280, gray-400 #9CA3AF` Texto sobre blanco, y otros elementos.
+  * Prohibido el uso de tonos azules.
 
-## 3. Sistema de espaciado y diseño adaptativo (Layout)
+### Fuentes y referencias
+
+* **GitHub** — [`/UI24`](https://github.com/AngieVik/UI24) ·
+  arquitectura, reglas, núcleos de negocio, mapeo visual UI, componentes, hooks y manejo de errores. Lectura obligatoria para construir nada ambicioso encima de este sistema.
+* **Maskable icons** — recibidos directamente del usuario, copiados bajo `05_interfaz_y_desarrollo\Public\Icons` junto con el json de configuración.
+* **Logo U24** — `copiado bajo 05_interfaz_y_desarrollo\Public\Logo.svg`
+* **Ilustración corporativa** — `05_interfaz_y_desarrollo\Public\Ilustración_corporativa.png`.
+* **Paleta de colores:** Inspirada en la identidad visual de U24 Servicios Sanitarios, con un enfoque en tonos neutros para la base y colores vivos para alertas y estados críticos.
+* **Iconografía:**  Se utilizarán exclusivamente los iconos de `lucide.dev` para mantener una estética coherente y profesional. Stroke width 2px, sin rellenos (outline), y con un tamaño base de 24px para la mayoría de los casos.
+                    Queda prohibido el uso de iconos de otras fuentes o la creación de iconos personalizados sin aprobación previa. Peso uniforme. Sin emojis ni unicode como sustituto.
+                    `https://github.com/lucide-icons/lucide/tree/22cfe96931bd9253ae26105d2b779210f2765b60/packages/lucide-react`
+
+### Sistema de espaciado y diseño adaptativo (Layout)
 
 El espacio es un recurso crítico en pantallas móviles montadas en ambulancias.
 
@@ -53,7 +70,7 @@ El espacio es un recurso crítico en pantallas móviles montadas en ambulancias.
 * **Adaptabilidad algorítmica (Fluid design):** Fomentar propiedades matemáticas fluidas como `clamp()` en Tailwind para anchos y tipografías. El estilo base será uniforme de móvil a monitor.
 * **Cambio estructural justificado:** Prohibidos los rediseños estéticos en distintos breakpoints. El layout solo mutará por limitación física (ej. transformar una tabla masiva en *Cards* en móvil).
 
-## 4. Arquitectura de datos y sincronización offline-first
+## Arquitectura de datos y sincronización offline-first
 
 Las ambulancias operan en zonas de baja cobertura (zonas rurales, sótanos). La aplicación debe ser resiliente a cortes de red.
 
@@ -63,7 +80,7 @@ Las ambulancias operan en zonas de baja cobertura (zonas rurales, sótanos). La 
 * **Persistencia crítica de estado (Zustand — IndexedDB Obligatorio):** Los estados de sesión vitales de turno (`estadoOperativo`, `condicionTecnica`, `tipoServicio`, `checkin_on`, `pilot`, `carry`, `drp_activo`, `turno_iniciado`) DEBEN utilizar el middleware `persist` acoplado a un adaptador de **almacenamiento asíncrono sobre `IndexedDB`** (ej. mediante `idb-keyval`). Queda **estrictamente prohibido** usar `localStorage` para persistir estos stores debido a que su naturaleza síncrona bloquea el Main Thread (Jank) bajo ráfagas de actualización Realtime. `localStorage` queda restringido a configuraciones ligeras o flags booleanos primitivos.
 * **Procesamiento de imágenes offline:** Cualquier fotografía adjunta a formularios offline (ej. Doc-7) debe someterse a una compresión síncrona obligatoria en el hilo de UI mediante la Canvas API (reducir dimensiones a un máximo de 1200px y codificar en formato WebP con calidad 0.70) antes de ser persistida en IndexedDB como un objeto `Blob` binario plano. Queda prohibida la persistencia en formato Base64 para evitar la saturación de la cuota de almacenamiento del navegador y la inyección de excepciones `QuotaExceededError`.
 
-## 5. Seguridad, RBAC y modelo de base de datos
+## Seguridad, RBAC y modelo de base de datos
 
 El frontend es un entorno intrínsecamente inseguro. La seguridad y el control de inventario deben recaer en el motor de la base de datos.
 
@@ -74,7 +91,7 @@ El frontend es un entorno intrínsecamente inseguro. La seguridad y el control d
 * **Sesiones de emergencia (Plan B):** La revocación de tokens temporales de emergencia debe aislarse en una tabla `sesiones_emergencia` con marca de tiempo. Supabase Edge Functions ejecutará un cronjob que purgará estas sesiones automáticamente sin depender de las acciones del usuario.
 * **Políticas RLS de prohibición incondicional:** Para tablas con inmutabilidad de negocio (ej. `doc1_asistencias`), las políticas RLS de UPDATE y DELETE deben devolver `USING (FALSE)` de forma estricta e incondicional — independientemente de los claims del JWT o del rol del usuario.
 
-## 6. Rendimiento y tráfico de red (Budget)
+## Rendimiento y tráfico de red (Budget)
 
 * **Payloads minimizados (Reducción de carga):** Las consultas hacia Supabase usarán selectores estrictos (ej. `select('id, nombre, stock')`). Está expresamente prohibido el uso de `select('*')` en vistas de listas o inventarios masivos para no colapsar ni encarecer el consumo de las tarifas de datos móviles de las tablets en ruta.
 * **Sincronía de tipado (Single Source of Truth):** Se exige el uso de `supabase-cli` para autogenerar las interfaces de TypeScript directamente desde el esquema de PostgreSQL. Esto asegurará que los validadores de `Zod` en el cliente tengan una paridad exacta con la base de datos.
@@ -85,17 +102,18 @@ El frontend es un entorno intrínsecamente inseguro. La seguridad y el control d
 * **First Contentful Paint — Chunk inicial ≤ 800 KB:** El chunk de entrada (entry chunk) que determina el FCP no puede superar los 800 KB en producción (gzip incluido). Vite debe configurarse con `build.chunkSizeWarningLimit: 800` y un paso de verificación en CI que falle si se supera.
 * **pdfMake — Carga diferida obligatoria:** `pdfMake` y sus fuentes (`vfs_fonts`) se cargarán **exclusivamente mediante importación dinámica** (`import()`) en React 19 lazy/Suspense. Queda terminantemente prohibido importarlos en el bundle principal. El import dinámico se ejecutará solo cuando el usuario dispare una acción de exportar o archivar un documento.
 
-## 7. Stack tecnológico obligatorio
+## Stack tecnológico obligatorio
 
-* **React 19**
-* **Vite**
-* **Zustand**
-* **TanStack Query**
-* **Tailwind v4**
+* **React 19** (con soporte estricto para React Server Components en futuras fases, aunque inicialmente solo se usarán Client Components).
+* **Vite** (compilador y bundler, configurado con límites estrictos de bundle size).
+* **Zustand** (gestión de estado global, con middleware `persist` acoplado a IndexedDB mediante `idb-keyval`).
+* **TanStack Query** (gestión de datos asíncrona, caché y sincronización con Supabase).
+* **Tailwind v4** (estilado utilitario, con configuración personalizada para tipografía, colores y breakpoints).
 * **shadcn/ui** (Única librería de componentes permitida)
-* **Supabase**
-* **pdfMake**
+* **Supabase** (PostgreSQL + Edge Functions + Auth + Storage)
+* **pdfMake** (generación de PDFs en cliente — carga diferida obligatoria)
 * **idb-keyval** (adaptador IndexedDB para el middleware `persist` de Zustand — obligatorio tras ADR-001)
+* **Vercel** (hosting y despliegue)
 
 ## 8. Stack de testing y calidad
 
