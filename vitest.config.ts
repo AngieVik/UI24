@@ -8,7 +8,12 @@ export default mergeConfig(
       globals: true,
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
-      exclude: ['**/node_modules/**', '**/e2e/**'],
+      exclude: [
+        '**/node_modules/**',
+        '**/e2e/**',
+        '**/_docs/**',           // documentación externa (Supabase, shadcn, etc.)
+        '**/dist/**',
+      ],
       coverage: {
         provider: 'v8',
         reporter: ['text', 'lcov'],

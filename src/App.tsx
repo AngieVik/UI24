@@ -74,7 +74,7 @@ function RoutePlaceholder({ activeNav }: { activeNav: string }) {
           <CardTitle className="font-display text-lg">Ruta: {activeNav}</CardTitle>
           <Badge variant="outline">Fase B — pendiente</Badge>
         </CardHeader>
-        <CardContent className="space-y-2 font-body text-sm font-light text-muted-foreground">
+        <CardContent className="space-y-2 font-body text-base font-light text-muted-foreground">
           <p>
             Esta vista forma parte del terminal y está documentada en{' '}
             <code className="font-medium text-foreground">mapeo_visual_ui.md §3</code>,

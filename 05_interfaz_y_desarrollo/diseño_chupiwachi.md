@@ -194,8 +194,8 @@ Estos son los nombres que usaremos en el código y en las clases Tailwind
 
 | Token | Valor | Uso |
 | --- | --- | --- |
-| `--col-w` | `52px` | Ancho fijo del `black_column`. |
-| `--header-h` | `52px` | Alto del header. |
+| `--col-w` | `60px` | Ancho fijo del `black_column`. (Actualizado 2026-05-22 — antes 52 px.) |
+| `--header-h` | `60px` | Alto del header. (Actualizado 2026-05-22 — antes 52 px.) |
 | `--col-hover` | `#1F1F1F` | Hover en `black_column`. |
 | `--col-active` | `#2A2A2A` | Botón activo en `black_column` (fondo). |
 | `--col-indicator` | `var(--u24-yellow)` | Barra vertical 3 px del ítem activo. |
@@ -310,8 +310,14 @@ contraste por color.
 
 ## 5. Iconografía — mapping ti-\* → lucide-react
 
-`rules.md §1` impone **`lucide.dev` exclusivamente**. Stroke 2 px. Tamaño base
-**18 px** dentro de botones, **20 px** en `black_column`, **16 px** en badges/inline.
+`rules.md §1` impone **`lucide.dev` exclusivamente**. Stroke 2 px. Tamaños tras
+ajuste 2026-05-22:
+
+- **24 px (`size-6`)** — iconos principales del `BlackColumn`.
+- **20 px (`size-5`)** — iconos secundarios del `BlackColumn` (sub-items),
+  iconos de acción en `Header` (`Inbox`, `ArrowLeft`).
+- **18 px** — iconos inline dentro de botones medianos.
+- **16 px (`size-4`)** — badges, iconos meta inline.
 La documentación heredada (`black_column.md`, `mapeo_visual_ui.md`) usa nombres
 `ti-*`. Esta tabla es el mapping autoritativo.
 
@@ -951,6 +957,68 @@ export function LoginForm() {
 
 Cada vez que se toque un componente o token, se añade una entrada aquí
 con fecha, autor (Claude o humano), archivos tocados y resumen del cambio.
+
+### 2026-05-22 — Ajuste de geometría y tipografía base
+
+**Autor**: Claude (a petición de AngieVik).
+
+**Decisión**: la primera versión del chasis quedó visualmente apretada en
+monitor de cabina. Subimos un escalón controlado de dimensiones sin tocar
+la dirección estética (densidad, monocromo + acento amarillo).
+
+**Cambios aplicados**:
+
+| Token / elemento | Antes | Después |
+| --- | --- | --- |
+| `--col-w` (BlackColumn) | `52px` | `60px` |
+| `--header-h` (Header)   | `52px` | `60px` |
+| BlackColumn — botón principal | `size-10` (40 px) | `size-11` (44 px) |
+| BlackColumn — botón sub-item  | `size-9` (36 px)  | `size-10` (40 px) |
+| BlackColumn — icono principal | `size-5` (20 px)  | `size-6` (24 px)  |
+| BlackColumn — icono sub-item  | `size-[18px]`     | `size-5` (20 px)  |
+| BlackColumn — logo mark       | 26 × 26           | 32 × 32           |
+| Header — logo lockup          | `size-6` + `text-sm` | `size-8` + `text-base` |
+| Header — botones acción       | `size-9`          | `size-10`         |
+| Header — icono acción         | `size-[18px]`     | `size-5` (20 px)  |
+| Header — ticker               | `text-sm`         | `text-base`       |
+| LoginScreen — logo            | `h-12` (48 px)    | `h-16` (64 px)    |
+| Texto secundario (banners, descripciones, cards) | `text-sm` | `text-base` |
+
+**Política de tipografía**: la regla operativa pasa a ser
+*"sm → base, dentro de la escala definida en §3.3"*. El uso de `text-sm`
+queda reservado a metadatos en tablas densas y microcopy explícitamente
+secundario. Los párrafos legibles, etiquetas y descripciones por defecto
+van en `text-base`.
+
+---
+
+### 2026-05-22 — Bypass de desarrollo en LoginScreen
+
+**Autor**: Claude (a petición de AngieVik).
+
+**Contexto**: el dev server local en `http://localhost:5173/` no podía
+autenticar contra Supabase porque faltaba `.env.local` y `useLoginFlow`
+caía en `Error de red`.
+
+**Cambios**:
+
+1. Creado `.env.local` apuntando al proyecto Supabase de producción
+   (`ygljtbpfpfdbuxvibbom.supabase.co`) — gitignored, no se versiona.
+   Esto habilita login real con `admin/12345678` desde localhost.
+2. Añadido en `LoginScreen.tsx` un bloque condicional a
+   `import.meta.env.DEV` con:
+   - Un botón "Acceso dev (saltar Supabase)" con variante `outline` y
+     borde dasheado, icono `FlaskConical`.
+   - Una función `buildFakeSession(id_nombre)` que construye una sesión
+     mock con `user_metadata.id_nombre = 'admin'` y `rol: 'gerencia'`.
+   - Microcopy explicativo bajo el botón.
+3. El botón **no se renderiza en build de producción** (Vite reemplaza
+   `import.meta.env.DEV` por `false` en `npm run build`).
+
+**Deuda registrada**: borrar el bloque completo de bypass al cerrar la
+Fase B. Marca de búsqueda: `Bypass de desarrollo — eliminar al cerrar Fase B`.
+
+---
 
 ### 2026-05-22 — Bootstrap del sistema (sesión actual)
 

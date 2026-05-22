@@ -44,7 +44,7 @@ export function AppShell({
           <div
             role="status"
             aria-live="polite"
-            className="flex items-center gap-2 border-b border-u24-yellow/30 bg-u24-yellow-soft px-4 py-2 text-sm font-medium text-u24-black"
+            className="flex items-center gap-2 border-b border-u24-yellow/30 bg-u24-yellow-soft px-4 py-2 text-base font-medium text-u24-black"
           >
             <WifiOff aria-hidden="true" className="size-4" />
             <span>Sin conexión — las mutaciones se encolan localmente y se sincronizarán al recuperar red.</span>

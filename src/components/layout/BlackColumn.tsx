@@ -149,12 +149,12 @@ export function BlackColumn({ activeId, onSelect }: BlackColumnProps) {
         '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
       )}
     >
-      <div className="mb-2 grid size-[34px] place-items-center">
+      <div className="mb-2 grid size-10 place-items-center">
         <img
           src={logoMark}
           alt="U24"
-          width={26}
-          height={26}
+          width={32}
+          height={32}
           className="opacity-95"
         />
       </div>
@@ -175,7 +175,7 @@ export function BlackColumn({ activeId, onSelect }: BlackColumnProps) {
                   aria-current={active ? 'page' : undefined}
                   aria-expanded={item.kind === 'group' ? open : undefined}
                   className={cn(
-                    'relative grid size-10 place-items-center rounded-md text-zinc-400 transition-colors',
+                    'relative grid size-11 place-items-center rounded-md text-zinc-400 transition-colors',
                     'hover:bg-u24-column-hover hover:text-white',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-inset',
                     active && 'bg-u24-column-active text-u24-yellow',
@@ -184,13 +184,13 @@ export function BlackColumn({ activeId, onSelect }: BlackColumnProps) {
                   <Icon
                     aria-hidden="true"
                     strokeWidth={2}
-                    className="size-5"
+                    className="size-6"
                   />
                   {/* Indicador activo — barra vertical amarilla 3 px */}
                   {active && (
                     <span
                       aria-hidden="true"
-                      className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm bg-u24-yellow"
+                      className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-sm bg-u24-yellow"
                     />
                   )}
                   {/* Indicador de grupo expandido */}
@@ -229,7 +229,7 @@ export function BlackColumn({ activeId, onSelect }: BlackColumnProps) {
                           aria-label={child.label}
                           aria-current={activeId === child.id ? 'page' : undefined}
                           className={cn(
-                            'relative grid size-9 place-items-center rounded-md text-zinc-500 transition-colors',
+                            'relative grid size-10 place-items-center rounded-md text-zinc-500 transition-colors',
                             'hover:bg-u24-column-hover hover:text-white',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-inset',
                             activeId === child.id && 'bg-u24-column-active text-u24-yellow',
@@ -238,12 +238,12 @@ export function BlackColumn({ activeId, onSelect }: BlackColumnProps) {
                           <child.icon
                             aria-hidden="true"
                             strokeWidth={2}
-                            className="size-[18px]"
+                            className="size-5"
                           />
                           {activeId === child.id && (
                             <span
                               aria-hidden="true"
-                              className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-sm bg-u24-yellow"
+                              className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm bg-u24-yellow"
                             />
                           )}
                         </button>

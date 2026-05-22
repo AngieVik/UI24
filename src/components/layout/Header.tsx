@@ -23,14 +23,14 @@ export function Header({
       className="flex h-[var(--header-h)] shrink-0 items-center gap-4 border-b border-border bg-u24-black px-3 text-white"
     >
       {/* Logo + lockup */}
-      <div className="flex shrink-0 items-center gap-2 font-display tracking-tight">
+      <div className="flex shrink-0 items-center gap-2.5 font-display tracking-tight">
         <span
           aria-hidden="true"
-          className="grid size-6 place-items-center rounded-sm bg-u24-yellow text-u24-black font-black"
+          className="grid size-8 place-items-center rounded-sm bg-u24-yellow text-u24-black text-base font-black"
         >
           U
         </span>
-        <span className="hidden text-sm font-bold leading-none text-white sm:inline">
+        <span className="hidden text-base font-bold leading-none text-white sm:inline">
           Control operativo U24
         </span>
       </div>
@@ -38,7 +38,7 @@ export function Header({
       {/* Ticker / marquesina */}
       <div className="relative flex-1 overflow-hidden">
         {ticker && (
-          <div className="flex animate-[marquee_60s_linear_infinite] whitespace-nowrap text-sm font-medium text-zinc-200 hover:[animation-play-state:paused] motion-reduce:animate-none">
+          <div className="flex animate-[marquee_60s_linear_infinite] whitespace-nowrap text-base font-medium text-zinc-200 hover:[animation-play-state:paused] motion-reduce:animate-none">
             <span className="px-6">{ticker}</span>
             <span className="px-6" aria-hidden="true">{ticker}</span>
           </div>
@@ -54,12 +54,12 @@ export function Header({
               aria-label="Bandejas"
               onClick={onOpenInbox}
               className={cn(
-                'relative grid size-9 place-items-center rounded-md text-zinc-300 transition-colors hover:bg-u24-column-hover hover:text-white',
+                'relative grid size-10 place-items-center rounded-md text-zinc-300 transition-colors hover:bg-u24-column-hover hover:text-white',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-u24-black',
                 unreadCount > 0 && 'text-u24-yellow',
               )}
             >
-              <Inbox aria-hidden="true" className="size-[18px]" strokeWidth={2} />
+              <Inbox aria-hidden="true" className="size-5" strokeWidth={2} />
               {unreadCount > 0 && (
                 <span
                   aria-hidden="true"
@@ -85,7 +85,7 @@ export function Header({
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-u24-black',
                 )}
               >
-                <ArrowLeft aria-hidden="true" className="size-[18px]" strokeWidth={2} />
+                <ArrowLeft aria-hidden="true" className="size-5" strokeWidth={2} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">Atrás</TooltipContent>

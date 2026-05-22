@@ -44,7 +44,7 @@ export function VisualInfoHome({ onGoCheckin }: VisualInfoHomeProps) {
           <h2 className="font-display text-lg font-bold leading-tight">
             Terminal sin turno activo
           </h2>
-          <p className="font-body text-sm font-light text-muted-foreground">
+          <p className="font-body text-base font-light text-muted-foreground">
             No hay personal en turno ni vehículo asignado.
             Pulsa <strong>Check-in</strong> para iniciar.
           </p>
@@ -87,7 +87,7 @@ function PanelPersonal() {
           0 con check-in
         </Badge>
       </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">
+      <CardContent className="text-base text-muted-foreground">
         Pendiente de cableado con <code className="font-body">usePersonaStore</code>.
       </CardContent>
     </Card>
@@ -101,7 +101,7 @@ function PanelVehiculo() {
         <CardTitle>Vehículo del terminal</CardTitle>
         <Badge variant="outline">Sin asignar</Badge>
       </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">
+      <CardContent className="text-base text-muted-foreground">
         Pendiente de cableado con <code className="font-body">useActivacionStore</code>.
       </CardContent>
     </Card>
@@ -125,7 +125,7 @@ function VisualInfoDRP() {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">
+      <CardContent className="text-base text-muted-foreground">
         Pendiente de cableado con <code className="font-body">useDrpStore</code>.
       </CardContent>
     </Card>
@@ -138,7 +138,7 @@ function BandejaEntradaPersonal() {
       <CardHeader className="pb-2">
         <CardTitle>Bandejas personales</CardTitle>
       </CardHeader>
-      <CardContent className="flex items-center gap-2 text-sm">
+      <CardContent className="flex items-center gap-2 text-base">
         <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5">
           <Mail aria-hidden="true" className="size-4 text-muted-foreground" />
           <Avatar className="size-6">
