@@ -218,15 +218,15 @@ netlify rollback
 ## Registro del deploy
 
 ```
-Fecha:                    2026-05-22 01:31 UTC (redeploy login-fix: 2026-05-22)
+Fecha:                    2026-05-22 (redeploy login-screen-redesign: 2026-05-22)
 Versión desplegada:       1.0.0
 Responsable:              AngieVik
 Migraciones aplicadas:    0001 – 0015 (todas, incluyendo migration 15 revoke system funcs)
 Edge Functions:           13 funciones desplegadas (ACTIVE v1)
-Bundle size (max chunk):  278 kB (index.js)
+Bundle size (max chunk):  276 kB (index.js)
 URL de producción:        https://u24-terminal.vercel.app  (Vercel — angieviks-projects/u24-terminal)
-URL de rollback frontend: https://u24-terminal-4acj83g92-angieviks-projects.vercel.app
-Inspector Vercel:         https://vercel.com/angieviks-projects/u24-terminal/9G4Eoq21picfaaGVdp9i89ENdv5B
+URL de rollback frontend: https://u24-terminal-4po60jatw-angieviks-projects.vercel.app
+Inspector Vercel:         https://vercel.com/angieviks-projects/u24-terminal/3Fh9QtFcgK9nrb5FBSiYGiLiioWr
 
 Fase 0 completada:  ☑ Pass  ⬜ Fail
 Fase 1 completada:  ☑ Pass  ⬜ Fail

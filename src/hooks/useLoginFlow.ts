@@ -10,35 +10,24 @@ export interface LoginFlowState {
   isLoading: boolean
   error: string | null
   attempts: number
-  isBlocked: boolean
 }
-
-const MAX_ATTEMPTS = 3
 
 export function useLoginFlow() {
   const [state, setState] = useState<LoginFlowState>({
     isLoading: false,
     error: null,
     attempts: 0,
-    isBlocked: false,
   })
 
   const isOnline = useGlobalStore((s) => s.isOnline)
 
   function handleFailure(message: string): boolean {
-    setState((prev) => {
-      const attempts = prev.attempts + 1
-      const isBlocked = attempts >= MAX_ATTEMPTS
-      return {
-        ...prev,
-        isLoading: false,
-        error: isBlocked
-          ? 'Demasiados intentos fallidos. Contacta con RRHH para recuperar el acceso.'
-          : message,
-        attempts,
-        isBlocked,
-      }
-    })
+    setState((prev) => ({
+      ...prev,
+      isLoading: false,
+      error: message,
+      attempts: prev.attempts + 1,
+    }))
     return false
   }
 
@@ -59,7 +48,6 @@ export function useLoginFlow() {
   }
 
   async function loginNormal(id_nombre: string, password: string): Promise<boolean> {
-    if (state.isBlocked) return false
     setState((s) => ({ ...s, isLoading: true, error: null }))
 
     try {
@@ -124,7 +112,7 @@ export function useLoginFlow() {
   }
 
   function reset() {
-    setState({ isLoading: false, error: null, attempts: 0, isBlocked: false })
+    setState({ isLoading: false, error: null, attempts: 0 })
   }
 
   return { ...state, loginNormal, loginEmergencia, reset }
