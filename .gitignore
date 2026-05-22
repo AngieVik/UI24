@@ -33,4 +33,13 @@ coverage/
 06_operaciones\Apuntes (Ignorar)/Apuntes(ignorar).md
 06_operaciones/Apuntes (Ignorar)/sprint_1_complete.md
 
+# Documentación externa
+/_docs/
+
+# Carpeta temporal
+/_tmp/
+
+# Apuntes
+/_apuntes/
+
 .vercel
