@@ -16,7 +16,10 @@
       "mcp__Desktop_Commander__get_file_info",
       "mcp__Desktop_Commander__start_process",
       "mcp__Desktop_Commander__read_process_output",
-      "mcp__Desktop_Commander__read_file"
+      "mcp__Desktop_Commander__read_file",
+      "mcp__afb9757a-54fd-42ee-bb6a-3c0b4f9d1f5a__get_project",
+      "mcp__afb9757a-54fd-42ee-bb6a-3c0b4f9d1f5a__list_projects",
+      "mcp__afb9757a-54fd-42ee-bb6a-3c0b4f9d1f5a__execute_sql"
     ]
   }
 }

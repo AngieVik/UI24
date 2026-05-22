@@ -47,12 +47,12 @@ BEGIN
     '{}'::jsonb,
     NOW(), NOW(), 'authenticated', 'authenticated'
   FROM (VALUES
-    (v_tes_uid,   'tes_demo@u24.internal'),
-    (v_flota_uid, 'flota_demo@u24.internal'),
-    (v_coord_uid, 'coordinacion_demo@u24.internal'),
-    (v_logis_uid, 'logistica_demo@u24.internal'),
-    (v_geren_uid, 'gerencia_demo@u24.internal'),
-    (v_rrhh_uid,  'rrhh_demo@u24.internal')
+    (v_tes_uid,   'tes_demo@u24.com'),
+    (v_flota_uid, 'flota_demo@u24.com'),
+    (v_coord_uid, 'coordinacion_demo@u24.com'),
+    (v_logis_uid, 'logistica_demo@u24.com'),
+    (v_geren_uid, 'gerencia_demo@u24.com'),
+    (v_rrhh_uid,  'rrhh_demo@u24.com')
   ) AS t(uid, email_val)
   ON CONFLICT (id) DO NOTHING;
 

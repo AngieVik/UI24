@@ -65,7 +65,7 @@ export function useLoginFlow() {
     try {
       if (isOnline) {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: `${id_nombre}@u24.internal`,
+          email: `${id_nombre}@u24.com`,
           password,
         })
         if (error || !data.session) {

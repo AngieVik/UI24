@@ -1,0 +1,27 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://ygljtbpfpfdbuxvibbom.supabase.co wss://ygljtbpfpfdbuxvibbom.supabase.co https://o4511429978488832.ingest.de.sentry.io; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none';"
+
+# Service Worker — no cachear en el navegador para que el SW reciba siempre la versión más reciente
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# SPA — todas las rutas sirven index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

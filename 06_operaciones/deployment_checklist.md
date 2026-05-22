@@ -218,20 +218,23 @@ netlify rollback
 ## Registro del deploy
 
 ```
-Fecha:                    ________________ UTC
-Versión desplegada:       ________________ (semver)
-Responsable:              ________________
-Migraciones aplicadas:    0001 – 0014 (todas)
-Edge Functions:           ______ funciones desplegadas
-Bundle size (max chunk):  _______ KB
+Fecha:                    2026-05-22 01:31 UTC
+Versión desplegada:       1.0.0
+Responsable:              AngieVik
+Migraciones aplicadas:    0001 – 0015 (todas, incluyendo migration 15 revoke system funcs)
+Edge Functions:           13 funciones desplegadas (ACTIVE v1)
+Bundle size (max chunk):  278 kB (index.js)
+URL de producción:        https://u24-terminal.vercel.app  (Vercel — angieviks-projects/u24-terminal)
+URL de rollback frontend: https://u24-terminal-og007ss4a-angieviks-projects.vercel.app
+Inspector Vercel:         https://vercel.com/angieviks-projects/u24-terminal/CNfs9PR5BhQZctz8ESdBDWTVHbgV
 
-Fase 0 completada:  ⬜ Pass  ⬜ Fail
-Fase 1 completada:  ⬜ Pass  ⬜ Fail
-Fase 2 completada:  ⬜ Pass  ⬜ Fail
-Fase 3 completada:  ⬜ Pass  ⬜ Fail
-Fase 4 completada:  ⬜ Pass  ⬜ Fail
+Fase 0 completada:  ☑ Pass  ⬜ Fail
+Fase 1 completada:  ☑ Pass  ⬜ Fail
+Fase 2 completada:  ☑ Pass  ⬜ Fail
+Fase 3 completada:  ☑ Pass  ⬜ Fail
+Fase 4 completada:  ⬜ Pass  ⬜ Fail  ← EN CURSO (smoke tests manuales)
 Fase 5 completada:  ⬜ Pass  ⬜ Fail
 
-Incidencias post-deploy: ________________
+Incidencias post-deploy: Ninguna
 RTO si hubo rollback:     ________________ min
 ```
