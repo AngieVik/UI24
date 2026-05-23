@@ -17,10 +17,10 @@ describe('useBlackColumnState — inicial', () => {
     expect(result.current.currentNodeId).toBeNull()
   })
 
-  it('expone hojas fijas filtradas por rol', () => {
+  it('expone hojas fijas filtradas por rol (solo Check-in tras 2026-05-23)', () => {
     const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
     const ids = result.current.fixedLeaves.map((l) => l.id)
-    expect(ids).toEqual(['home', 'checkin'])
+    expect(ids).toEqual(['checkin'])
   })
 
   it('rol sin_rol no ve ni hojas fijas ni hijos', () => {
@@ -164,14 +164,14 @@ describe('useBlackColumnState — visibleChildren', () => {
     expect(ids).toContain('rrhh')
   })
 
-  it('dentro de un grupo devuelve sus hijos (grupillos + leaves del grupo)', () => {
+  it('dentro de un grupo devuelve sus hijos en orden (Vehículos primero)', () => {
     const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
     act(() => result.current.navigateInto('operativa'))
     const ids = result.current.visibleChildren.map((n) => n.id)
+    expect(ids[0]).toBe('vehiculos_op')
     expect(ids).toContain('op_docs_turno')
     expect(ids).toContain('op_docs_clinicos')
     expect(ids).toContain('op_mantenimiento')
-    expect(ids).toContain('vehiculos_op')
   })
 
   it('dentro de un grupillo devuelve sus hojas', () => {

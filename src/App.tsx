@@ -1,28 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { LoginScreen } from '@/components/auth/LoginScreen'
 import { AppShell } from '@/components/layout/AppShell'
 import { VisualInfoHome } from '@/components/layout/VisualInfoHome'
+import { useBlackColumn } from '@/contexts/BlackColumnContext'
+import { findNode } from '@/components/layout/black-column-nav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 /**
- * Punto de entrada de la app. Solo dos estados:
+ * Punto de entrada — dos estados estrictos.
  *
  *   estado_0 — sin sesión → <LoginScreen />
- *   estado_1 — con sesión → <AppShell> con routing state-based
+ *   estado_1 — con sesión → <AppShell> con routing por selectedLeafId
  *
- * El check-in operativo (selección de vehículo / inicio de turno) NO es un
- * gate del estado_1: vive como una ruta interna ("activeNav === 'checkin'").
- * Spec: mapeo_visual_ui.md §1 + diseño_chupiwachi.md §6.
+ * AppShell envuelve todo en BlackColumnProvider, así que cualquier hijo
+ * (incluido el HomeArea) puede leer el estado del BlackColumn via context.
  */
 export default function App() {
   const session   = useAuthStore((s) => s.session)
   const setOnline = useGlobalStore((s) => s.setOnline)
-
-  // Routing state-based — siguiendo el árbol del BlackColumn.
-  const [activeNav, setActiveNav] = useState('home')
 
   useEffect(() => {
     const onlineHandler  = () => setOnline(true)
@@ -36,43 +34,40 @@ export default function App() {
     }
   }, [setOnline])
 
-  // estado_0
-  if (!session) {
-    return <LoginScreen />
-  }
-
-  // estado_1
-  const showBack = activeNav !== 'home'
-  const handleBack = () => setActiveNav('home')
+  if (!session) return <LoginScreen />
 
   return (
-    <AppShell
-      activeNav={activeNav}
-      onNavSelect={setActiveNav}
-      showBack={showBack}
-      onBack={handleBack}
-      ticker="Tablón · sistema en reconstrucción · Fase A completada · home_area activo con shadcn + lucide + tokens U24."
-    >
-      {renderRoute(activeNav, () => setActiveNav('checkin'))}
+    <AppShell ticker="Tablón · BlackColumn drill-down activo · pulsa los grupos para entrar, pulsa el padre activo o el botón de atrás para volver.">
+      <HomeArea />
     </AppShell>
   )
 }
 
-function renderRoute(activeNav: string, goCheckin: () => void) {
-  if (activeNav === 'home') {
-    return <VisualInfoHome onGoCheckin={goCheckin} />
+/* ─────────────────────────────────────────────────────────────────────────
+ *  HomeArea — lee selectedLeafId del Context y rutea al Screen.
+ * ───────────────────────────────────────────────────────────────────────── */
+function HomeArea() {
+  const { selectedLeafId } = useBlackColumn()
+
+  if (selectedLeafId === 'home' || selectedLeafId == null) {
+    return <VisualInfoHome />
   }
-  return <RoutePlaceholder activeNav={activeNav} />
+
+  // Cualquier otra hoja → placeholder honesto hasta que cada Screen se
+  // implemente en Fase D.
+  return <LeafPlaceholder leafId={selectedLeafId} />
 }
 
-/* ─── Placeholder honesto para rutas aún sin implementar (Fase B) ─── */
-function RoutePlaceholder({ activeNav }: { activeNav: string }) {
+function LeafPlaceholder({ leafId }: { leafId: string }) {
+  const node  = findNode(leafId)
+  const label = node?.label ?? leafId
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="font-display text-lg">Ruta: {activeNav}</CardTitle>
-          <Badge variant="outline">Fase B — pendiente</Badge>
+          <CardTitle className="font-display text-lg">{label}</CardTitle>
+          <Badge variant="outline">Fase D — pendiente</Badge>
         </CardHeader>
         <CardContent className="space-y-2 font-body text-base font-light text-muted-foreground">
           <p>
@@ -81,9 +76,11 @@ function RoutePlaceholder({ activeNav }: { activeNav: string }) {
             pero todavía no está reconstruida con shadcn/ui + tokens U24.
           </p>
           <p>
-            Se implementará en la <strong>Fase B</strong> tras validar el chasis,
-            siguiendo el orden del documento{' '}
-            <code className="font-medium text-foreground">diseño_chupiwachi.md §8</code>.
+            Se implementará en la <strong>Fase D</strong> tras validar el chasis
+            y `visual_info_home`. Orden de Screens documentado en{' '}
+            <code className="font-medium text-foreground">
+              06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md
+            </code>.
           </p>
         </CardContent>
       </Card>

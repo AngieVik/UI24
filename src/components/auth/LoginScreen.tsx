@@ -86,7 +86,7 @@ export function LoginScreen() {
         <img
           src={logoUrl}
           alt="U24 Servicios Sanitarios"
-          className="h-16 w-auto"
+          className="h-24 w-auto"
         />
 
         <Card className="w-full">

@@ -26,8 +26,9 @@
   --u24-column-active: #2A2A2A;
 
   /* —— Geometría del chasis —— */
-  --col-w:    60px;
-  --header-h: 60px;
+  --col-w:           60px;   /* BlackColumn colapsada (default) */
+  --col-w-expanded: 220px;   /* BlackColumn con etiquetas a la derecha */
+  --header-h:        60px;
 
   /* —— Radios —— */
   --radius-sm: 0.25rem;   /* 4px */

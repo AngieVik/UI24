@@ -679,68 +679,166 @@ Content → fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-60
 
 ### 10.1 BlackColumn (`src/components/layout/BlackColumn.tsx`)
 
-**Dimensiones**: `w-13` (52 px) · alto: `100vh`.
-**Fondo**: `bg-[--u24-black]`.
-**Logo**: top 12 px, U24 mark, 26×26 px, color `--u24-yellow`.
+**Versión final — 2026-05-23**. Reemplaza por completo la especificación
+anterior basada en acordeón vertical.
 
-**Item normal** (`button`):
+#### 10.1.1 Modelo de navegación: drill-down con anchura fluida
+
+- **Niveles**: máximo 3 (raíz → grupo → grupillo).
+- **Anchura**: `var(--col-w)` (60 px) cuando colapsada · `var(--col-w-expanded)`
+  (220 px) cuando expandida.
+- **Transición**: `transition-[width] duration-200 ease-out`.
+- **Estado**: `useBlackColumnState` vía `BlackColumnContext` — compartido con
+  Header y `App.tsx`.
+
+#### 10.1.2 Layout vertical
+
 ```
-h-13 w-13 (52×52) · flex items-center justify-center
-text-zinc-400 · hover:bg-[--col-hover] hover:text-zinc-50
-focus-visible:ring-2 ring-[--u24-yellow] ring-inset
-transition-colors duration-fast
+┌──────────────────────────────────────┐
+│ Check-in | Check-out  (fijo arriba)  │  ← hoja fija (NAV_FIXED_LEAVES)
+│ ── separator ──                      │
+│                                      │
+│ [Padre activo en amarillo]           │  ← encabezado, solo si currentPath ≠ []
+│ ── separator ──                      │
+│                                      │
+│ Hijo 1                               │  ← drill content (visibleChildren)
+│ Hijo 2                               │
+│ ...                                  │
+│                                      │
+│ (spacer mt-auto)                     │
+│                                      │
+│ ── separator ──                      │  ← anclado al fondo
+│ Atrás (contextual)                   │  ← penúltimo (aparece/desaparece)
+│ Toggle expandir/contraer             │  ← último (siempre presente)
+└──────────────────────────────────────┘
 ```
 
-**Item activo**:
+**Orden de botones inferiores (decisión 2026-05-23)**:
+- **Toggle siempre último** (anclado al fondo). Su posición nunca se mueve.
+- **Atrás penúltimo y contextual** (`canGoBack === true`). Aparece/desaparece
+  encima del Toggle sin desplazarlo.
+
+#### 10.1.3 Encabezado del padre activo
+
+Cuando `currentPath.length > 0`, se renderiza el último nodo del path como
+**encabezado** dentro del flujo vertical:
+- Visual: `aria-current="page"` + fondo `bg-u24-column-active` + texto
+  `text-u24-yellow` + barra vertical amarilla 3 px a la izquierda.
+- Comportamiento: pulsar el encabezado = `goBack()` (equivalente al botón
+  Atrás del fondo).
+- Tooltip: "Cerrar este grupo y volver atrás".
+
+#### 10.1.4 NavRow (item genérico)
+
+Todas las filas del BlackColumn usan el mismo componente interno `NavRow`:
+
 ```
-text-[--u24-yellow]  · bg-[--col-active]
-+ pseudo-elemento ::before
-  → barra 3 px de ancho · 28 px alto · centrada vertical · bg-[--u24-yellow]
-  → posicionada en left: 0
+<button class="
+  group relative flex h-11 w-full items-center rounded-md
+  text-zinc-300 transition-colors
+  hover:bg-u24-column-hover hover:text-white
+  focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-inset
+  data-[active]:bg-u24-column-active data-[active]:text-u24-yellow
+">
+  <span class="grid w-[52px] place-items-center">
+    <Icon class="size-6" stroke-width="2" />
+  </span>
+  {expanded && <span class="flex-1 truncate text-left font-display text-base font-bold leading-none">
+    {label}
+  </span>}
+  {expanded && trailing /* ChevronRight si es grupo/grupillo */}
+  {active && <span class="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-sm bg-u24-yellow" />}
+</button>
 ```
 
-**Sub-item (acordeón expandido)**:
-```
-h-11 w-13 (52×44) · text-zinc-500
-indent visual: el icono se renderiza con un leve fade-in (opacity 0→1)
-+ separator entre subgrupos: <hr class="mx-3 my-1 border-zinc-800">
-```
+**Reglas**:
+- Rail del icono: ancho fijo de 52 px (alinea con `--col-w` para que la
+  posición horizontal del icono no se mueva al expandir/contraer).
+- Label: visible **solo** cuando `expanded === true`. Truncado con `truncate`.
+- Trailing chevron (`ChevronRight`): visible **solo** en grupos/grupillos
+  cuando `expanded === true`.
+- Indicador activo: barra vertical 3 px amarilla a `left-0`, alto desde
+  `top-2` a `bottom-2`.
 
-**Comportamiento**:
-- Un solo subgrupo abierto simultáneamente.
-- Click en grupo padre → toggle expand.
-- Click en hoja → emite `onSelect(id)`.
-- Tooltip on hover (delay 350 ms, side="right"), suprimido en touch.
+#### 10.1.5 Botones permanentes / contextuales
+
+| Botón | Posición | Condición | onClick |
+| --- | --- | --- | --- |
+| **Check-in \| Check-out** | Arriba (fijo) | Siempre visible | `goCheckin()` |
+| **Encabezado padre activo** | Cabecera de la lista | `currentPath ≠ []` | `goBack()` |
+| **Atrás** | Penúltimo abajo (contextual) | `canGoBack === true` | `goBack()` |
+| **Toggle expand/collapse** | Último abajo (fijo) | Siempre | `toggleExpanded()` |
+
+> **Sin Home**: el botón Home se eliminó (decisión 2026-05-23). El **logo del
+> Header** ocupa su función — pulsarlo invoca `goHome()`.
+
+#### 10.1.6 Tooltips
+
+- Cuando `expanded === false` o cuando el item tiene `hint`: tooltip activo.
+- Cuando `expanded === true` y no hay `hint`: tooltip suprimido (la label
+  ya es visible).
+- Posición: `side="right"`, `sideOffset={6}`.
+- Delay: heredado del `TooltipProvider` global (350 ms en producción, 0 en
+  tests).
+
+#### 10.1.7 RBAC visual
+
+`useBlackColumnState` aplica `filterByRol(NAV_TREE, rol)` y filtra
+`NAV_FIXED_LEAVES`. Los items que el rol no puede ver simplemente no se
+renderizan. Sin `aria-disabled` ni atenuado — invisibles.
+
+#### 10.1.8 Foco por teclado
+
+Cada `NavRow` es un `<button>` nativo. `Tab` recorre los botones en orden
+visual. `Enter` y `Espacio` activan. El indicador de foco usa
+`focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-inset`.
+
+#### 10.1.9 Tests asociados
+
+| Archivo | Cobertura |
+| --- | --- |
+| `src/test/black-column-nav.test.ts` | Helpers del árbol (filterByRol, findNode, getPathTo, getChildrenOf, rolPuedeVer). 28 tests. |
+| `src/test/useBlackColumnState.test.ts` | Máquina de estado (navigateInto, goBack, selectLeaf, toggleExpanded, goHome, goCheckin, visibleChildren). 20 tests. |
+| `src/test/BlackColumnContext.test.tsx` | Provider/consumer del Context. 2 tests. |
+| `src/test/BlackColumn.test.tsx` | Componente — drill, encabezado padre, RBAC, orden de botones, selección de hoja, Toggle. 17 tests. |
+
+Total tras Fase B: **86 tests verde**.
 
 ### 10.2 Header (`src/components/layout/Header.tsx`)
 
-**Dimensiones**: `h-13` (52 px) · `border-b border-border` · `bg-card` ·
-sticky top.
+**Versión final — 2026-05-23**.
 
-**Layout (3 columnas con grid)**:
+**Dimensiones**: `h-[var(--header-h)]` (60 px) · `border-b border-zinc-900` ·
+`bg-u24-black` · full-width arriba del chasis (no comparte fila con
+BlackColumn).
+
+**Layout horizontal**:
 ```
-[Logo + tipografía U24]  [marquesina/ticker · animación marquee derecha → izquierda]  [inbox-btn] [back-btn]
-   min-w-[140px]           flex-1 overflow-hidden                                     auto auto
+[Logo U24 grande (clickable)]   [ticker (marquee)]   [bandejas]
+   44 px mark, fondo transparente   flex-1            size-10
 ```
 
-**Logo lockup**:
-- Mark SVG (24 px) color `--u24-yellow`.
-- Texto "Control operativo U24" `font-display font-bold text-sm tracking-tight`.
+**Logo principal**:
+- Mark SVG 44×44 px, sin texto al lado.
+- `button` envolvente con `bg-transparent`, sin hover de fondo (decisión
+  2026-05-23 — el logo debe quedar visualmente "libre" sobre el header).
+- Click → `goHome()` vía `useBlackColumn()`.
+- Tooltip "Home · Volver a la vista raíz".
+- `aria-current="page"` cuando `selectedLeafId === 'home'` (sin estilo
+  visual asociado por petición de la usuaria).
 
 **Ticker**:
 - `whitespace-nowrap` · animación `marquee 60s linear infinite`.
 - Pausa on `hover` y on `prefers-reduced-motion`.
-- Texto `font-display text-sm text-muted-foreground`.
+- Texto `font-display text-base font-medium text-zinc-200`.
 
 **Botón bandejas**:
-- `Inbox` icon · 36 px · variante `ghost icon`.
-- Si `unreadCount > 0` → dot amarillo absolute `top-1 right-1` 8 px.
-- Tooltip "Bandejas".
+- `Inbox` icon · `size-10` botón · icono `size-5`.
+- Si `unreadCount > 0` → dot amarillo absoluto `top-1 right-1` `size-2`.
+- Tooltip "Bandejas · N sin leer".
 
-**Botón atrás**:
-- `ArrowLeft` icon · 36 px · variante `ghost icon`.
-- Visible **solo** cuando hay historial (`showBack === true`).
-- Tooltip "Atrás".
+**El botón "Atrás" NO vive en el Header**. Su lugar es el BlackColumn (penúltimo
+botón abajo) y la cabecera del padre activo.
 
 ### 10.3 LoginScreen (`src/components/auth/LoginScreen.tsx`)
 
@@ -957,6 +1055,83 @@ export function LoginForm() {
 
 Cada vez que se toque un componente o token, se añade una entrada aquí
 con fecha, autor (Claude o humano), archivos tocados y resumen del cambio.
+
+### 2026-05-23 — Fase B cerrada (BlackColumn drill-down + JWT claims)
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Contexto**: Cierre completo de la Fase B del roadmap de reconstrucción
+del frontend.
+
+**Decisiones tomadas y aplicadas**:
+
+1. **Backend** (Fase B.1):
+   - Enum `rol_empleado` extendido con `personal_externo` e `invitado`.
+   - Función `public.custom_access_token_hook(jsonb) returns jsonb` que
+     inyecta `app_metadata.rol` e `id_nombre` en cada JWT.
+   - Hook activado manualmente por la usuaria en Supabase Dashboard.
+   - Verificación end-to-end en navegador con JWT decodificado.
+
+2. **Frontend — modelo de nav** (Fases B.2 / B.3 / B.4 / B.5):
+   - Árbol drill-down de 3 niveles tipado en `black-column-nav.ts`.
+   - Máquina de estado en `useBlackColumnState` + Context
+     `BlackColumnContext` para compartirla entre Header, BlackColumn y
+     `App.tsx`.
+   - Componente `BlackColumn` reescrito con anchura fluida 60 ↔ 220 px,
+     drill-down puro, encabezado del padre activo y auto-colapso tras
+     seleccionar hoja.
+   - `App.tsx` rutea `home_area` según `selectedLeafId` del Context.
+
+3. **Refinamientos visuales del 23-05**:
+   - Logo del login: `h-16` → `h-24`.
+   - Logo del Header (44 px) sin fondo, clickable → `goHome()`.
+   - Botón Home eliminado del BlackColumn (su función va al logo del
+     Header).
+   - Botones inferiores invertidos: Toggle al fondo (siempre presente),
+     Atrás encima (contextual). Razón: Atrás aparece/desaparece sin
+     desplazar al Toggle.
+   - Estructura del chasis: Header full-width arriba, debajo
+     `BlackColumn + main` (antes BlackColumn iba de extremo a extremo).
+
+4. **Decisiones de RBAC**:
+   - Rol JWT como única fuente de verdad (no fallback desde
+     `fichas_empleados.rol` en el cliente).
+   - Tipo `Rol` con 14 valores en `src/lib/auth-roles.ts`.
+   - `useAuthStore` decodifica el JWT en `setSession` y expone `rol` como
+     selector.
+
+5. **Tests**: 86 tests verde tras Fase B (era 38 antes).
+   - `black-column-nav.test.ts` — 28 tests
+   - `useBlackColumnState.test.ts` — 20 tests
+   - `BlackColumnContext.test.tsx` — 2 tests
+   - `BlackColumn.test.tsx` — 17 tests
+   - `resolveRpcError.test.ts` — 6 tests
+   - `useOfflineQueue.test.ts` — 13 tests
+
+**Archivos creados/modificados** (resumen):
+- `supabase/migrations/20260522000001_extend_rol_empleado_enum.sql`
+- `supabase/migrations/20260522000002_custom_access_token_hook.sql`
+- `src/lib/auth-roles.ts` (nuevo)
+- `src/stores/useAuthStore.ts` (decodifica JWT)
+- `src/components/layout/black-column-nav.ts` (nuevo)
+- `src/components/layout/BlackColumn.tsx` (reescrito)
+- `src/components/layout/Header.tsx` (logo grande clickable)
+- `src/components/layout/AppShell.tsx` (reestructurado)
+- `src/components/auth/LoginScreen.tsx` (logo más grande)
+- `src/contexts/BlackColumnContext.tsx` (nuevo)
+- `src/hooks/useBlackColumnState.ts` (nuevo)
+- `src/App.tsx` (routing por selectedLeafId)
+- `src/test/setup.ts` (ResizeObserver mock, etc.)
+- `src/test/test-utils.tsx` (nuevo, renderWithShell)
+- 4 archivos `.test.{ts,tsx}` nuevos en `src/test/`
+
+**Deuda registrada** (sigue en
+`06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md`):
+- D-01: Bypass dev de LoginScreen — eliminar en Fase E.
+- D-09: Clarificar leaves vs intra-Screen content en Visor Mantenimiento,
+  Mantenimiento flota, Modulo_emergencias.
+
+---
 
 ### 2026-05-22 — Ajuste de geometría y tipografía base
 

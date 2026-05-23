@@ -42,16 +42,17 @@ describe('filterByRol', () => {
     expect(idsRaiz).toContain('doc13')
   })
 
-  it('rol "tes" dentro de Operativa solo ve documentos del turno + clínicos + mantenimiento + Vehículos', () => {
+  it('rol "tes" dentro de Operativa ve Vehículos + 3 grupillos', () => {
     const filtered = filterByRol(NAV_TREE, 'tes')
     const operativa = filtered.find((n) => n.id === 'operativa')
     expect(operativa).toBeDefined()
     if (operativa?.kind === 'group') {
       const ids = operativa.children.map((c) => c.id)
+      // Vehículos primero según el spec refinado del 23-05-2026
+      expect(ids[0]).toBe('vehiculos_op')
       expect(ids).toContain('op_docs_turno')
       expect(ids).toContain('op_docs_clinicos')
       expect(ids).toContain('op_mantenimiento')
-      expect(ids).toContain('vehiculos_op')
     }
   })
 
@@ -71,7 +72,6 @@ describe('filterByRol', () => {
     const log = filtered.find((n) => n.id === 'logistica')
     expect(log).toBeDefined()
     if (log?.kind === 'group') {
-      // Inventario maestro existe pero sin auditoría
       const invMaestro = log.children.find((c) => c.id === 'log_inventario')
       expect(invMaestro?.kind).toBe('grupillo')
       if (invMaestro?.kind === 'grupillo') {
@@ -80,7 +80,7 @@ describe('filterByRol', () => {
         expect(ids).toContain('log_inv_dinamicos')
         expect(ids).not.toContain('log_inv_auditoria')
         expect(ids).not.toContain('log_descuadres')
-        expect(ids).not.toContain('log_catalogo_alt')
+        expect(ids).not.toContain('log_inv_catalogo')
       }
     }
   })
@@ -134,9 +134,9 @@ describe('filterByRol', () => {
  * ───────────────────────────────────────────────────────────────────────── */
 
 describe('findNode', () => {
-  it('encuentra hojas fijas (Home, Check-in)', () => {
-    expect(findNode('home')?.id).toBe('home')
+  it('encuentra hoja fija Check-in (Home se removió 2026-05-23)', () => {
     expect(findNode('checkin')?.id).toBe('checkin')
+    expect(findNode('home')).toBeNull()
   })
 
   it('encuentra hojas de primer nivel', () => {
@@ -146,7 +146,7 @@ describe('findNode', () => {
 
   it('encuentra hojas dentro de grupillos', () => {
     expect(findNode('doc6')?.id).toBe('doc6')
-    expect(findNode('log_stock_actual')?.id).toBe('log_stock_actual')
+    expect(findNode('log_stock_historial')?.id).toBe('log_stock_historial')
   })
 
   it('devuelve null para ids inexistentes', () => {
@@ -155,8 +155,8 @@ describe('findNode', () => {
 })
 
 describe('getPathTo', () => {
-  it('hoja fija → [id]', () => {
-    expect(getPathTo('home')).toEqual(['home'])
+  it('hoja fija Check-in → [id]', () => {
+    expect(getPathTo('checkin')).toEqual(['checkin'])
   })
 
   it('hoja raíz → [id]', () => {
@@ -185,7 +185,7 @@ describe('getChildrenOf', () => {
   it('grupo → sus hijos directos', () => {
     const children = getChildrenOf('operativa')
     expect(children.length).toBe(4)
-    expect(children[0]?.id).toBe('op_docs_turno')
+    expect(children[0]?.id).toBe('vehiculos_op')
   })
 
   it('grupillo → sus hojas', () => {

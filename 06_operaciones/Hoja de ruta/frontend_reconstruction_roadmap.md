@@ -38,7 +38,7 @@
 ## Estado actual (snapshot)
 
 - ✅ Fase A — Chasis correcto (cerrada 2026-05-22)
-- 🟡 Fase B — Reescritura del black_column (en curso, decisiones pendientes)
+- ✅ Fase B — Reescritura del BlackColumn (cerrada 2026-05-23)
 - ⬜ Fase C — Cableado de datos de `visual_info_home`
 - ⬜ Fase D — Reconstrucción de Screens feature (modular)
 - ⬜ Fase E — Validación y reapertura del checklist de despliegue
