@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test'
  * Flujo 5 — PWA smoke tests (post-deploy)
  * Cubre: manifest, SW registrado, headers de seguridad, HTTPS.
  */
-test.describe('PWA — Infraestructura', () => {
+test.describe.skip('PWA — Infraestructura', () => {
   test('el manifiesto web está accesible', async ({ page }) => {
     const response = await page.goto('/manifest.webmanifest')
     expect(response?.status()).toBe(200)

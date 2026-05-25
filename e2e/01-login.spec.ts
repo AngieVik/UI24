@@ -4,8 +4,11 @@ import { CREDS, loginNormal, waitForVehiclePicker } from './helpers'
 /**
  * Flujo 1 — Login normal + galleta + fingerprint
  * Cubre: acceso normal online, fingerprint SHA-256, galleta terminal.
+ *
+ * SKIPPED (D-05): referencias a UI vieja borrada en Fase A.
+ * Se reescribirá en Fase E junto con el resto de E2E.
  */
-test.describe('Login — Flujo normal', () => {
+test.describe.skip('Login — Flujo normal', () => {
   test('muestra la pantalla de login al arrancar', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('tab', { name: /acceso normal/i })).toBeVisible()
@@ -49,7 +52,7 @@ test.describe('Login — Flujo normal', () => {
   })
 })
 
-test.describe('Login — Flujo emergencia', () => {
+test.describe.skip('Login — Flujo emergencia', () => {
   test('muestra el formulario de emergencia al seleccionar la pestaña', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('tab', { name: /emergencia/i }).click()

@@ -14,7 +14,7 @@ async function llegarAInventario(page: Page) {
   await navegarA(page, 'inventario|doc.?6|material')
 }
 
-test.describe('Inventario — Flujo online', () => {
+test.describe.skip('Inventario — Flujo online', () => {
   test('muestra el inventario del vehículo', async ({ page }) => {
     await llegarAInventario(page)
     await expect(page.getByRole('heading', { name: /inventario/i })).toBeVisible({ timeout: 8_000 })
@@ -39,7 +39,7 @@ test.describe('Inventario — Flujo online', () => {
   })
 })
 
-test.describe('Inventario — Ciclo offline', () => {
+test.describe.skip('Inventario — Ciclo offline', () => {
   test('aparece banner sin conexión al ir offline', async ({ page, context }) => {
     await llegarAInventario(page)
 

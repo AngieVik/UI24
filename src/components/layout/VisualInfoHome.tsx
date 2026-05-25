@@ -1,23 +1,26 @@
-import { Ambulance, CirclePlus, DoorOpen, LogIn, Mail, MapPin, UserCheck } from 'lucide-react'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
+import { Ambulance, LogIn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useTerminalStore } from '@/stores/useTerminalStore'
+import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
+import { useVehiculoActivo } from '@/hooks/useVehiculoActivo'
+import { useDrpActivo } from '@/hooks/useDrpActivo'
+import { PanelPersonal } from '@/components/layout/panels/PanelPersonal'
+import { PanelVehiculo } from '@/components/layout/panels/PanelVehiculo'
+import { VisualInfoDRP } from '@/components/layout/panels/VisualInfoDRP'
+import { BandejaEntradaPersonal } from '@/components/layout/panels/BandejaEntradaPersonal'
 
 /**
  * VisualInfoHome — contenido por defecto del home_area cuando activeNav === 'home'.
- * Spec: mapeo_visual_ui.md §2.
+ * Spec: mapeo_visual_ui.md §2 + diseño_chupiwachi.md §10.4.
  *
  * Sub-paneles:
- *   - PanelPersonal     (visible si hay personal con checkin_on > 0)
- *   - PanelVehiculo     (visible si hay ID_vehiculo del terminal)
- *   - VisualInfoDRP     (visible si hay DRP activo asignado)
- *   - BandejaEntradaPersonal (siempre visible si hay checkin_on)
+ *   - PanelPersonal     (visible si hay personal con checkin_on > 0)  ✅ Fase C.1
+ *   - PanelVehiculo     (visible si hay matrícula en useActivacionStore) ⏳ Fase C.2
+ *   - VisualInfoDRP     (visible si hay DRP activo asignado)             ⏳ Fase C.4
+ *   - BandejaEntradaPersonal (visible si hay checkin_on)                 ⏳ Fase C.5
  *
- * Estado actual: stores aún sin poblar. Cuando todos los paneles están vacíos
- * mostramos un empty state honesto que invita a hacer check-in.
+ * Cuando todo está vacío, mostramos el empty state honesto que invita a check-in.
  */
 interface VisualInfoHomeProps {
   onGoCheckin?: () => void
@@ -26,13 +29,17 @@ interface VisualInfoHomeProps {
 export function VisualInfoHome({ onGoCheckin }: VisualInfoHomeProps) {
   const ejecutorId = useAuthStore((s) => s.ejecutorId)
   const idTerminal = useTerminalStore((s) => s.id_terminal)
+  const personal   = usePersonalEnTurno()
+  const vehiculo   = useVehiculoActivo()
+  const drp        = useDrpActivo()
 
-  // Mientras los hooks de personal/vehículo no estén implementados, asumimos sin datos.
-  const hasPersonal = false
-  const hasVehiculo = false
-  const hasDrp      = false
+  const hasPersonal = personal.data.length > 0
+  const hasVehiculo = vehiculo.data !== null
+  const hasDrp      = drp.data !== null
 
-  const allEmpty = !hasPersonal && !hasVehiculo && !hasDrp
+  // Mientras carga la primera vez, no decidimos el empty state — esperamos.
+  const stillLoading = personal.isLoading || vehiculo.isLoading || drp.isLoading
+  const allEmpty = !stillLoading && !hasPersonal && !hasVehiculo && !hasDrp
 
   if (allEmpty) {
     return (
@@ -67,86 +74,10 @@ export function VisualInfoHome({ onGoCheckin }: VisualInfoHomeProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-      {hasPersonal && <PanelPersonal />}
-      {hasVehiculo && <PanelVehiculo />}
-      {hasDrp      && <VisualInfoDRP />}
-      {hasPersonal && <BandejaEntradaPersonal />}
+      {(hasPersonal || personal.isLoading) && <PanelPersonal />}
+      {(hasVehiculo || vehiculo.isLoading) && <PanelVehiculo />}
+      {(hasDrp      || drp.isLoading)      && <VisualInfoDRP />}
+      {hasPersonal && <BandejaEntradaPersonal personas={personal.data} />}
     </div>
-  )
-}
-
-/* ─── Sub-paneles (estructura — el cableado de datos llega en Fase B) ─── */
-
-function PanelPersonal() {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle>Personal en turno</CardTitle>
-        <Badge variant="secondary" className="gap-1">
-          <UserCheck aria-hidden="true" className="size-3" />
-          0 con check-in
-        </Badge>
-      </CardHeader>
-      <CardContent className="text-base text-muted-foreground">
-        Pendiente de cableado con <code className="font-body">usePersonaStore</code>.
-      </CardContent>
-    </Card>
-  )
-}
-
-function PanelVehiculo() {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle>Vehículo del terminal</CardTitle>
-        <Badge variant="outline">Sin asignar</Badge>
-      </CardHeader>
-      <CardContent className="text-base text-muted-foreground">
-        Pendiente de cableado con <code className="font-body">useActivacionStore</code>.
-      </CardContent>
-    </Card>
-  )
-}
-
-function VisualInfoDRP() {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle className="flex items-center gap-2">
-          <MapPin aria-hidden="true" className="size-4" />
-          DRP activo
-        </CardTitle>
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" aria-label="Añadir asistencia Doc-1">
-            <CirclePlus className="size-4" />
-          </Button>
-          <Button size="icon" variant="ghost" aria-label="Entrar a filiación">
-            <DoorOpen className="size-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="text-base text-muted-foreground">
-        Pendiente de cableado con <code className="font-body">useDrpStore</code>.
-      </CardContent>
-    </Card>
-  )
-}
-
-function BandejaEntradaPersonal() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle>Bandejas personales</CardTitle>
-      </CardHeader>
-      <CardContent className="flex items-center gap-2 text-base">
-        <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5">
-          <Mail aria-hidden="true" className="size-4 text-muted-foreground" />
-          <Avatar className="size-6">
-            <AvatarFallback className="text-[10px]">—</AvatarFallback>
-          </Avatar>
-        </div>
-        <span className="text-xs text-muted-foreground">Sin buzones cargados.</span>
-      </CardContent>
-    </Card>
   )
 }

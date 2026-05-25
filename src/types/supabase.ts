@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -44,6 +24,7 @@ export type Database = {
           pilot: string
           timestamp_apertura: string
           timestamp_cierre: string | null
+          tipo_servicio: Database["public"]["Enums"]["tipo_servicio"]
         }
         Insert: {
           carry?: string | null
@@ -54,6 +35,7 @@ export type Database = {
           pilot: string
           timestamp_apertura?: string
           timestamp_cierre?: string | null
+          tipo_servicio?: Database["public"]["Enums"]["tipo_servicio"]
         }
         Update: {
           carry?: string | null
@@ -64,6 +46,7 @@ export type Database = {
           pilot?: string
           timestamp_apertura?: string
           timestamp_cierre?: string | null
+          tipo_servicio?: Database["public"]["Enums"]["tipo_servicio"]
         }
         Relationships: [
           {
@@ -1156,6 +1139,7 @@ export type Database = {
           pin_stepup_salt: string | null
           rgpd_suprimido_at: string | null
           rol: Database["public"]["Enums"]["rol_empleado"]
+          telefono: string | null
         }
         Insert: {
           activo?: boolean
@@ -1170,6 +1154,7 @@ export type Database = {
           pin_stepup_salt?: string | null
           rgpd_suprimido_at?: string | null
           rol: Database["public"]["Enums"]["rol_empleado"]
+          telefono?: string | null
         }
         Update: {
           activo?: boolean
@@ -1184,6 +1169,7 @@ export type Database = {
           pin_stepup_salt?: string | null
           rgpd_suprimido_at?: string | null
           rol?: Database["public"]["Enums"]["rol_empleado"]
+          telefono?: string | null
         }
         Relationships: []
       }
@@ -2095,6 +2081,7 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["rol_empleado"]
       }
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       f_funciones_sin_security_definer: {
         Args: never
         Returns: {
@@ -2401,6 +2388,8 @@ export type Database = {
         | "medico"
         | "responsable_flota"
         | "responsable_logistica"
+        | "personal_externo"
+        | "invitado"
       seccion_tablon: "normativas" | "protocolos" | "avisos_corporativos"
       tipo_aviso:
         | "rotura_stock"
@@ -2444,6 +2433,7 @@ export type Database = {
         | "merma"
         | "recuperacion_descuadre"
         | "merma_definitiva_residual"
+      tipo_servicio: "urgente" | "programado" | "evento" | "traslado"
       tipo_turno: "T" | "L" | "V" | "B" | "C"
       tipo_vehiculo: "A1" | "A2" | "B" | "C" | "VIR" | "Quad" | "BKP"
     }
@@ -2571,9 +2561,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       condicion_tecnica: [
@@ -2636,6 +2623,8 @@ export const Constants = {
         "medico",
         "responsable_flota",
         "responsable_logistica",
+        "personal_externo",
+        "invitado",
       ],
       seccion_tablon: ["normativas", "protocolos", "avisos_corporativos"],
       tipo_aviso: [
@@ -2683,9 +2672,9 @@ export const Constants = {
         "recuperacion_descuadre",
         "merma_definitiva_residual",
       ],
+      tipo_servicio: ["urgente", "programado", "evento", "traslado"],
       tipo_turno: ["T", "L", "V", "B", "C"],
       tipo_vehiculo: ["A1", "A2", "B", "C", "VIR", "Quad", "BKP"],
     },
   },
 } as const
-

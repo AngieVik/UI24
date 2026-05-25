@@ -876,40 +876,98 @@ Spec del estado_0.
 
 ### 10.4 VisualInfoHome (`src/components/layout/VisualInfoHome.tsx`)
 
-Spec según `mapeo_visual_ui.md §2`. Sub-componentes:
+**Versión actualizada — 2026-05-24 (Fase C.1 + C.2 cerradas).**
 
-**Estructura**:
+Spec según `mapeo_visual_ui.md §2`. Composición:
+
 ```
-<div class="grid gap-3 p-3">
-  <PanelPersonal />        ← visible si hay checkin_on > 0
-  <PanelVehiculo />        ← visible si hay ID_vehiculo del terminal
-  <VisualInfoDRP />        ← visible si hay DRP activo asignado
-  <BandejaEntradaPersonal/>← siempre visible
+<div class="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
+  <PanelPersonal />        ← Fase C.1 ✅ cableado (usePersonalEnTurno)
+  <PanelVehiculo />        ← Fase C.2 ✅ cableado (useVehiculoActivo)
+  <VisualInfoDRP />        ← Fase C.4 ⏳ placeholder honesto
+  <BandejaEntradaPersonal/>← Fase C.5 ⏳ placeholder honesto
 </div>
 ```
 
-**PanelPersonal** (`Card`):
-- Header: título "Personal en turno" + Badge `ok` con `UserCheck` y nº de personas.
-- Tabla densa con columnas: ID_nombre (avatar + nombre), Estado (badge), Función (badge), Teléfono.
+#### 10.4.1 Política de datos (Fase C)
 
-**PanelVehiculo** (`Card`):
-- Header: título "Vehículo del terminal" + Badge `info` con estado.
-- Lead: ID grande (`text-xl font-bold`) + matrícula (`text-sm muted`).
-- Grid 2×2: Pilot / Carry / Servicio / Condición técnica.
+- **TanStack Query es el source of truth** de los datos servidor. Cada
+  panel autónomo: hook propio `useXxx` que devuelve `{ data, isLoading,
+  isError, error }`.
+- **Realtime es invalidator, no cache paralelo**. `useRealtimeInvalidator`
+  abre un canal Supabase por (tabla, filtro) e invalida la `queryKey`
+  en cualquier cambio. La query refetchea automáticamente.
+- **Kill-switch**: `useRealtimeKillSwitch` lee `system_config.realtime_kill_switch`.
+  Si está `true`, los hooks no abren canal y el `useQuery` cae en
+  `refetchInterval: 30_000` ms.
+- **Stores Zustand permanecen** como estado de sesión local persistente
+  (`useTerminalStore`, `useActivacionStore`, `useAuthStore`). NO se
+  crearon `usePersonaStore` ni `useDrpStore` — esos datos viven en Query.
 
-**VisualInfoDRP** (`Card`):
-- Header: título con `MapPin` icon + nombre DRP + Badge de estado.
-- Meta inline: Fecha · Hora · Ubicación (`text-xs muted font-light`).
-- Acciones: `CirclePlus` (añadir Doc-1), `DoorOpen` (entrar filiación), `Ambulance` (toggle activo, color amarillo si activo).
-- Desplegable de docs (Doc-2/3/4/5/11) como grid de tiles 2 columnas.
+#### 10.4.2 PanelPersonal (`src/components/layout/panels/PanelPersonal.tsx`)
 
-**BandejaEntradaPersonal** (`Card`):
-- Una pin por cada `checkin_on`. Iniciales encima de icono `Mail`.
-- Si hay sin leer → dot rojo arriba a la derecha.
+**Hook**: `usePersonalEnTurno()` — `presencias_activas_terminal` join
+`fichas_empleados`, filtro `id_terminal = useTerminalStore.id_terminal`.
 
-Cuando faltan datos: cada panel se oculta o muestra placeholder "—".
-Cuando no hay datos en absoluto → mensaje único:
-> "No hay personal en turno ni vehículo asignado. Pulsa Check-in para iniciar."
+**Estructura**:
+- Header `Card`: título "Personal en turno" + Badge `secondary` con
+  `UserCheck` y count.
+- Estados:
+  - `isLoading` → 3 filas Skeleton (`role="status"`).
+  - `isError` → texto destructivo "No se pudo cargar…".
+  - `data.length === 0` → "Nadie ha hecho check-in en este terminal todavía."
+  - `data.length > 0` → `Table` shadcn con columnas Nombre · Función · Check-in.
+- Fila: `Avatar` (2 iniciales calculadas con `getInitials`) + nombre real
+  (bold) + id_nombre (muted) | rol formateado con `formatRol` en `Badge outline`
+  | hora `HH:MM` alineada a la derecha (muted).
+
+**Limitaciones conocidas (deuda registrada)**:
+- El spec original pedía columnas Estado y Teléfono. Ninguna de las dos
+  existe hoy en BD (`fichas_empleados` no tiene teléfono;
+  `presencias_activas_terminal` no tiene un campo "estado" semántico).
+  Solo se muestran Función + hora de check-in. Ver `frontend_reconstruction_roadmap.md`
+  Deuda registrada D-10.
+
+#### 10.4.3 PanelVehiculo (`src/components/layout/panels/PanelVehiculo.tsx`)
+
+**Hook**: `useVehiculoActivo()` — gate `enabled: !!useActivacionStore.matricula`.
+Dos queries paralelas combinadas: `vehiculos` (matricula, tipo,
+condicion_tecnica, estado_operativo) + `activaciones_vehiculo`
+(pilot, carry de la activación con `timestamp_cierre IS NULL`).
+
+**Estructura**:
+- Header `Card`: título "Vehículo del terminal" + Badge con
+  `condicion_tecnica` (variante `destructive` si avería, `secondary` si
+  operativo, `outline` resto).
+- Lead: matrícula (`font-display text-xl font-bold`) + tipo (muted).
+- Grid 2×2 con `Cell { label, value }`:
+  - Pilot · Carry · Tipo · Estado (operativo)
+  - Cada celda: label `text-xs uppercase tracking-wide muted` arriba,
+    valor `font-bold` debajo. `—` si null.
+- Estados loading/error/empty equivalentes a PanelPersonal.
+
+**Limitaciones conocidas**:
+- El spec pedía celda "Servicio" basada en `tipo_servicio`. Ese campo no
+  existe en el esquema. Sustituido por "Tipo" (tipo de vehículo SVB/SAMU/…)
+  como aproximación. Ver Deuda registrada D-11.
+
+#### 10.4.4 Lógica del empty state global
+
+`VisualInfoHome` lee `usePersonalEnTurno` y `useVehiculoActivo` (TanStack
+Query deduplica con los hooks de los paneles hijos). El "Terminal sin
+turno activo" se muestra **solo** cuando:
+
+- Ningún hook está aún en `isLoading` (evita parpadeo en el primer pintado).
+- `data` de ambos resuelve a vacío.
+
+Cuando uno cualquiera tiene datos, se renderizan los paneles correspondientes
+y el empty state global desaparece.
+
+#### 10.4.5 Subpaneles aún placeholder (Fase C.4 y C.5)
+
+- `VisualInfoDRPPlaceholder` — pendiente de `useDrpActivo` (Fase C.4).
+- `BandejaEntradaPersonalPlaceholder` — pendiente de `useBandejasPersonales`
+  (Fase C.5). Visible solo si `hasPersonal === true`.
 
 ---
 
@@ -1055,6 +1113,252 @@ export function LoginForm() {
 
 Cada vez que se toque un componente o token, se añade una entrada aquí
 con fecha, autor (Claude o humano), archivos tocados y resumen del cambio.
+
+### 2026-05-25 (tarde) — Fase C completa cerrada (C.5 + E2E + 4 bugs colaterales)
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Cierre Fase C — DoD del roadmap cumplida**:
+- C.1 PanelPersonal ✅ (con Estado derivado + Teléfono)
+- C.2 PanelVehiculo ✅ (con Servicio = tipo_servicio)
+- C.4 VisualInfoDRP ✅ (vía vehículo o personal a pie)
+- C.5 BandejaEntradaPersonal ✅ (pin por persona, dot rojo con count, sin onClick — modal en Fase D.9)
+- E2E mínimo Playwright "home con datos" ✅ (con mocks de Supabase REST)
+
+**Tests**: 128 Vitest verde + 2 Playwright verde (chromium-android + chromium-desktop).
+
+**Bugs arquitectónicos colaterales encontrados y resueltos en sesión**:
+
+1. **`DataCloneError` en zustand+IDB** — `createIdbStorage` no filtraba
+   funciones. Stores con `persist`+IDB tiraban excepción al guardar
+   porque structured-clone no acepta funciones. Fix global en
+   `src/lib/idb.ts` con `stripFunctions()`. Cubre 5 stores sin tocar
+   `partialize` por cada uno.
+
+2. **React 19 StrictMode + Supabase channel cache** — `useRealtimeInvalidator`
+   usaba nombres estables de canal, y el doble mount llamaba `.on()`
+   sobre un canal ya suscrito (Supabase cachea por nombre). Sin
+   ErrorBoundary, React 19 colapsaba todo el árbol y dejaba pantalla
+   en blanco tras login. Fix: sufijo aleatorio por instancia con
+   `useRef` + `Math.random().toString(36).slice(2, 10)`.
+
+3. **D-12 GRANTs revocados** — Sprint 14 hardening había revocado SELECT
+   masivamente al rol `authenticated`. Hooks de Fase C devolvían
+   `permission denied`. Migración correctiva
+   `20260525000001_grant_select_authenticated_fase_c.sql` restauró
+   SELECT en 8 tablas + 1 adicional para `mensajes_bandeja`.
+
+4. **D-13 RLS sin policies** — `presencias_activas_terminal` y
+   `activaciones_vehiculo` tenían RLS enabled SIN policies (deny by
+   default). Migración `20260525000002_rls_policies_presencias_activaciones.sql`
+   añadió SELECT permisivo a authenticated. Endurecimiento auditado
+   en Fase E.
+
+**E2E spec** (`e2e/fase-c-home.spec.ts`):
+- Mocks de `**/rest/v1/**` vía `page.route` con fixtures JSON.
+- `addInitScript` inyecta IDB (`u24-terminal`, `u24-activacion`) +
+  sessionStorage (`u24-auth`) antes de cargar la app.
+- `realtime_kill_switch` mockeado a `true` para evitar WebSockets.
+- Verifica los 4 paneles + estado derivado "En DRP" + matrícula
+  + servicio "Urgente" + DRP por vehículo.
+- Specs antiguos (`01-login`, `02-checklist-doc8`, `03-inventario-offline`,
+  `04-drp`, `05-pwa-smoke`) marcados con `test.describe.skip` (deuda
+  D-05 — se reescriben en Fase E).
+
+**Archivos creados/modificados (resumen)**:
+- `src/hooks/useBandejasPersonales.ts` (nuevo)
+- `src/components/layout/panels/BandejaEntradaPersonal.tsx` (nuevo)
+- `src/components/layout/VisualInfoHome.tsx` (integra Bandejas, elimina placeholders)
+- `src/test/BandejaEntradaPersonal.test.tsx` (nuevo)
+- `src/test/useBandejasPersonales.test.tsx` (nuevo)
+- `src/lib/idb.ts` (fix DataCloneError)
+- `src/hooks/useRealtimeInvalidator.ts` (fix StrictMode channel reuse)
+- `e2e/fase-c-home.spec.ts` (nuevo)
+- `e2e/01-login..05-pwa-smoke.spec.ts` (test.describe.skip — D-05)
+- `playwright.config.ts` (dev server en lugar de preview)
+- `supabase/migrations/20260524000001_resolve_d10_d11.sql` (D-10 + D-11)
+- `supabase/migrations/20260525000001_grant_select_authenticated_fase_c.sql` (D-12)
+- `supabase/migrations/20260525000002_rls_policies_presencias_activaciones.sql` (D-13)
+- `supabase/migrations/20260525XXXXXX_grant_select_mensajes_bandeja.sql` (D-12 ampliada)
+
+**Política respetada**: sin `npm run build`, sin `git push`, sin
+despliegues. Migraciones aplicadas vía Supabase MCP con permiso
+explícito de la usuaria.
+
+---
+
+### 2026-05-25 — Fase C.4 + cierre deudas D-10/D-11
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Contexto**: sesión continua tras C.1/C.2 — se cierra C.4 (VisualInfoDRP) y
+se resuelven en la misma sesión las deudas D-10 (teléfono + estado) y D-11
+(tipo_servicio) que habían quedado abiertas.
+
+**C.4 — VisualInfoDRP cableado**:
+
+- `src/hooks/useDrpActivo.ts` (nuevo) — busca el DRP activo del terminal
+  vía dotación de vehículo (`dotaciones_drp.matricula` = useActivacionStore.matricula)
+  O vía personal a pie (`drp_personal_a_pie.id_nombre` ∈ ids con check-in).
+  Filtra por estados activos (En_espera, En_preparacion, En_curso),
+  dedupe por id_drp (prioriza vía vehículo), prioridad
+  En_curso > En_preparacion > En_espera, desempate por timestamp más reciente.
+- Tres canales Realtime (dotaciones_drp, drp_personal_a_pie, drps) invalidan
+  la misma queryKey.
+- `src/components/layout/panels/VisualInfoDRP.tsx` (nuevo) — header con
+  `DRP <id8>` + estado en badge, meta inline (Coord./Inicio/Preparación),
+  badge "Por vehículo" / "A pie", acciones `CirclePlus`/`DoorOpen`/`Ambulance`
+  deshabilitadas cuando no hay DRP.
+- VisualInfoHome integra el panel y elimina el placeholder.
+
+**Migración BD aplicada** (`20260524000001_resolve_d10_d11`, ejecutada
+2026-05-25 vía Supabase MCP):
+
+- D-10: `fichas_empleados.telefono TEXT` (nullable).
+- D-11: `CREATE TYPE tipo_servicio AS ENUM ('urgente','programado','evento','traslado')`
+  + `activaciones_vehiculo.tipo_servicio NOT NULL DEFAULT 'urgente'`.
+- Types Supabase regenerados (`src/types/supabase.ts`, 82 KB).
+
+**Frontend post-migración**:
+
+- `usePersonalEnTurno` añade `telefono` al SELECT y al tipo `PersonaEnTurno`.
+- `useVehiculoActivo` añade `tipo_servicio` al SELECT de `activaciones_vehiculo`
+  y al tipo `VehiculoActivo`.
+- `PanelPersonal` añade columnas **Estado** (derivado en componente:
+  En DRP si `useDrpActivo().data`, En servicio si `useVehiculoActivo().data`,
+  En base resto) + **Teléfono**. TanStack Query dedupe los hooks contextuales.
+- `PanelVehiculo` reemplaza celda "Tipo" por **Servicio** (label legible
+  de tipo_servicio). El tipo de vehículo sigue visible en el lead.
+
+**Decisión de modelado para "Estado"**: derivado en hook, no columna BD.
+Se aplica el mismo estado a todo el personal en turno del terminal (no
+diferencia individual entre pilot/carry/personal a pie). Es la versión
+operativamente útil con coste cero de mantenimiento. Si en futuro se
+necesita granularidad por persona, requiere joins adicionales.
+
+**Tests**: 117 verde (eran 104 al cerrar C.1+C.2).
+- `useDrpActivo.test.tsx` (6) — sin matrícula+sin personal, vía vehículo,
+  vía personal a pie, dedupe priorizando vehículo, prioridad por estado,
+  propagación de error.
+- `VisualInfoDRP.test.tsx` (5) — loading, empty, error, render con DRP,
+  vía A pie.
+- `PanelPersonal.test.tsx` extendido a 6 (+2 nuevos: estados En servicio
+  y En DRP derivados).
+- `PanelVehiculo.test.tsx`, `useVehiculoActivo.test.tsx`, `usePersonalEnTurno.test.tsx`
+  actualizados para incluir los nuevos campos en los mocks.
+
+**Deuda resuelta**: D-10 y D-11 cerradas en el roadmap (tachadas).
+
+**Archivos creados/modificados**:
+- `supabase/migrations/20260524000001_resolve_d10_d11.sql` (nuevo)
+- `src/types/supabase.ts` (regenerado)
+- `src/hooks/useDrpActivo.ts` (nuevo)
+- `src/hooks/usePersonalEnTurno.ts` (telefono)
+- `src/hooks/useVehiculoActivo.ts` (tipo_servicio)
+- `src/components/layout/panels/VisualInfoDRP.tsx` (nuevo)
+- `src/components/layout/panels/PanelPersonal.tsx` (Estado + Teléfono)
+- `src/components/layout/panels/PanelVehiculo.tsx` (Servicio)
+- `src/components/layout/VisualInfoHome.tsx` (integra VisualInfoDRP)
+- `src/test/useDrpActivo.test.tsx`, `src/test/VisualInfoDRP.test.tsx` (nuevos)
+- Tests de Panel/use Personal y Vehículo actualizados.
+
+**Pendiente para cerrar Fase C completa**:
+- C.5 — `useBandejasPersonales` + `BandejaEntradaPersonal`.
+- E2E mínimo Playwright "home con datos".
+
+---
+
+### 2026-05-24 — Fase C.1 + C.2 (PanelPersonal y PanelVehiculo cableados)
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Contexto**: arranque de la Fase C del roadmap — cableado de datos
+reales en `VisualInfoHome`. Se cierran los dos sub-objetivos prioritarios
+(Personal en turno + Vehículo activo). Quedan abiertos C.4 (DRP) y C.5
+(Bandejas) como sub-fases independientes.
+
+**Decisiones aplicadas** (consensuadas antes de codear, ver roadmap
+Fase C → "Decisiones a tomar antes de empezar"):
+
+1. **Stores Zustand actuales se mantienen** como estado de sesión local.
+   NO se crean `usePersonaStore` ni `useDrpStore` — los datos servidor
+   viven en TanStack Query (que es el cache canónico). Cierra parcialmente
+   D-04.
+2. **TanStack Query + Realtime coexisten**: Query como source of truth,
+   Realtime como invalidator. Patrón documentado en `useRealtimeInvalidator`.
+3. **PanelVehiculo gated por `useActivacionStore.matricula`**: sin check-in,
+   `enabled: false` y el panel no se renderiza.
+
+**Cableado**:
+
+- `@tanstack/react-query@^5` instalado y `QueryClientProvider` montado en
+  `main.tsx` entre `ThemeProvider` y `TooltipProvider`.
+- `src/lib/queryClient.ts` con defaults para terminal en ambulancia
+  (staleTime 30 s, gcTime 5 min, refetchOnWindowFocus off, retry 1).
+- `src/hooks/useRealtimeKillSwitch.ts` — lee `system_config.realtime_kill_switch`
+  con staleTime 5 min.
+- `src/hooks/useRealtimeInvalidator.ts` — abre canal Supabase por
+  (tabla, filtro) e invalida una queryKey. Devuelve `realtimeActive: boolean`
+  para que el caller configure `refetchInterval` cuando el kill-switch
+  está activo.
+- `src/hooks/usePersonalEnTurno.ts` — query sobre
+  `presencias_activas_terminal join fichas_empleados`, filtro por
+  `id_terminal`. Realtime sobre `presencias_activas_terminal`.
+- `src/hooks/useVehiculoActivo.ts` — dos queries paralelas (`vehiculos`
+  + `activaciones_vehiculo` con `timestamp_cierre IS NULL`). Realtime
+  doble (uno por cada tabla).
+- `src/components/layout/panels/PanelPersonal.tsx` — refactor completo
+  con Table shadcn, Avatar con iniciales, formatRol.
+- `src/components/layout/panels/PanelVehiculo.tsx` — refactor completo
+  con lead matrícula/tipo + grid 2×2 (Pilot/Carry/Tipo/Estado).
+- `src/components/layout/VisualInfoHome.tsx` — `allEmpty` derivado de
+  datos reales, no constante. Subpaneles DRP y Bandejas quedan como
+  placeholders honestos hasta C.4/C.5.
+- `src/lib/formatRol.ts` (nuevo) — `formatRol(rol)` y `getInitials(nombre)`.
+
+**Tests**: 104 tests verde (eran 86 al cerrar Fase B). +11 nuevos en:
+- `PanelPersonal.test.tsx` (4) — mock del hook, cubre los 4 estados.
+- `usePersonalEnTurno.test.tsx` (3) — mock de supabase + store, mapeo de
+  filas, error path.
+- `PanelVehiculo.test.tsx` (6) — incluye variante destructive del badge
+  para avería grave y null-handling de pilot/carry.
+- `useVehiculoActivo.test.tsx` (5) — combinación de dos queries paralelas,
+  ausencia de activación, vehículo inexistente, error path.
+
+**Deuda registrada nueva en el roadmap**:
+- **D-10**: `fichas_empleados` no tiene `telefono` ni hay campo "estado"
+  semántico en `presencias_activas_terminal`. PanelPersonal muestra
+  Nombre + Función + Check-in. Si se quieren las columnas originales,
+  añadir columnas a BD en sesión futura.
+- **D-11**: el esquema no tiene `tipo_servicio`. PanelVehiculo muestra
+  `vehiculos.tipo` como aproximación. Si se quiere "Servicio" semántico
+  separado del tipo de vehículo, modelarlo en BD.
+
+**Archivos creados/modificados**:
+- `package.json` (+ `@tanstack/react-query`)
+- `src/main.tsx` (QueryClientProvider)
+- `src/lib/queryClient.ts` (nuevo)
+- `src/lib/formatRol.ts` (nuevo)
+- `src/hooks/useRealtimeKillSwitch.ts` (nuevo)
+- `src/hooks/useRealtimeInvalidator.ts` (nuevo)
+- `src/hooks/usePersonalEnTurno.ts` (nuevo)
+- `src/hooks/useVehiculoActivo.ts` (nuevo)
+- `src/components/layout/panels/PanelPersonal.tsx` (nuevo)
+- `src/components/layout/panels/PanelVehiculo.tsx` (nuevo)
+- `src/components/layout/VisualInfoHome.tsx` (refactor)
+- `src/test/PanelPersonal.test.tsx` (nuevo)
+- `src/test/usePersonalEnTurno.test.tsx` (nuevo)
+- `src/test/PanelVehiculo.test.tsx` (nuevo)
+- `src/test/useVehiculoActivo.test.tsx` (nuevo)
+- `05_interfaz_y_desarrollo/diseño_chupiwachi.md` (§10.4 reescrita)
+- `06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md` (deuda)
+
+**Pendiente para cerrar Fase C completa** (DoD del roadmap):
+- C.4: `useDrpActivo` + `VisualInfoDRP`.
+- C.5: `useBandejasPersonales` + `BandejaEntradaPersonal`.
+- E2E mínimo Playwright "home con datos".
+
+---
 
 ### 2026-05-23 — Fase B cerrada (BlackColumn drill-down + JWT claims)
 

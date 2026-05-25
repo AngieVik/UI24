@@ -21,7 +21,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.E2E_BASE_URL || 'http://localhost:4173',
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'off',
@@ -42,12 +42,13 @@ export default defineConfig({
     },
   ],
 
-  // Levantar el preview build antes de correr en local
+  // Levantar el dev server antes de correr en local — Fase C usa dev
+  // porque el roadmap prohíbe builds de producción hasta cerrar Fase E.
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: 'npm run preview',
-        url: 'http://localhost:4173',
+        command: 'npm run dev',
+        url: 'http://localhost:5173',
         reuseExistingServer: !process.env.CI,
         timeout: 30_000,
       },

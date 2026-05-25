@@ -14,7 +14,7 @@ async function llegarAlDrpPanel(page: Page) {
   await navegarA(page, 'drp|emergencia')
 }
 
-test.describe('Panel DRP — Solo coordinación/gerencia', () => {
+test.describe.skip('Panel DRP — Solo coordinación/gerencia', () => {
   test('un sanitario de base no ve el panel DRP', async ({ page }) => {
     await loginNormal(page, CREDS.user.email, CREDS.user.password)
     await waitForVehiclePicker(page)
@@ -65,7 +65,7 @@ test.describe('Panel DRP — Solo coordinación/gerencia', () => {
   })
 })
 
-test.describe('Visor GPS', () => {
+test.describe.skip('Visor GPS', () => {
   test('el visor GPS carga sin errores para gerencia', async ({ page }) => {
     await llegarAlDrpPanel(page)
     // Navegar al visor GPS

@@ -39,7 +39,7 @@
 
 - ✅ Fase A — Chasis correcto (cerrada 2026-05-22)
 - ✅ Fase B — Reescritura del BlackColumn (cerrada 2026-05-23)
-- ⬜ Fase C — Cableado de datos de `visual_info_home`
+- ✅ Fase C — Cableado de datos de `visual_info_home` (cerrada 2026-05-25)
 - ⬜ Fase D — Reconstrucción de Screens feature (modular)
 - ⬜ Fase E — Validación y reapertura del checklist de despliegue
 - ⬜ Fase F — Modo oscuro y refinamientos
@@ -637,6 +637,10 @@ Lista viva. Se cierra cuando la fase responsable la resuelve.
 | D-07 | A11y | Auditar focus traps en modales y sheets de shadcn | Fase F |
 | D-08 | Nav | Eliminar campos `level` antiguo del store de navegación al estabilizar B.4 | Fase B (B.4) |
 | D-09 | Nav | Clarificar si los items de "Visor Mantenimiento" (Tabla principal, Badges, Filtros…), "Mantenimiento flota" (Aceite/Frenos/Neumáticos) y "Modulo_emergencias" (Galleta / Galleta pequeña) son leaves de navegación reales o contenido **intra-Screen**. Si son intra-Screen, sacarlos del árbol y resolverlos en la lógica del Screen. | Fase D (al llegar a Flota y Coordinación) |
+| ~~D-10~~ | ~~Datos~~ | ~~`fichas_empleados.telefono`~~ ✅ resuelto 2026-05-25 con migración `20260524000001_resolve_d10_d11.sql`. Estado del personal se deriva en hook (En DRP / En servicio / En base) sin columna BD. |
+| ~~D-11~~ | ~~Datos~~ | ~~`activaciones_vehiculo.tipo_servicio`~~ ✅ resuelto 2026-05-25 con la misma migración. Enum tipo_servicio (urgente/programado/evento/traslado). |
+| D-12 | BD/Seguridad | Sprint 14 hardening revocó GRANTs masivamente: rol `authenticated` solo tenía TRUNCATE/REFERENCES/TRIGGER, bloqueando cualquier SELECT desde el cliente. Migración `20260525000001_grant_select_authenticated_fase_c.sql` restauró GRANT SELECT en 8 tablas de Fase C, pero el resto del esquema sigue sin grants. Auditoría completa pendiente — revisar qué tablas necesitan GRANT y qué se debe quedar a través de RPC SECURITY DEFINER. | Fase E (previo a despliegue) |
+| D-13 | BD/Seguridad | `presencias_activas_terminal` y `activaciones_vehiculo` tenían RLS enabled SIN policies (denegando todo). Migración `20260525000002_rls_policies_presencias_activaciones.sql` añadió SELECT permisivo a authenticated en ambas. Las policies son intencionalmente liberales para Fase C; auditar el resto de tablas y endurecer si el modelo de amenaza lo pide. | Fase E (previo a despliegue) |
 
 ---
 

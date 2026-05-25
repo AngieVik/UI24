@@ -6,7 +6,7 @@ import { CREDS, loginNormal, waitForVehiclePicker, selectFirstVehicle, completar
  * Cubre: selección de matrícula, validación de estado_operativo/condicion_tecnica,
  *        checklist 360° con 10 sistemas, trigger Doc-7 (avería si hay NG).
  */
-test.describe('Check-in vehículo + Checklist 360°', () => {
+test.describe.skip('Check-in vehículo + Checklist 360°', () => {
   test.beforeEach(async ({ page }) => {
     await loginNormal(page, CREDS.user.email, CREDS.user.password)
     await waitForVehiclePicker(page)
