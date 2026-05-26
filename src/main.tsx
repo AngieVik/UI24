@@ -7,6 +7,7 @@ import App from './App'
 import { initSentry, setSentryUser } from '@/lib/sentry'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { queryClient } from '@/lib/queryClient'
+import { registerOfflineMutationProcessor } from '@/lib/offlineMutationProcessor'
 import { ThemeProvider } from '@/components/theme-provider'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
@@ -16,6 +17,8 @@ initSentry()
 useAuthStore.subscribe((state) => {
   setSentryUser(state.ejecutorId ?? null)
 })
+
+registerOfflineMutationProcessor(queryClient)
 
 registerSW({ onNeedRefresh() { /* vite-plugin-pwa notifica en consola */ } })
 

@@ -1114,6 +1114,452 @@ export function LoginForm() {
 Cada vez que se toque un componente o token, se añade una entrada aquí
 con fecha, autor (Claude o humano), archivos tocados y resumen del cambio.
 
+### 2026-05-26 (bug fix) — VehiculosScreen v2: rpc_checkin_vehiculo_v2
+
+**Autor**: Claude (fix de bug reportado por AngieVik).
+
+**Problema reportado**: "No me deja activar ningún vehículo `[object Object]`".
+
+**Causa raíz doble**:
+
+1. `useOfflineMutation` lanzaba el error plano de Supabase
+   (`PostgrestError`, un objeto literal sin `instanceof Error`). En
+   los catches de hooks consumidores, `String(err)` daba
+   `'[object Object]'`. La verdadera causa quedaba oculta.
+
+2. `rpc_checkin_vehiculo` (v1) derivaba el pilot de `auth.uid()`.
+   En el modelo "sesión del terminal" (D.1.1d), `auth.uid()` es el
+   usuario máquina (`terminal_<fp>@u24.local`) que NO tiene ficha en
+   `fichas_empleados`. El RPC devolvía `ERR_AUTH_001: Sesión no
+   reconocida` cada vez.
+
+**Cambios**:
+
+- `useOfflineMutation` ahora envuelve el `PostgrestError` en un
+  `Error` real con `message` legible (y el original como `cause`).
+- Migración `rpc_checkin_vehiculo_v2_terminal_session`:
+  - Nuevo RPC `rpc_checkin_vehiculo_v2(p_mutation_uuid, p_id_nombre_pilot,
+    p_matricula, p_km_inicio, p_carry?)`.
+  - Acepta `p_id_nombre_pilot` EXPLÍCITO en vez de derivarlo del JWT.
+  - Verifica que el pilot existe + está activo + tiene presencia en
+    algún terminal.
+  - Verifica el carry si se proporciona.
+  - Resto idéntico al v1 (idempotencia, crear activación, abrir Doc-8,
+    crear checklist360, marcar vehículo activo).
+- `useActivarVehiculo` reescrito: llama al v2 con `pilot` explícito.
+- `VehiculosScreen` añade selector de **pilot** (de `usePersonalEnTurno`)
+  + selector opcional de **carry** (excluyendo al pilot). Si solo
+  hay 1 presente, auto-selecciona como pilot. Si no hay presencias,
+  muestra warning y deshabilita el submit.
+
+**Tests**: 171 verde (eran 171 — el test viejo de VehiculosScreen
+fue migrado al nuevo modelo, añadidos casos de pilot/carry y
+auto-selección con 1 presente).
+
+---
+
+### 2026-05-26 (D.1.2) — Doc6GastoMaterialScreen
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Decisiones consensuadas**:
+- UX híbrida: lista densa con buscador + **agrupación por `categoria`
+  del item** (no por subgrupo) + **carrito** con varios items antes
+  de confirmar.
+- Motivo opcional (RPC `rpc_deducir_material.p_motivo` ya nullable).
+- Items con `stock_real = 0` ocultos.
+
+**Cambios**:
+
+- `src/hooks/useInventarioVehiculo.ts` (nuevo) — TanStack Query sobre
+  `inventario_vehiculo` filtrado por matrícula del store +
+  Realtime invalidator.
+- `src/hooks/useDeducirMaterial.ts` (nuevo) — orquesta N llamadas a
+  `rpc_deducir_material` via `useOfflineMutation` (cada item con su
+  propio mutation_uuid para idempotencia). Devuelve
+  `{ ok, failed, queued }` para feedback granular.
+- `src/components/operativa/Doc6GastoMaterialScreen.tsx` (nuevo) —
+  pantalla con dos cards: catálogo agrupado por categoría + carrito
+  con motivo opcional. Si no hay matrícula activa, muestra gate
+  "Necesitas un vehículo activo".
+- App.tsx routing: `selectedLeafId === 'doc6'` → Doc6GastoMaterialScreen.
+- Migración `grant_rls_doc6_inventario` — D-12/D-13 ampliada: GRANT
+  SELECT a authenticated en `catalogo_items`, `inventario_vehiculo`,
+  `doc6_deducciones` + policies SELECT permissive en las dos últimas
+  (la primera ya tenía policy).
+
+**Tests**: 171 verde (eran 160). +11 nuevos en
+`Doc6GastoMaterialScreen.test.tsx`:
+- Gates (sin matrícula / loading / error).
+- Lista oculta items con stock 0, agrupa por categoría.
+- Buscador filtra por nombre.
+- Carrito: añadir, cap por stock_real, vaciar.
+- Confirmar: envía deducciones, vacía al éxito.
+- Feedback en éxito parcial.
+- Motivo opcional se envía si está presente.
+
+**Pendiente**:
+- Validación visual en navegador real (los datos de inventario
+  necesitan estar en BD para vehículos demo).
+- D.1.3 Doc8ParteTrabajoScreen (siguiente).
+
+---
+
+### 2026-05-26 (final) — D.1.1d.2 Frontend 3 estados + EF hooks
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Cambio estructural mayor**: App.tsx ahora gestiona **3 estados**.
+
+```
+estado_0a  → sin sesión Supabase o sin id_terminal
+            → <AutorizarTerminalScreen />
+              (gerencia introduce credenciales una sola vez por terminal)
+
+estado_0b  → sesión activa pero presencias_activas_terminal vacío
+            → <CheckinInicialScreen />
+              (cualquier trabajador entra al terminal)
+
+estado_1   → sesión + al menos un trabajador presente
+            → <AppShell>
+```
+
+**Nuevos hooks** (todos llaman a EFs vía `supabase.functions.invoke`):
+
+- `useAutorizarTerminal` — autoriza el terminal (estado_0a → estado_0b).
+  Llama `ef-autorizar-terminal`, hace `supabase.auth.setSession()` con
+  la sesión del usuario máquina y guarda fingerprint en
+  `useTerminalStore`.
+- `useCheckinTrabajador` — verifica credenciales del trabajador via
+  `ef-checkin-trabajador` y UPSERT presencia. NO toca la sesión
+  Supabase del terminal. Invalida `['personal_en_turno', idTerminal]`.
+- `useCheckoutTrabajador` — borra presencia via `ef-checkout-trabajador`.
+  La sesión del terminal persiste indefinidamente.
+
+**Nuevas pantallas**:
+
+- `src/components/auth/AutorizarTerminalScreen.tsx` — form
+  identificador + contraseña de gerencia. Online obligatorio.
+- `src/components/auth/CheckinInicialScreen.tsx` — form
+  identificador + contraseña de trabajador. Cuando completa, App.tsx
+  ve `personal.length > 0` y muta a estado_1.
+
+**Refactor PresenciaScreen → v4**:
+- Ya no usa `useLoginFlow.loginNormal` (que rotaba la sesión).
+- Usa `useCheckinTrabajador` (EF, no toca sesión).
+- Botón único "Salir" en cada item de la lista (sin distinción
+  default/outline porque ya no hay caso especial del logueado).
+
+**Refactor useMiPresencia → v2**:
+- Reescrito en clave EF: usa `useCheckoutTrabajador`.
+- Ya no llama a `signOut()` ni a `clearSession()` en self-checkout.
+- La sesión del terminal persiste; al quedar `personal.length === 0`
+  App.tsx muestra `CheckinInicialScreen`, no `LoginScreen`.
+
+**LoginScreen viejo** queda obsoleto. No se borra todavía porque
+todavía existen referencias en `useLoginFlow` (que aún se usa para
+el flujo de emergencia con PIN — separado de Fase D).
+
+**Tests**: 160 verde (eran 162 — restamos 2 que asumían rotado de
+sesión y los reemplazamos con tests del nuevo modelo). +5 nuevos en
+PresenciaScreen v4 para `useCheckinTrabajador` + flow de checkin.
+
+**Validación visual pendiente**: la usuaria validará en su navegador
+real porque el navegador automation de Claude bloquea requests a
+Supabase REST/Functions externos.
+
+**Próximo paso D.1.1d.3** (limpieza, opcional):
+- Borrar `useLoginFlow` (o aislar lo del PIN de emergencia).
+- Borrar `useCheckin` (motor v1 viejo).
+- Eliminar bypass dev del LoginScreen viejo (cierra D-01).
+
+---
+
+### 2026-05-26 (madrugada) — D.1.1d.1 Backend usuario máquina del terminal
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Modelo establecido**: la sesión Supabase ahora es **del terminal**
+(usuario máquina `terminal_<fingerprint>@u24.local`), no del trabajador.
+Los trabajadores entran/salen sin tocar la sesión.
+
+**3 Edge Functions desplegadas y validadas con cURL**:
+
+1. **`ef-autorizar-terminal`** (verify_jwt: false)
+   - Body: `{ id_nombre_gerencia, password, fingerprint }`
+   - Flujo: verifica credenciales gerencia con cliente Anon AISLADO
+     (no toca otras sesiones) → crea/reutiliza `auth.users` con email
+     `terminal_<fp>@u24.local` y password random → UPSERT en
+     `galletas_terminales` (tipo `flota`) → crea sesión del usuario
+     máquina con `signInWithPassword` y devuelve `{ session, fingerprint,
+     auth_user_id }`.
+   - Validado: admin/12345678 + fingerprint test → 200 con session válida.
+
+2. **`ef-checkin-trabajador`** (verify_jwt: true)
+   - Body: `{ id_nombre, password, id_terminal }`
+   - Flujo: resuelve ficha → verifica credenciales del trabajador con
+     cliente Anon AISLADO → UPSERT en `presencias_activas_terminal`
+     (PK `id_nombre` → mueve de terminal si ya estaba en otro).
+   - Validado: admin/12345678 → 200 con `{ id_nombre, id_terminal, nombre_real, rol }`.
+
+3. **`ef-checkout-trabajador`** (verify_jwt: true)
+   - Body: `{ id_nombre_target, id_terminal }`
+   - Flujo: comprueba presencia actual → si no estaba presente, noop
+     idempotente → si estaba en OTRO terminal, error 403 → si estaba en
+     este terminal, DELETE.
+   - Validado: noop idempotente confirmado en segundo call.
+
+**D-12 ampliada** (`grant_service_role_d11d1.sql`):
+- Detectado que Sprint 14 hardening también revocó GRANTs a
+  `service_role` (no solo a authenticated). Las EFs nuevas con cliente
+  service_role fallaban con `permission denied for table fichas_empleados`.
+- Migración añade SELECT/INSERT/UPDATE/DELETE a service_role en las 3
+  tablas que tocan las EFs.
+
+**Patrón de verificación sin contaminar sesión**:
+Las EFs verifican credenciales creando un cliente Supabase Anon con
+`auth: { persistSession: false }`, llamando `signInWithPassword` (que
+devuelve sesión si las credenciales son válidas), y haciendo `signOut`
+inmediatamente. La sesión queda dentro del scope de la EF y no se
+exporta al cliente.
+
+**Limpieza**: usuarios `terminal_test-fp-*` y sus galletas eliminados
+tras validación.
+
+**Pendiente para D.1.1d.2**:
+- Frontend: reescribir `App.tsx` con 3 estados (autorizar, checkin
+  inicial, operativo).
+- `AutorizarTerminalScreen` que llama `ef-autorizar-terminal` y hace
+  `setSession()` con la sesión del usuario máquina.
+- `CheckinInicialScreen` que aparece cuando `personal.length === 0`.
+- Migrar `PresenciaScreen` para usar las EFs.
+
+---
+
+### 2026-05-26 (noche) — PresenciaScreen v3: auto-presencia + check-out por item
+
+**Autor**: Claude (refinamiento final de AngieVik).
+
+**Decisiones aplicadas**:
+
+1. **Presencia automática tras login** (no acción manual):
+   - LoginScreen → `useLoginFlow.loginNormal` extendido para llamar a
+     `rpc_marcar_presencia` tras success. El primer trabajador
+     (estado_0 → LoginScreen) ya queda con presencia activa.
+   - PresenciaScreen → "Sumar otro trabajador" ya hacía login; ahora
+     la presencia la marca automáticamente el propio loginNormal.
+   - **Eliminado** el botón "Marcar mi presencia" (era redundante).
+
+2. **Check-out individual por item de la lista**:
+   - Cada presente tiene un botón en su fila:
+     - Si es el ejecutor logueado → texto **"Salir"** (variante default).
+     - Si es otro presente → texto **"Sacar"** (variante outline).
+   - Click llama `useMiPresencia.checkout(id_nombre)`.
+
+3. **Comportamiento del check-out según target**:
+   - **Target = ejecutor logueado**: `rpc_marcar_ausencia` + `signOut()`
+     + `clearSession()`. Como `useAuthStore.session` queda null,
+     `App.tsx` redirige a estado_0 (LoginScreen) automáticamente.
+     Si era el único presente, terminal vuelve a estado_0 limpio;
+     si quedan otros, el siguiente debe loguearse.
+   - **Target = otro presente**: `rpc_marcar_ausencia_otro(p_id_nombre_target)`
+     (nueva migración) — modelo de confianza: solo presentes del mismo
+     terminal pueden expulsar a otro presente. Si no estás presente o
+     intentas con otro terminal → error. La sesión del caller NO se
+     toca.
+
+**Nuevos archivos / cambios**:
+
+- `supabase/migrations/20260526XXXXXX_rpc_marcar_ausencia_otro.sql` —
+  RPC SECURITY DEFINER con verificación de mismo terminal.
+- `src/hooks/useLoginFlow.ts` — auto-marca presencia tras `setSession`.
+- `src/hooks/useMiPresencia.ts` — reescrito: solo expone `checkout(id_nombre)`
+  (sin `marcarPresencia` ni `marcarAusencia` separados); el hook decide
+  internamente si llama `rpc_marcar_ausencia` (self) o
+  `rpc_marcar_ausencia_otro` (no-self) + clearSession si self.
+- `src/components/operativa/PresenciaScreen.tsx` — UI v3: sin botón
+  "Marcar mi presencia". Form "Sumar otro trabajador" + lista con
+  check-out por item.
+
+**Tests**: 162 verde (eran 154). +8 nuevos en PresenciaScreen v3:
+- Render del form auth + interacciones.
+- Lista con botones "Salir" / "Sacar".
+- Click "Salir" → `checkout(ejecutorId)`.
+- Click "Sacar" en otro → `checkout(id_nombre_otro)`.
+- Marca "· Tú" junto al logueado.
+- Botones disabled durante isSubmitting.
+- Error path.
+- Confirmación de que NO existe botón "Marcar mi presencia" (regresión-prevention).
+
+---
+
+### 2026-05-26 (tarde) — PresenciaScreen con form auth para sumar trabajadores
+
+**Autor**: Claude (clarificación adicional de AngieVik).
+
+**Decisión**: el "Check-in" del BlackColumn debe servir para que **otro
+trabajador** (no el actual logueado) se sume al terminal. La sesión
+Supabase rota al nuevo trabajador y queda registrado en presencias.
+
+**Cambios en `PresenciaScreen`**:
+
+Ahora tiene 3 secciones:
+
+1. **Mi presencia** — del trabajador logueado actualmente. Botón
+   marcar/quitar presencia individual.
+
+2. **Sumar otro trabajador** (NUEVA) — form con identificador +
+   contraseña. Al submit válido:
+   - `loginNormal(id, password)` → si OK, rota la sesión Supabase
+     al nuevo trabajador (sobrescribe la anterior en `useAuthStore`).
+   - `marcarPresencia()` automáticamente con el JWT del nuevo
+     trabajador → `presencias_activas_terminal` acumula (UPSERT por
+     `id_nombre` PK).
+   - El trabajador anterior sigue listado como presente hasta que
+     vuelva a loguearse y haga check-out (o forzar_checkout de
+     Coordinación).
+
+3. **Personal en este terminal** — lista de todos los presentes con
+   avatar + rol.
+
+**Reutiliza** `useLoginFlow.loginNormal` existente (Sprint 8). No
+duplica lógica de auth. El form usa RHF + Zod con validación: ID
+requerido + password ≥ 8 chars (mismo schema que LoginScreen).
+
+**Tests**: 159 verde (eran 154). +5 nuevos en PresenciaScreen para
+el form de auth (render, submit OK con login + marcar, submit que
+falla NO marca presencia, error visible, validación Zod).
+
+**UX final**:
+- Trabajador A entra al terminal → login normal → marca presencia.
+- Trabajador B llega → click en Check-in del BlackColumn → introduce
+  sus credenciales en "Sumar otro trabajador" → sesión rota a B,
+  presencia de B creada (la de A persiste).
+- PanelPersonal muestra ambos.
+- B puede hacer check-out de su presencia desde "Mi presencia". A
+  necesita volver a loguearse para hacer check-out (o pedir
+  forzar_checkout en Coordinación, Fase D.6).
+
+---
+
+### 2026-05-26 (refactor) — Separación de Check-in: PresenciaScreen + VehiculosScreen
+
+**Autor**: Claude (clarificación semántica de AngieVik).
+
+**Decisión**: el "Check-in" tiene dos semánticas distintas que no
+debían mezclarse:
+
+- **Hoja `checkin` del BlackColumn (top fijo)** → presencia individual
+  del trabajador. Cada empleado (TES, DUE, médico, flota…) marca su
+  presencia al subir al terminal. Pantalla: **PresenciaScreen**.
+- **Hoja `vehiculos_op` (Operativa rutinaria → Vehículos)** → activación
+  del vehículo. Lo hace el pilot. Crea activación + Doc-8 + checklist
+  inicial. Pantalla: **VehiculosScreen**.
+
+**Cambios**:
+
+- `CheckinScreen.tsx` → renombrado a `VehiculosScreen.tsx`, simplificado:
+  ya no llama `rpc_marcar_presencia` (era un acoplamiento incorrecto).
+  Conserva el form de activación (vehículo + km_inicio) y el RPC
+  `rpc_checkin_vehiculo`.
+- `useCheckinVehiculo` → renombrado a `useActivarVehiculo`. Solo
+  llama un RPC.
+- `PresenciaScreen.tsx` (nuevo) — UI mínima con dos estados:
+  - "Sin presencia activa" → botón **Marcar mi presencia**
+    (rpc_marcar_presencia).
+  - "Presente en este terminal" → botón **Quitar mi presencia**
+    (rpc_marcar_ausencia).
+  - Lista del personal actual en turno con avatares.
+- `useMiPresencia` (nuevo) — hook compuesto que deriva `isPresente`
+  del `usePersonalEnTurno().data` filtrado por id_nombre del JWT.
+- `rpc_marcar_ausencia` (nuevo, migración
+  `20260526XXXXXX_rpc_marcar_ausencia.sql`) — DELETE de la presencia
+  del usuario logueado. SECURITY DEFINER con idempotencia.
+- `App.tsx` routing:
+  - `selectedLeafId === 'checkin'` → `<PresenciaScreen />`.
+  - `selectedLeafId === 'vehiculos_op'` → `<VehiculosScreen />`.
+
+**Tests**: 154 verde (eran 147). +7 nuevos en PresenciaScreen. Tests
+de VehiculosScreen migrados (renombrados símbolos, sin lógica nueva).
+
+---
+
+### 2026-05-26 — Fase D arranca: D.0 motor offline + D.1.1 CheckinScreen
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Decisiones tomadas antes de codear** (política del roadmap):
+
+1. Empezar por **D.1 Operativa rutinaria** — camino crítico del turno.
+2. **Una pantalla por sub-sesión** con validación visual.
+3. **Reescribir useOfflineQueue** alineado con TanStack Mutations
+   (alcance: MVP + migración progresiva — hooks viejos siguen con v1
+   marcado `@deprecated` hasta que cada Screen migre).
+4. **Solo Vitest por Screen, sin E2E nuevos en D** — E2E se acumula
+   para Fase E.
+
+**D.0 — Motor offline v2** (`useOfflineMutation`):
+
+- `src/lib/offlineMutationQueue.ts` (nuevo) — store IDB de `PendingMutation`.
+- `src/hooks/useOfflineMutation.ts` (nuevo) — wrapper sobre
+  `useMutation` que inyecta `p_mutation_uuid` (prefix Postgres),
+  ejecuta directo si online, encola si offline, invalida queryKeys
+  al éxito.
+- `src/lib/offlineMutationProcessor.ts` (nuevo) — listener global
+  `window 'online'` que drena cola, sube blobs antes del RPC,
+  refresca sesión, marca failed tras `MAX_ATTEMPTS=3`.
+- `src/main.tsx` invoca `registerOfflineMutationProcessor(queryClient)`.
+- `useOfflineQueue` v1 marcado `@deprecated`.
+- `fake-indexeddb` añadido a tests para que stores con persist+IDB
+  funcionen en jsdom.
+
+**D.1.1 — CheckinScreen** (`src/components/operativa/CheckinScreen.tsx`):
+
+- Form RHF + Zod con dos campos: `matricula` (Select shadcn con
+  vehículos disponibles) + `km_inicio` (Input number).
+- Pilot = usuario logueado (asunción del RPC). Carry queda null y
+  tipo_servicio queda default 'urgente' (decisión de scope mínimo).
+- Hook compuesto `useCheckinVehiculo` llama dos RPCs en secuencia:
+  1. `rpc_checkin_vehiculo` → crea activación + Doc-8 + checklist360.
+  2. `rpc_marcar_presencia` (nuevo, migración
+     `20260526XXXXXX_rpc_marcar_presencia.sql`) → UPSERT del pilot en
+     `presencias_activas_terminal` para el id_terminal del navegador.
+- Si ya hay matrícula activa en `useActivacionStore`, la pantalla
+  muestra "Ya tienes un turno activo" y redirige al home.
+- Routing en `App.tsx`: `selectedLeafId === 'checkin'` → renderiza
+  CheckinScreen.
+
+**Hooks de soporte**:
+- `useVehiculosDisponibles` — query sobre `vehiculos` filtrado por
+  `estado_operativo='inactivo'` y `condicion_tecnica` apta.
+
+**Tests**: 147 verde tras D.1.1 (eran 128 al cerrar Fase C). +19 nuevos:
+- `offlineMutationQueue.test.ts` (6).
+- `useOfflineMutation.test.tsx` (7).
+- `CheckinScreen.test.tsx` (6).
+
+**Validación visual**: limitada por el entorno automation del navegador
+de Claude (bloquea fetch externo). Confirmado visualmente que la
+pantalla renderiza correctamente con el form completo. El flujo
+end-to-end con BD real lo validará la usuaria en su navegador.
+
+**Convención reforzada**: los RPCs del proyecto usan prefijo `p_` en
+sus parámetros (convención plpgsql). El motor offline inyecta
+automáticamente `p_mutation_uuid`. Pequeño bug latente del v1 viejo
+(usaba `mutation_uuid` sin prefijo) detectado al revisar el RPC
+`rpc_checkin_vehiculo` antes de codear.
+
+**Pendiente para cerrar D.1 completa**:
+- D.1.2 Doc6GastoMaterialScreen
+- D.1.3 Doc8ParteTrabajoScreen
+- D.1.4 Doc2InformeAsistencialScreen
+- D.1.5 Doc11AvisoUrgenteScreen
+- D.1.6 RepostajeCombustibleScreen + RepostajeAdBlueScreen
+- D.1.7 Checklist360Screen
+- D.1.8 VehiculosScreen
+
+---
+
 ### 2026-05-25 (tarde) — Fase C completa cerrada (C.5 + E2E + 4 bugs colaterales)
 
 **Autor**: Claude (con supervisión humana de AngieVik).

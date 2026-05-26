@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom'
+import 'fake-indexeddb/auto'
 
 // jsdom no implementa matchMedia — stub mínimo necesario para useInstallPrompt
 if (!window.matchMedia) {

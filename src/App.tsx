@@ -1,25 +1,41 @@
 import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useGlobalStore } from '@/stores/useGlobalStore'
-import { LoginScreen } from '@/components/auth/LoginScreen'
+import { useTerminalStore } from '@/stores/useTerminalStore'
+import { AutorizarTerminalScreen } from '@/components/auth/AutorizarTerminalScreen'
+import { CheckinInicialScreen } from '@/components/auth/CheckinInicialScreen'
 import { AppShell } from '@/components/layout/AppShell'
 import { VisualInfoHome } from '@/components/layout/VisualInfoHome'
+import { PresenciaScreen } from '@/components/operativa/PresenciaScreen'
+import { VehiculosScreen } from '@/components/operativa/VehiculosScreen'
+import { Doc6GastoMaterialScreen } from '@/components/operativa/Doc6GastoMaterialScreen'
 import { useBlackColumn } from '@/contexts/BlackColumnContext'
+import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 import { findNode } from '@/components/layout/black-column-nav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 /**
- * Punto de entrada — dos estados estrictos.
+ * Punto de entrada — TRES estados.
  *
- *   estado_0 — sin sesión → <LoginScreen />
- *   estado_1 — con sesión → <AppShell> con routing por selectedLeafId
+ *   estado_0a — terminal sin autorizar (sin sesión Supabase
+ *               o sin id_terminal en cliente) → <AutorizarTerminalScreen />
  *
- * AppShell envuelve todo en BlackColumnProvider, así que cualquier hijo
- * (incluido el HomeArea) puede leer el estado del BlackColumn via context.
+ *   estado_0b — terminal autorizado pero sin presencias activas
+ *               (presencias_activas_terminal vacía para este terminal)
+ *               → <CheckinInicialScreen />
+ *
+ *   estado_1  — terminal con sesión + al menos un trabajador presente
+ *               → <AppShell> con routing por selectedLeafId
+ *
+ * La sesión Supabase es del TERMINAL (usuario máquina
+ * terminal_<fp>@u24.local) y persiste indefinidamente. Los
+ * trabajadores entran/salen sin tocar la sesión.
  */
 export default function App() {
   const session   = useAuthStore((s) => s.session)
+  const idTerminal = useTerminalStore((s) => s.id_terminal)
   const setOnline = useGlobalStore((s) => s.setOnline)
 
   useEffect(() => {
@@ -34,7 +50,35 @@ export default function App() {
     }
   }, [setOnline])
 
-  if (!session) return <LoginScreen />
+  // estado_0a — sin sesión o sin id_terminal
+  if (!session || !idTerminal) {
+    return <AutorizarTerminalScreen />
+  }
+
+  // estado_0b / estado_1 dependen de si hay presencias
+  return <RouterPresencias />
+}
+
+/**
+ * Decide entre CheckinInicialScreen (estado_0b) y AppShell (estado_1)
+ * según haya o no personal en turno en este terminal.
+ */
+function RouterPresencias() {
+  const personal = usePersonalEnTurno()
+
+  // Primer pintado: mientras carga la primera vez, mostramos skeleton
+  // para no parpadear entre estados.
+  if (personal.isLoading) {
+    return (
+      <main className="grid min-h-dvh place-items-center p-6" aria-busy="true">
+        <Skeleton className="h-32 w-72" />
+      </main>
+    )
+  }
+
+  if (personal.data.length === 0) {
+    return <CheckinInicialScreen />
+  }
 
   return (
     <AppShell ticker="Tablón · BlackColumn drill-down activo · pulsa los grupos para entrar, pulsa el padre activo o el botón de atrás para volver.">
@@ -47,14 +91,24 @@ export default function App() {
  *  HomeArea — lee selectedLeafId del Context y rutea al Screen.
  * ───────────────────────────────────────────────────────────────────────── */
 function HomeArea() {
-  const { selectedLeafId } = useBlackColumn()
+  const { selectedLeafId, goCheckin } = useBlackColumn()
 
   if (selectedLeafId === 'home' || selectedLeafId == null) {
-    return <VisualInfoHome />
+    return <VisualInfoHome onGoCheckin={goCheckin} />
   }
 
-  // Cualquier otra hoja → placeholder honesto hasta que cada Screen se
-  // implemente en Fase D.
+  if (selectedLeafId === 'checkin') {
+    return <PresenciaScreen />
+  }
+
+  if (selectedLeafId === 'vehiculos_op') {
+    return <VehiculosScreen />
+  }
+
+  if (selectedLeafId === 'doc6') {
+    return <Doc6GastoMaterialScreen />
+  }
+
   return <LeafPlaceholder leafId={selectedLeafId} />
 }
 

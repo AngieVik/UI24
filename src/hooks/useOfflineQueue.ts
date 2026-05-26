@@ -1,3 +1,11 @@
+/**
+ * @deprecated Motor v1 — usar `useOfflineMutation` (Fase D+) en código
+ * nuevo. Los hooks viejos (useInformes, useInventario, useChecklist,
+ * useDoc7, useCheckin) siguen aquí hasta que sus respectivos Screens
+ * se reescriban en sub-fases D.X y migren al nuevo motor.
+ *
+ * No añadir nuevas dependencias a este archivo.
+ */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createIdbStorage } from '@/lib/idb'

@@ -78,6 +78,19 @@ export function useLoginFlow() {
       const fingerprint = await computeFingerprint()
       await resolveGalleta(fingerprint)
 
+      // Auto-marca presencia del trabajador en este terminal (Fase D.1.1c).
+      // Login = entrar al terminal = presencia activa.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.rpc as any)('rpc_marcar_presencia', {
+          p_mutation_uuid: crypto.randomUUID(),
+          p_id_terminal:   fingerprint,
+        })
+      } catch {
+        // Si falla la presencia, NO bloqueamos el login. La pantalla
+        // de check-in mostrará al trabajador la opción manual.
+      }
+
       setState((s) => ({ ...s, isLoading: false }))
       return true
     } catch {
