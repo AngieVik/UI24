@@ -9,6 +9,7 @@ import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { useCheckinTrabajador } from '@/hooks/useCheckinTrabajador'
+import { useAbrirTurno } from '@/hooks/useAbrirTurno'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useTerminalStore } from '@/stores/useTerminalStore'
 import logoUrl from '@/assets/logo.svg'
@@ -36,9 +37,12 @@ const APP_VERSION = (typeof window !== 'undefined' && (window as { __APP_VERSION
  */
 export function CheckinInicialScreen() {
   const [showPassword, setShowPassword] = useState(false)
-  const { checkin, isSubmitting, error } = useCheckinTrabajador()
-  const isOnline = useGlobalStore((s) => s.isOnline)
+  const { checkin, isSubmitting, error }   = useCheckinTrabajador()
+  const { abrir, isSubmitting: abriendo } = useAbrirTurno()
+  const isOnline   = useGlobalStore((s) => s.isOnline)
   const idTerminal = useTerminalStore((s) => s.id_terminal)
+
+  const isBusy = isSubmitting || abriendo
 
   const form = useForm<Schema>({
     resolver: zodResolver(schema),
@@ -47,10 +51,11 @@ export function CheckinInicialScreen() {
   })
 
   async function onSubmit(values: Schema) {
-    await checkin({
-      id_nombre: values.identificador.trim(),
-      password:  values.password,
-    })
+    const id_nombre = values.identificador.trim()
+    const res = await checkin({ id_nombre, password: values.password })
+    if (!res) return
+    // Open the shift Doc-8 for this worker
+    await abrir({ id_nombre })
   }
 
   return (
@@ -146,8 +151,8 @@ export function CheckinInicialScreen() {
                 {error}
               </div>
 
-              <Button type="submit" className="w-full" disabled={isSubmitting || !isOnline}>
-                {isSubmitting ? 'Verificando…' : 'Hacer check-in'}
+              <Button type="submit" className="w-full" disabled={isBusy || !isOnline}>
+                {isBusy ? 'Verificando…' : 'Hacer check-in'}
               </Button>
             </form>
 
@@ -165,8 +170,11 @@ export function CheckinInicialScreen() {
                   type="button"
                   variant="outline"
                   className="w-full border-dashed"
-                  onClick={() => checkin({ id_nombre: 'admin', password: '12345678' })}
-                  disabled={isSubmitting || !isOnline}
+                  onClick={async () => {
+                    const res = await checkin({ id_nombre: 'admin', password: '12345678' })
+                    if (res) await abrir({ id_nombre: 'admin' })
+                  }}
+                  disabled={isBusy || !isOnline}
                 >
                   <FlaskConical aria-hidden="true" className="size-4" />
                   Acceso dev (admin/12345678)

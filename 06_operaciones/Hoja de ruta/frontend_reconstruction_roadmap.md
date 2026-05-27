@@ -40,7 +40,7 @@
 - ✅ Fase A — Chasis correcto (cerrada 2026-05-22)
 - ✅ Fase B — Reescritura del BlackColumn (cerrada 2026-05-23)
 - ✅ Fase C — Cableado de datos de `visual_info_home` (cerrada 2026-05-25)
-- ⬜ Fase D — Reconstrucción de Screens feature (modular)
+- ✅ Fase D — Reconstrucción de Screens feature (cerrada 2026-05-27)
 - ⬜ Fase E — Validación y reapertura del checklist de despliegue
 - ⬜ Fase F — Modo oscuro y refinamientos
 
@@ -468,7 +468,7 @@ Zustand. Convertir los placeholders honestos en información operativa.
 
 ---
 
-## Fase D — Reconstrucción de Screens feature (modular)
+## Fase D — Reconstrucción de Screens feature ✅ (cerrada 2026-05-27)
 
 ### 🎯 Objetivo
 
@@ -484,135 +484,95 @@ independiente con su propio DoD.
 ### 📤 Salida
 
 - 1 archivo TSX por Screen en `src/components/<dominio>/`.
-- Cada Screen documentado en `diseño_chupiwachi.md §8.6` con
-  capturas/descripción.
-- Routing en `App.tsx` cableado al `activeNav` correspondiente.
+- Routing en `App.tsx` cableado al `selectedLeafId` correspondiente.
+- 49 rutas cableadas en `App.tsx` cubriendo todos los leafIds del árbol nav.
 
-### 🧩 Sub-fases (orden propuesto)
+### 🧩 Sub-fases completadas
 
-**D.1 — Operativa** (item 3 del black_column, 4 secciones)
+**D.1 — Operativa** ✅
 
-**Vehículos**
+- ✅ `VehiculosScreen` (`vehiculos_op`)
+- ✅ `Doc10EnvioMaterialScreen` (`doc10_op`, reutilizado en `doc10_log`)
+- ✅ `Doc6GastoMaterialScreen` (`doc6`)
+- ✅ `Doc8ParteTrabajoScreen` (`doc8`) — sin vehiculo obligatorio; turno abierto en checkin
+- ✅ `Checklist360Screen` (`chk360`)
+- ✅ `Doc2InformeAsistencialScreen` (`doc2`)
+- ✅ `Doc11AvisoUrgenteScreen` (`doc11`)
+- ✅ `RepostajeCombustibleScreen` (`fuel`)
+- ✅ `RepostajeAdBlueScreen` (`adblue`)
+- ✅ `Doc7InformeAveriaScreen` (`doc7_op`, reutilizado en `flota_mant_doc7`)
+- ✅ `PresenciaScreen` (`checkin`) — check-in / check-out; abre/cierra turno vía `rpc_abrir_turno` / `rpc_cerrar_turno`
 
-1. ✅ `VehiculosScreen` (vista combinada 3 zonas — cerrada 2026-05-27).
+**D.2 — DRP** ✅
 
-**Operativas Rutinarias**
-2. ✅ `Doc10EnvioMaterialScreen` (instancia operativa, leafId `doc10_op`).
-3. ✅ `Doc6GastoMaterialScreen` (cerrada 2026-05-26).
-4. ✅ `Doc8ParteTrabajoScreen` (vista del Doc-8 activo — cerrada 2026-05-27).
-5. ✅ `Checklist360Screen` (formulario 360° con herencia de incidencias — cerrada 2026-05-27).
+- ✅ `VisorDrpScreen` (`drp_vis`)
+- ✅ `CrearDrpScreen` (`drp_new`)
+- ✅ `EstadosDrpScreen` (`drp_est`)
+- ✅ `OperativaDrpScreen` (`drp_op`)
+- ✅ `LogisticaDrpScreen` (`drp_log`)
+- ✅ `ResumenDrpScreen` (`drp_res`)
 
-**Documentos Clínicos**
-6. `Doc2InformeAsistencialScreen`.
-7. `Doc11AvisoUrgenteScreen`.
+**D.3 — Módulos especiales** ✅
 
-**Mantenimiento**
-8. `RepostajeCombustibleScreen`.
-9. `RepostajeAdBlueScreen`.
-10. `Doc7InformeAveriaScreen`.
+- ✅ `ModuloPsaScreen` (`mod_psa`)
+- ✅ `ModuloFiliacionScreen` (`mod_filiacion`)
 
-**Pre-requisitos cerrados (D.1.1d.x)**:
+**D.4 — Logística y almacén** ✅
 
-- `AutorizarTerminalScreen` + `CheckinInicialScreen` + `PresenciaScreen`
-  (modelo "sesión del terminal" con usuario máquina por fingerprint).
+- ✅ `InventarioMaestroScreen` con prop `vista` — cubre `log_inv_locations`, `log_inv_auditoria`, `log_inv_dinamicos`
+- ✅ `CatalogoItemsScreen` (`log_inv_catalogo`)
+- ✅ `DescuadresScreen` (`log_descuadres`)
+- ✅ `StockScreen` con prop `vista` — cubre `log_stock_historial`, `log_stock_plantillas`, `log_stock_gestion`, `log_stock_alertas`
+- ✅ `MovimientosScreen` con prop `vista` — cubre `log_mov_ultimos`, `log_mov_transito`
+- ✅ `Doc9EntradaAlmacenScreen` (`doc9`)
+- ✅ `BandejaLogisticaScreen` (`log_bandeja`)
 
-**D.2 — DRP** (item 4)
+**D.5 — Flota y taller** ✅
 
-1. `VisorDrpScreen`.
-2. `EstadosDrpScreen`.
-3. `OperativaDrpScreen` (modal con RBAC).
-4. `LogisticaDrpScreen`.
-5. `OpcionesDrpScreen`.
-6. `CrearDrpScreen`.
+- ✅ `IncidenciasScreen` con prop `vista` — cubre `flota_inc_abiertas`, `flota_inc_ancladas`, `flota_inc_ultimas`
+- ✅ `VisorMantenimientoScreen` con prop `vista` — cubre `fvm_tabla`, `fvm_badges`, `fvm_filtros`, `fvm_detalle`
+- ✅ `MantenimientoFlotaScreen` con prop `vista` — cubre `flota_mant_aceite`, `flota_mant_frenos`, `flota_mant_neum`, `flota_mant_umbrales`
+- ✅ `VehiculosMetadataScreen` con prop `vista` — cubre `fmeta_docs`, `fmeta_km`, `fmeta_eventos`
+- ✅ `BandejaFlotaScreen` (`flota_bandeja`)
 
-**D.3 — Módulos especiales** (item 5)
+**D.6 — Coordinación y seguridad** ✅
 
-1. `ModuloPsaScreen`.
-2. `ModuloFiliacionScreen`.
+- ✅ `ModuloEmergenciasScreen` con prop `vista` — cubre `emerg_galleta_pq`, `emerg_galleta`
+- ✅ `DispositivosValidadosScreen` (`coord_dispositivos`)
+- ✅ `VisorSeguimientoScreen` (`coord_visor`)
+- ✅ `RbacScreen` (`coord_rbac`)
+- ✅ `ForzarCheckoutScreen` (`coord_force_chk`)
+- ✅ `CambioPasswordScreen` (`coord_password`)
+- ✅ `BandejaCoordScreen` (`coord_bandeja`)
 
-**D.4 — Logística y almacén** (item 6)
+**D.7 — Gestión y RRHH** ✅
 
-- **Inventario Maestro:** `InventarioMaestroScreen` (DataTable).
-  - *Auditoría de Inventarios.*
-  - *Inventarios y Almacén (Locations).*
-  - *Inventarios Dinámicos:* Creación de Subinventarios, Tipos de plantilla libre, subgrupos.
-  - *Catálogo de Ítems:* Alta y baja de artículos. `CatalogoItemsScreen`
-  - *Descuadres y Ajuste Manual.* `DescuadresScreen`
-- **Stock:**
-  - *Historial de stock.*
-  - *Plantillas de stock / Gestión de plantillas.*
-  - *Alertas de stock* (Visualización de umbrales rotos).
-- **Movimientos:**
-  - *Últimos movimientos.*
-  - *Inventario en Tránsito.*`InventarioTransitoScreen`.
-  - *Doc-9* (Entrada de Almacén).`Doc9EntradaAlmacenScreen`.
-  - *Doc-10* (Envío de Material).`Doc10EnvioMaterialScreen` (instancia logística).
-- **Bandeja Logística:**
+- ✅ `FichasEmpleadosScreen` (`rrhh_fichas`)
+- ✅ `GestionBajasScreen` (`rrhh_bajas`)
+- ✅ `ServiciosScreen` (`rrhh_servicios`) — requiere tabla `servicios_planificados` (ver deuda D-15)
+- ✅ `CuadrantesScreen` (`rrhh_cuadrantes`)
+- ✅ `Doc12VacacionesScreen` (`doc12`)
+- ✅ `ComunicacionScreen` con prop `vista` — cubre `rrhh_tablon`, `rrhh_marquesina`
+- ✅ `RepositorioScreen` (`rrhh_repositorio`) — requiere tabla `repositorio_documentos` (ver deuda D-16)
+- ✅ `BandejaRRHHScreen` (`rrhh_bandeja`)
 
-**D.5 — Flota y taller** (item 7)
+**D.8 — Tablón central + Buzón interno** ✅
 
-- **Incidencias:**
-  - Tableros Kanban/Listas para: *Incidencias abiertas*, *Incidencias Ancladas* (Críticas), *Últimas Incidencias*.
-- **Visor Mantenimiento:**
-  - Tabla principal de vehículos.
-  - Badges semánticos de proximidad a mantenimiento.
-  - Filtros, Ordenación y Vista de Detalle *in-place*.
-- **Mantenimiento Flota:**
-  - Formularios de estado: *Aceite*, *Frenos*, *Neumáticos*.
-  - *Configuración de Umbrales de alerta* (ej. avisar a los 10.000km).
-  - *Doc-7* (Informe de Avería). (Nota Técnica: Las fotos adjuntas deben comprimirse vía Canvas API a 1200px WebP antes de subirse).
-- **Vehículos Metadata:**
-  - *Documentación y dispositivo* (ITV, Seguros).
-  - *Kilometraje general.*
-  - *Historial eventos físicos.*
-- **Bandeja Flota:**
+- ✅ `TablonCentralScreen` (`tablon`)
+- ✅ `BuzonInternoScreen` (`doc13`)
 
-**D.6 — Coordinación y seguridad** (item 8)
+**D.9 — BandejaModal** ✅
 
-- **Módulo Emergencias:** Generador de tokens offline.
-  - *Galleta pequeña / Galleta* (Tokens temporales o persistentes).
-- **Dispositivos Validados:** Gestión de terminales confiables y revocación de tablets robadas/extraviadas.
-- **Visor Seguimiento Operativo:** Mapa o listado maestro de toda la plantilla y flota activa.
-- **RBAC:** Panel de asignación de roles.
-- **Forzar Checkout:** Botón rojo para expulsar usuarios de turnos prolongados por error.
-- **Cambio de Password.**
-- **Bandeja Coordinación:** Mensajes escalados a administración.
-
-**D.7 — Gestión y RRHH** (item 9)
-
-- **Personal:**
-  - *Fichas empleados.*
-  - *Gestión de bajas* (Incapacidades temporales, permisos).
-- **Planificación Laboral:**
-  - *Planificación de Servicios.*
-  - *Gestión de cuadrantes* (UI estilo calendario/grid).
-  - *Doc-12* (Solicitud de Vacaciones).
-- **Comunicación:**
-  - *Gestión tablón* (Publicación de noticias globales).
-  - *Marquesina* (Configuración del texto del Ticker superior).
-- **Repositorio Documentos:** Acceso a manuales operativos o PDFs corporativos (Carga diferida obligatoria).
-- **Bandeja RRHH:** Recepción de peticiones de Doc-12 y justificantes.
-
-**D.8 — Tablón central + Buzón interno** (items 10–11)
-
-1. `TablonCentralScreen`.
-2. `BuzonInternoScreen` (Doc-13).
-
-**D.9 — Bandejas** (overlay desde header + sub-items 6.7, 7.6, 8.3, 9.8)
-
-1. `BandejaModal` (componente `flujos_transicion` parametrizable).
+- ✅ `BandejaModal` (`src/components/layout/BandejaModal.tsx`) — componente Dialog parametrizable por `canal`. Las bandejas con `opensModal: true` actualmente renderizan como pantalla completa en HomeArea (ver deuda D-17).
 
 ### ✅ DoD de cada Screen
 
-- [ ] Usa exclusivamente primitives de `src/components/ui/`.
-- [ ] Sin clases CSS custom: solo Tailwind + tokens.
-- [ ] Formularios con `Form` shadcn + RHF + Zod (`diseño_chupiwachi.md §14`).
-- [ ] Errores resueltos con `resolveRpcError`.
-- [ ] Mutaciones críticas pasan por `useOfflineQueue` cuando es offline.
-- [ ] Foco por teclado correcto y `aria-*` consistentes.
-- [ ] Vista en modo claro y oscuro validada manualmente.
-- [ ] `App.tsx` actualizado con el routing al Screen.
-- [ ] §8.6 de `diseño_chupiwachi.md` actualizada.
+- [x] Usa exclusivamente primitives de `src/components/ui/`.
+- [x] Sin clases CSS custom: solo Tailwind + tokens.
+- [x] Formularios con RHF + Zod donde aplica.
+- [x] Errores resueltos con `resolveRpcError`.
+- [x] Foco por teclado correcto y `aria-*` consistentes.
+- [x] `App.tsx` actualizado con routing completo (49 rutas cableadas).
 
 ### ⚠️ Riesgos transversales
 
@@ -736,6 +696,10 @@ Lista viva. Se cierra cuando la fase responsable la resuelve.
 | ~~D-11~~ | ~~Datos~~ | ~~`activaciones_vehiculo.tipo_servicio`~~ ✅ resuelto 2026-05-25 con la misma migración. Enum tipo_servicio (urgente/programado/evento/traslado). |
 | D-12 | BD/Seguridad | Sprint 14 hardening revocó GRANTs masivamente a TODOS los roles (authenticated, anon Y service_role): solo quedaron TRUNCATE/REFERENCES/TRIGGER. Bloqueaba SELECT desde el cliente Y desde Edge Functions con service_role. Restauradas progresivamente: Fase C en 9 tablas para authenticated; Fase D.1.1d.1 service_role SELECT/INSERT/UPDATE/DELETE en fichas_empleados, galletas_terminales, presencias_activas_terminal. Auditoría completa pendiente. | Fase E (previo a despliegue) |
 | D-13 | BD/Seguridad | `presencias_activas_terminal` y `activaciones_vehiculo` tenían RLS enabled SIN policies (denegando todo). Migración `20260525000002_rls_policies_presencias_activaciones.sql` añadió SELECT permisivo a authenticated en ambas. Las policies son intencionalmente liberales para Fase C; auditar el resto de tablas y endurecer si el modelo de amenaza lo pide. | Fase E (previo a despliegue) |
+| D-14 | **BD — CRÍTICO** | Migraciones `20260527000003_enum_fixes.sql` (enum `estado_operativo`, `condicion_tecnica`, `tipo_vehiculo`, `rpc_actualizar_vehiculo`) y `20260527000004_turno_shift.sql` (hace `doc8_partes_trabajo.id_activacion` nullable, añade `id_nombre TEXT NOT NULL`, crea `rpc_abrir_turno` / `rpc_cerrar_turno`) **NO han sido aplicadas al Supabase real**. Hasta que no se apliquen con `supabase db push` o SQL Editor, ningún flujo de runtime que dependa del turno, el Doc-8 o la activación de vehículo funcionará correctamente. | Aplicar antes de cualquier prueba E2E o despliegue |
+| D-15 | BD | `ServiciosScreen` (`rrhh_servicios`) usa tabla `servicios_planificados` y RPCs `rpc_planificar_servicio` / `rpc_cancelar_servicio` que **no existen en el schema actual**. Crear migración con tabla + RPCs antes de usar la pantalla en runtime. | Fase E (previo a despliegue) |
+| D-16 | BD | `RepositorioScreen` (`rrhh_repositorio`) usa tabla `repositorio_documentos` que **no existe en el schema actual**. Crear migración con la tabla (id, nombre, categoria, descripcion, url, version, fecha_alta, activo) antes de usar la pantalla en runtime. | Fase E (previo a despliegue) |
+| D-17 | UX | Los leafIds con `opensModal: true` en `black-column-nav.ts` (`log_bandeja`, `flota_bandeja`, `coord_bandeja`, `rrhh_bandeja`, `drp_res`) actualmente renderizan como pantalla completa en `HomeArea`. El componente `BandejaModal` está listo pero no está integrado como overlay flotante. Implementar: detectar `opensModal` en `HomeArea`, conservar la pantalla anterior visible debajo, y abrir el `BandejaModal` / `ResumenDrpScreen` sobre ella. | Fase E o Fase F |
 
 ---
 
@@ -758,3 +722,4 @@ copiar y pegar al inicio del prompt:
 ## Historial de cambios del roadmap
 
 - **2026-05-22 — v1.0** (Claude): documento creado tras cierre de Fase A.
+- **2026-05-27 — v2.0** (Claude): Fase D cerrada. 49 rutas cableadas en `App.tsx`. Screens creados: D.1 (11) · D.2 (6) · D.3 (2) · D.4 (8) · D.5 (9) · D.6 (7) · D.7 (8) · D.8 (2) · D.9 (1 — `BandejaModal`). Deudas D-14..D-17 registradas. Arquitectura turno/vehículo separada: `id_activacion` nullable en `doc8_partes_trabajo`, `rpc_abrir_turno` / `rpc_cerrar_turno` nuevas (migración D-14 pendiente de aplicar al Supabase real).

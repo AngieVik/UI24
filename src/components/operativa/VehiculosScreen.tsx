@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clock,
   Disc3,
-  MapPin,
   Navigation,
   Pause,
   Power,
@@ -28,7 +27,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useFlotaCompleta, type VehiculoFila } from '@/hooks/useFlotaCompleta'
 import {
   useActualizarVehiculo,
-  type EstadoOperativo,
   type TipoServicio,
 } from '@/hooks/useActualizarVehiculo'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'

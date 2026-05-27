@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Car,
   CheckSquare,
   ClipboardList,
   Package,
@@ -12,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { useTurnoStore } from '@/stores/useTurnoStore'
 import { useActivacionStore } from '@/stores/useActivacionStore'
 import { useDoc8Activo } from '@/hooks/useDoc8Activo'
 import { useDoc6DelTurno } from '@/hooks/useDoc6DelTurno'
@@ -33,7 +35,8 @@ const TIPO_SERVICIO_LABELS: Record<string, string> = {
   sin_asignar:       'Sin asignar',
 }
 
-function formatTipoServicio(tipo: string): string {
+function formatTipoServicio(tipo: string | null): string {
+  if (!tipo) return '—'
   return TIPO_SERVICIO_LABELS[tipo] ?? tipo
 }
 
@@ -55,11 +58,11 @@ function fmtTime(iso: string | null | undefined): string {
 // ── Componente principal ──────────────────────────────────────
 
 export function Doc8ParteTrabajoScreen() {
-  const idParte         = useActivacionStore((s) => s.id_parte)
-  const checklistCerrado = useActivacionStore((s) => s.checklistCerrado)
+  const idParte     = useTurnoStore((s) => s.id_parte)
+  const turnoActivo = useTurnoStore((s) => s.turnoActivo)
 
   // Gate: sin turno activo
-  if (!idParte) {
+  if (!idParte || !turnoActivo) {
     return (
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-6 py-16 text-center">
         <div className="grid size-12 place-items-center rounded-md bg-muted text-muted-foreground/70">
@@ -69,34 +72,35 @@ export function Doc8ParteTrabajoScreen() {
           Doc-8 — Parte de trabajo
         </h2>
         <p className="font-body text-base font-light text-muted-foreground">
-          No hay turno activo. Inicia un turno desde Operativa → Vehículos.
+          No hay turno activo. Haz check-in desde la pantalla de presencia.
         </p>
       </div>
     )
   }
 
-  return <Doc8Content idParte={idParte} checklistCerrado={checklistCerrado} />
+  return <Doc8Content idParte={idParte} />
 }
 
-// ── Contenido del parte (cuando hay activación) ───────────────
+// ── Contenido del parte ───────────────────────────────────────
 
 interface Doc8ContentProps {
-  idParte:          string
-  checklistCerrado: boolean
+  idParte: string
 }
 
-function Doc8Content({ idParte, checklistCerrado }: Doc8ContentProps) {
+function Doc8Content({ idParte }: Doc8ContentProps) {
   const { data: doc8, isLoading, isError } = useDoc8Activo()
+  const checklistCerrado = useActivacionStore((s) => s.checklistCerrado)
+  const idActivacion     = useActivacionStore((s) => s.id_activacion)
+
   const { data: gastos, isLoading: gastosLoading } = useDoc6DelTurno(
-    doc8?.id_activacion ?? null,
+    doc8?.id_activacion ?? idActivacion ?? null,
   )
   const personal   = usePersonalEnTurno()
   const { anotar, isSubmitting, error: anotarError } = useAnotarParte()
 
-  // Notas locales — se inicializan una vez al cargar el doc8
   const [localNotas, setLocalNotas] = useState('')
-  const [notasInit, setNotasInit] = useState(false)
-  const [feedback, setFeedback] = useState<string | null>(null)
+  const [notasInit, setNotasInit]   = useState(false)
+  const [feedback, setFeedback]     = useState<string | null>(null)
 
   useEffect(() => {
     if (doc8 && !notasInit) {
@@ -107,6 +111,7 @@ function Doc8Content({ idParte, checklistCerrado }: Doc8ContentProps) {
 
   const notasSinCambios = localNotas === (doc8?.notas ?? '')
   const parteAbierto    = doc8?.estado === 'Abierto_En_Turno'
+  const tieneVehiculo   = !!doc8?.id_activacion
 
   async function handleGuardarNotas() {
     if (!doc8 || notasSinCambios || isSubmitting) return
@@ -120,7 +125,6 @@ function Doc8Content({ idParte, checklistCerrado }: Doc8ContentProps) {
     )
   }
 
-  // ── Loading ──
   if (isLoading) {
     return (
       <div
@@ -135,7 +139,6 @@ function Doc8Content({ idParte, checklistCerrado }: Doc8ContentProps) {
     )
   }
 
-  // ── Error ──
   if (isError || !doc8) {
     return (
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-6 py-16 text-center">
@@ -160,40 +163,55 @@ function Doc8Content({ idParte, checklistCerrado }: Doc8ContentProps) {
           </CardTitle>
           <div className="flex items-center gap-2">
             <Badge
-              variant={doc8.estado === 'Abierto_En_Turno' ? 'ok' : 'secondary'}
-              aria-label={`Estado: ${doc8.estado === 'Abierto_En_Turno' ? 'Abierto en turno' : 'Cerrado'}`}
+              variant={parteAbierto ? 'ok' : 'secondary'}
+              aria-label={`Estado: ${parteAbierto ? 'Abierto en turno' : 'Cerrado'}`}
             >
-              {doc8.estado === 'Abierto_En_Turno' ? 'Abierto en turno' : 'Cerrado'}
-            </Badge>
-            <Badge variant="outline" aria-label={`Matrícula ${doc8.matricula}`}>
-              {doc8.matricula}
+              {parteAbierto ? 'Abierto en turno' : 'Cerrado'}
             </Badge>
           </div>
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-            <DataCell label="ID parte" value={`#${idParteCorto}`} />
-            <DataCell label="Inicio"   value={fmtDateTime(doc8.timestamp_inicio)} />
-            <DataCell label="Fin"      value={fmtDateTime(doc8.timestamp_fin)} />
-            <DataCell label="Km inicio" value={doc8.km_inicio != null ? String(doc8.km_inicio) : '—'} />
-            <DataCell label="Km fin"   value={doc8.km_fin    != null ? String(doc8.km_fin)    : '—'} />
+            <DataCell label="ID parte"  value={`#${idParteCorto}`} />
+            <DataCell label="Trabajador" value={doc8.id_nombre || '—'} />
+            <DataCell label="Inicio"    value={fmtDateTime(doc8.timestamp_inicio)} />
+            <DataCell label="Fin"       value={fmtDateTime(doc8.timestamp_fin)} />
           </dl>
         </CardContent>
       </Card>
 
-      {/* ── Card 2: Dotación y servicio ──────────────────── */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="font-display text-base">Dotación y servicio</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-            <DataCell label="Pilot" value={doc8.pilot} />
-            <DataCell label="Carry" value={doc8.carry ?? '—'} />
-            <DataCell label="Tipo servicio" value={formatTipoServicio(doc8.tipo_servicio)} />
-          </dl>
-        </CardContent>
-      </Card>
+      {/* ── Card 2: Vehículo (solo si hay activación) ────── */}
+      {tieneVehiculo ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardTitle className="flex items-center gap-2 font-display text-base">
+              <Car aria-hidden="true" className="size-4" />
+              Vehículo activo
+            </CardTitle>
+            <Badge variant="outline" aria-label={`Matrícula ${doc8.matricula}`}>
+              {doc8.matricula}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+              <DataCell label="Pilot"          value={doc8.pilot ?? '—'} />
+              <DataCell label="Carry"          value={doc8.carry ?? '—'} />
+              <DataCell label="Tipo servicio"  value={formatTipoServicio(doc8.tipo_servicio)} />
+              <DataCell label="Km inicio"      value={doc8.km_inicio != null ? String(doc8.km_inicio) : '—'} />
+              <DataCell label="Km fin"         value={doc8.km_fin    != null ? String(doc8.km_fin)    : '—'} />
+            </dl>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-4 pb-3">
+            <Car aria-hidden="true" className="size-5 text-muted-foreground/60" />
+            <p className="font-body text-sm font-light text-muted-foreground">
+              Sin vehículo activo. Ve a Operativa → Vehículos para activar uno.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Card 3: Personal en turno ────────────────────── */}
       <Card>
@@ -255,81 +273,85 @@ function Doc8Content({ idParte, checklistCerrado }: Doc8ContentProps) {
         </CardContent>
       </Card>
 
-      {/* ── Card 4: Checklist360 ─────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="flex items-center gap-2 font-display text-base">
-            <CheckSquare aria-hidden="true" className="size-4" />
-            Checklist360
-          </CardTitle>
-          <Badge
-            variant={checklistCerrado ? 'ok' : 'warn'}
-            aria-label={`Checklist ${checklistCerrado ? 'completado' : 'pendiente'}`}
-          >
-            {checklistCerrado ? 'Completado' : 'Pendiente'}
-          </Badge>
-        </CardHeader>
-        {!checklistCerrado && (
-          <CardContent>
-            <p className="text-sm font-light text-muted-foreground">
-              La revisión 360° de inicio de turno no está completada. Ve a Operativa → Doc-Checklist360 para completarla.
-            </p>
-          </CardContent>
-        )}
-      </Card>
+      {/* ── Card 4: Checklist360 (solo si hay vehículo activo) ── */}
+      {tieneVehiculo && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardTitle className="flex items-center gap-2 font-display text-base">
+              <CheckSquare aria-hidden="true" className="size-4" />
+              Checklist360
+            </CardTitle>
+            <Badge
+              variant={checklistCerrado ? 'ok' : 'warn'}
+              aria-label={`Checklist ${checklistCerrado ? 'completado' : 'pendiente'}`}
+            >
+              {checklistCerrado ? 'Completado' : 'Pendiente'}
+            </Badge>
+          </CardHeader>
+          {!checklistCerrado && (
+            <CardContent>
+              <p className="text-sm font-light text-muted-foreground">
+                La revisión 360° de inicio de turno no está completada. Ve a Operativa → Doc-Checklist360 para completarla.
+              </p>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* ── Card 5: Gastos de material del turno ─────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="flex items-center gap-2 font-display text-base">
-            <Package aria-hidden="true" className="size-4" />
-            Gastos de material
-          </CardTitle>
-          {!gastosLoading && (
-            <Badge variant="secondary" aria-label={`${gastos.length} gastos registrados`}>
-              {gastos.length}
-            </Badge>
-          )}
-        </CardHeader>
-        <CardContent>
-          {gastosLoading && (
-            <div role="status" aria-label="Cargando gastos">
-              <Skeleton className="h-8 w-full" />
-            </div>
-          )}
-          {!gastosLoading && gastos.length === 0 && (
-            <p className="text-sm font-light text-muted-foreground">
-              Sin gastos de material registrados en este turno.
-            </p>
-          )}
-          {!gastosLoading && gastos.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs font-bold uppercase tracking-wide">Ítem</TableHead>
-                  <TableHead className="text-xs font-bold uppercase tracking-wide">Categoría</TableHead>
-                  <TableHead className="text-right text-xs font-bold uppercase tracking-wide">Cant.</TableHead>
-                  <TableHead className="text-right text-xs font-bold uppercase tracking-wide">Hora</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {gastos.map((g) => (
-                  <TableRow key={g.id_deduccion}>
-                    <TableCell className="font-bold">{g.nombre_item}</TableCell>
-                    <TableCell className="text-sm font-light text-muted-foreground">{g.categoria}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary" aria-label={`Cantidad ${g.cantidad}`}>{g.cantidad}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-xs font-light text-muted-foreground">
-                      {fmtTime(g.created_at)}
-                    </TableCell>
+      {tieneVehiculo && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardTitle className="flex items-center gap-2 font-display text-base">
+              <Package aria-hidden="true" className="size-4" />
+              Gastos de material
+            </CardTitle>
+            {!gastosLoading && (
+              <Badge variant="secondary" aria-label={`${gastos.length} gastos registrados`}>
+                {gastos.length}
+              </Badge>
+            )}
+          </CardHeader>
+          <CardContent>
+            {gastosLoading && (
+              <div role="status" aria-label="Cargando gastos">
+                <Skeleton className="h-8 w-full" />
+              </div>
+            )}
+            {!gastosLoading && gastos.length === 0 && (
+              <p className="text-sm font-light text-muted-foreground">
+                Sin gastos de material registrados en este turno.
+              </p>
+            )}
+            {!gastosLoading && gastos.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs font-bold uppercase tracking-wide">Ítem</TableHead>
+                    <TableHead className="text-xs font-bold uppercase tracking-wide">Categoría</TableHead>
+                    <TableHead className="text-right text-xs font-bold uppercase tracking-wide">Cant.</TableHead>
+                    <TableHead className="text-right text-xs font-bold uppercase tracking-wide">Hora</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {gastos.map((g) => (
+                    <TableRow key={g.id_deduccion}>
+                      <TableCell className="font-bold">{g.nombre_item}</TableCell>
+                      <TableCell className="text-sm font-light text-muted-foreground">{g.categoria}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="secondary" aria-label={`Cantidad ${g.cantidad}`}>{g.cantidad}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-xs font-light text-muted-foreground">
+                        {fmtTime(g.created_at)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Card 6: Anotaciones ──────────────────────────── */}
       <Card>

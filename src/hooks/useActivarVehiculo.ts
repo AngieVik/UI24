@@ -67,7 +67,6 @@ export function useActivarVehiculo() {
         const data = result.data as CheckinRpcData
         useActivacionStore.getState().setActivacion({
           id_activacion: data.id_activacion,
-          id_parte:      data.id_parte,
           id_checklist:  data.id_checklist,
           matricula:     data.matricula,
         })
@@ -75,7 +74,6 @@ export function useActivarVehiculo() {
         // Offline: ids placeholder hasta drenar.
         useActivacionStore.getState().setActivacion({
           id_activacion: result.mutation_uuid,
-          id_parte:      crypto.randomUUID(),
           id_checklist:  crypto.randomUUID(),
           matricula:     vars.matricula,
         })

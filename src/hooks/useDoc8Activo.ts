@@ -1,22 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { useActivacionStore } from '@/stores/useActivacionStore'
+import { useTurnoStore } from '@/stores/useTurnoStore'
 import { useRealtimeInvalidator } from '@/hooks/useRealtimeInvalidator'
 
 export interface Doc8Data {
   id_parte:         string
-  id_activacion:    string
+  id_activacion:    string | null   // nullable — shift can exist without a vehicle
+  id_nombre:        string          // worker who opened the shift
   km_inicio:        number | null
   km_fin:           number | null
   timestamp_inicio: string
   timestamp_fin:    string | null
   estado:           'Abierto_En_Turno' | 'Enviado_Cerrado'
   notas:            string | null
-  // De activaciones_vehiculo
-  matricula:        string
-  pilot:            string
+  // From activaciones_vehiculo — null when no vehicle is active
+  matricula:        string | null
+  pilot:            string | null
   carry:            string | null
-  tipo_servicio:    string
+  tipo_servicio:    string | null
 }
 
 interface UseDoc8ActivoResult {
@@ -28,14 +29,17 @@ interface UseDoc8ActivoResult {
 
 /**
  * Lee el Doc-8 activo del turno usando el id_parte persistido en
- * useActivacionStore (IndexedDB). Hace el join con activaciones_vehiculo
- * para obtener pilot/carry/tipo_servicio/matricula en una sola query.
+ * useTurnoStore (IndexedDB).
+ *
+ * El Doc-8 ahora puede existir SIN vehículo activo (id_activacion nullable).
+ * La unión con activaciones_vehiculo es LEFT — los campos de vehículo
+ * son null cuando no hay activación vinculada.
  *
  * Realtime: invalida en cualquier cambio al Doc-8 propio.
  * Gate: disabled si no hay id_parte en el store.
  */
 export function useDoc8Activo(): UseDoc8ActivoResult {
-  const idParte = useActivacionStore((s) => s.id_parte)
+  const idParte = useTurnoStore((s) => s.id_parte)
 
   const queryKey = ['doc8_activo', idParte] as const
 
@@ -53,18 +57,21 @@ export function useDoc8Activo(): UseDoc8ActivoResult {
     queryFn: async (): Promise<Doc8Data | null> => {
       if (!idParte) return null
 
-      const { data, error } = await supabase
+      // doc8_partes_trabajo schema changed (id_nombre added) → cast until types are regenerated
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from('doc8_partes_trabajo')
         .select(`
           id_parte,
           id_activacion,
+          id_nombre,
           km_inicio,
           km_fin,
           timestamp_inicio,
           timestamp_fin,
           estado,
           notas,
-          activaciones_vehiculo!inner(
+          activaciones_vehiculo!left(
             matricula,
             pilot,
             carry,
@@ -77,26 +84,28 @@ export function useDoc8Activo(): UseDoc8ActivoResult {
       if (error) throw error
       if (!data) return null
 
-      const av = data.activaciones_vehiculo as unknown as {
+      // LEFT join: activaciones_vehiculo will be null if id_activacion is null
+      const av = data.activaciones_vehiculo as {
         matricula:     string
         pilot:         string
         carry:         string | null
         tipo_servicio: string
-      }
+      } | null
 
       return {
         id_parte:         data.id_parte,
         id_activacion:    data.id_activacion,
+        id_nombre:        (data as unknown as { id_nombre: string }).id_nombre ?? '',
         km_inicio:        data.km_inicio,
         km_fin:           data.km_fin,
         timestamp_inicio: data.timestamp_inicio,
         timestamp_fin:    data.timestamp_fin,
         estado:           data.estado as 'Abierto_En_Turno' | 'Enviado_Cerrado',
         notas:            data.notas ?? null,
-        matricula:        av.matricula,
-        pilot:            av.pilot,
-        carry:            av.carry ?? null,
-        tipo_servicio:    av.tipo_servicio,
+        matricula:        av?.matricula ?? null,
+        pilot:            av?.pilot ?? null,
+        carry:            av?.carry ?? null,
+        tipo_servicio:    av?.tipo_servicio ?? null,
       }
     },
   })

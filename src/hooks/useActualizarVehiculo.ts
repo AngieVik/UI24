@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useOfflineMutation } from '@/hooks/useOfflineMutation'
 import { useActivacionStore } from '@/stores/useActivacionStore'
+import { useTurnoStore } from '@/stores/useTurnoStore'
 
 /** Estado general del vehículo ('activado'/'desactivado') o subestado operativo. */
 export type EstadoOperativo =
@@ -29,7 +30,6 @@ interface ActualizarRpcData {
   matricula:        string
   estado_operativo: EstadoOperativo
   id_activacion?:   string | null
-  id_parte?:        string | null
   id_checklist?:    string | null
 }
 
@@ -58,6 +58,7 @@ export function useActualizarVehiculo() {
     p_carry:          string | null
     p_km_inicio:      number | null
     p_km_fin:         number | null
+    p_id_parte:       string | null
   }>({
     rpcName: 'rpc_actualizar_vehiculo',
     invalidates: [
@@ -70,6 +71,10 @@ export function useActualizarVehiculo() {
     setError(null)
     setIsSubmitting(true)
     try {
+      // Pass the current turno id_parte so the RPC can link the shift doc
+      // to the vehicle activation (updates doc8.id_activacion + km).
+      const idParte = useTurnoStore.getState().id_parte || null
+
       const res = await mut.mutateAsync({
         p_matricula:      vars.matricula,
         p_estado_destino: vars.estado_destino,
@@ -78,6 +83,7 @@ export function useActualizarVehiculo() {
         p_carry:          vars.carry ?? null,
         p_km_inicio:      vars.km_inicio ?? null,
         p_km_fin:         vars.km_fin ?? null,
+        p_id_parte:       idParte,
       })
 
       if (!res.queued && res.data) {
@@ -86,7 +92,6 @@ export function useActualizarVehiculo() {
         if (data.id_activacion && vars.estado_destino === 'activado') {
           useActivacionStore.getState().setActivacion({
             id_activacion: data.id_activacion,
-            id_parte:      data.id_parte ?? '',
             id_checklist:  data.id_checklist ?? '',
             matricula:     data.matricula,
           })

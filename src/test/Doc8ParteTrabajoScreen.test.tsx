@@ -26,7 +26,7 @@ vi.mock('@/hooks/useAnotarParte',    () => ({ useAnotarParte:    vi.fn() }))
 vi.mock('@/hooks/usePersonalEnTurno',() => ({ usePersonalEnTurno: vi.fn() }))
 
 import { Doc8ParteTrabajoScreen } from '@/components/operativa/Doc8ParteTrabajoScreen'
-import { useDoc8Activo }      from '@/hooks/useDoc8Activo'
+import { useDoc8Activo, type Doc8Data } from '@/hooks/useDoc8Activo'
 import { useDoc6DelTurno }    from '@/hooks/useDoc6DelTurno'
 import { useAnotarParte }     from '@/hooks/useAnotarParte'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
@@ -38,9 +38,10 @@ const usePersonalMock  = vi.mocked(usePersonalEnTurno)
 
 // ── Fixtures ──────────────────────────────────────────────────
 
-const DOC8: ReturnType<typeof useDoc8Activo>['data'] = {
+const DOC8: Doc8Data = {
   id_parte:         'abc12345-0000-0000-0000-000000000001',
   id_activacion:    'act00001-0000-0000-0000-000000000001',
+  id_nombre:        'jperez',
   km_inicio:        125000,
   km_fin:           null,
   timestamp_inicio: '2026-05-27T08:00:00Z',

@@ -756,12 +756,11 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
 // ── Pantalla principal ────────────────────────────────────────
 
 export function Checklist360Screen() {
-  const idParte     = useActivacionStore((s) => s.id_parte)
   const idChecklist = useActivacionStore((s) => s.id_checklist)
   const matricula   = useActivacionStore((s) => s.matricula)
 
-  // Gate: sin turno activo
-  if (!idParte || !idChecklist) {
+  // Gate: sin vehículo activado (checklist es exclusivo del vehículo)
+  if (!idChecklist || !matricula) {
     return (
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-6 py-16 text-center">
         <div className="grid size-12 place-items-center rounded-md bg-muted text-muted-foreground/70">
@@ -771,7 +770,7 @@ export function Checklist360Screen() {
           Checklist 360° — Revisión del vehículo
         </h2>
         <p className="font-body text-base font-light text-muted-foreground">
-          No hay turno activo. Inicia un turno desde Operativa → Vehículos.
+          No hay vehículo activado. Ve a Operativa → Vehículos para activar uno.
         </p>
       </div>
     )

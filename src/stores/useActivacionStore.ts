@@ -3,10 +3,9 @@ import { persist } from 'zustand/middleware'
 import { createIdbStorage } from '@/lib/idb'
 
 export interface ActivacionData {
-  id_activacion: string
-  id_parte: string
-  id_checklist: string
-  matricula: string
+  id_activacion:    string
+  id_checklist:     string
+  matricula:        string
   checklistCerrado: boolean
 }
 
@@ -17,10 +16,9 @@ interface ActivacionState extends ActivacionData {
 }
 
 const EMPTY: ActivacionData = {
-  id_activacion: '',
-  id_parte: '',
-  id_checklist: '',
-  matricula: '',
+  id_activacion:    '',
+  id_checklist:     '',
+  matricula:        '',
   checklistCerrado: false,
 }
 
