@@ -1,126 +1,41 @@
-# black_column
+# 05_interfaz_y_desarrollo/black_column.md
 
-* Barra lateral permanente de 52px de ancho, fondo `#111111`, junto con el header.
-* `Logo.svg` en la parte superior — color `#FFD60A` (token `--u24-yellow`, único amarillo del sistema). No usar `#F5C518` ni variantes doradas.
-* Todos los iconos son Tabler Icons (outline). Sin etiqueta visible. Tooltip al hover con el nombre del módulo.
-* Indicador de ítem activo: barra vertical amarilla de 3px en el borde izquierdo del botón.
+# ANATOMÍA MECÁNICA DEL COMPONENTE: BLACK_COLUMN
 
-* **Comportamiento de navegación (acordeón):**
-  * Al pulsar un núcleo con subgrupo, sus iconos secundarios se despliegan hacia abajo empujando los demás.
-  * Al pulsar otro núcleo con subgrupo, el anterior se contrae y el nuevo se expande.
-  * Al pulsar el mismo núcleo activo, se contrae.
-  * Al pulsar un subicono, su contenido o doc se abre en el `home_area` (zona amarilla).
-  * El icono Home siempre lleva al estado raíz limpio (contrae todo, limpia el home).
+> Este documento detalla la estructura física e interacciones del componente de navegación principal `<BlackColumn />`.
+> **La jerarquía exacta de módulos (Árbol) reside en `mapeo_visual_ui.md` Sección 4.**
 
-* **Botón de atrás:**
-  * Ubicado en el extremo derecho del header negro.
-  * Aparece únicamente cuando hay historial de navegación (submenú abierto o doc abierto en home).
-  * Funciones: cerrar un doc abierto en el home y volver al estado anterior, o colapsar el submenú activo.
-  * Icono: `ti-arrow-left`.
+## 1. Dimensiones y Geometría
 
-* **Iconos de navegación (orden de arriba a abajo):**
+* **Ancho Colapsado (`--col-w`):** `52px`. (Mostrando exclusivamente el rail de iconos para maximizar espacio).
+* **Ancho Expandido (`--col-w-expanded`):** `220px`. (Mostrando iconos, etiquetas truncadas y chevrons).
+* **Layout vertical:** La columna cubre todo el alto disponible debajo del `header`. Implementada mediante `flex-col`. Fondo `--u24-black` inmutable (#111111).
 
-  * `Home` — `ti-home`
-    * Sin subgrupo. Lleva al estado_1 home por defecto.
+## 2. Motor de Navegación: Drill-Down Puro
 
-  * `Check-in` — `ti-login`
-    * Sin subgrupo. Abre `terminal_check` directamente en el home_area.
+El sistema rechaza acordeones múltiples. Emplea navegación de sustitución (Max 3 niveles: Raíz -> Grupo -> Ítem).
 
-  * `Operativa rutinaria` — `ti-ambulance`
-    * Subgrupo:
-      * Doc-10 Envío material — `ti-file-text`
-      * Doc-6 Gasto material — `ti-package`
-      * Doc-8 Parte de trabajo — `ti-clipboard-list`
-      * `sep`
-      * Doc-2 Informe asistencial — `ti-heart-rate-monitor`
-      * Doc-11 Aviso urgente — `ti-alert-triangle`
-      * Repostar combustible — `ti-gas-station`
-      * Repostar AdBlue — `ti-droplet`
-      * Doc-Checklist360 Revisión 360° — `ti-checkbox`
-      * Vehículos — `ti-steering-wheel`
-        *(Vista combinada in-place: selector de flota en la parte superior + selector de
-        estado operativo / condición técnica / tipo de servicio del vehículo seleccionado.
-        El selector de vehículos ya no vive en visual_info_home — este es el único punto
-        de acceso al listado completo de la flota.)*
+* **Interacción de Profundización (Hijos reemplazan a padres):** Al hacer clic sobre un *Grupo* (ej. *Logística y almacén*), la lista base desaparece (`duration-200 ease-out`) y es reemplazada visualmente por los sub-ítems de ese grupo.
+* **Encabezado de Nivel (Padre Activo):** Dentro de un grupo, el primer ítem anclado arriba actúa como encabezado representativo. Se pinta con fondo `--u24-column-active` y la barra amarilla lateral. Hacer clic en este encabezado retrocede al nivel anterior.
+* **Selección de Hoja (Auto-colapso):** Al hacer clic en una ruta terminal (hoja funcional, ej. *Doc-10*), el contenido renderiza en el `home_area`. Si la columna estaba expandida a 220px, se **auto-contrae** a 52px para despejar el área de trabajo táctil.
 
-  * `DRP` — `ti-map-pin`
-    * Subgrupo:
-      * Operativa DRP — `ti-activity`
-      * Visor DRP — `ti-selector`
-      * Resumen DRP — `ti-chart-bar` *RBAC: `gerencia`, `coordinación` (icono atenuado para otros roles)*
-      * Logística DRP — `ti-package`
-      * Crear DRP — `ti-circle-plus`
-      * Estados DRP — `ti-toggle-left`
+## 3. Disposición de Botones Periféricos
 
-  * `Módulos especiales` — `ti-puzzle`
-    * Subgrupo *(RBAC: `logística`, `coordinación`, `gerencia`)*:
-      * PSA — `ti-first-aid-kit`
-      * Filiación — `ti-forms` *(RBAC crear/eliminar: `coordinación`, `gerencia`)*
-        * Si hay DRP activo con módulo filiación: opción Entrar.
-        * Crear módulo filiación (vinculado a DRP activo).
-        * Eliminar módulo filiación.
+### 3.1 Hojas Fijas (Top)
 
-  * `Logística y almacén` — `ti-building-warehouse`
-    * Subgrupo:
-      * Inventario maestro — `ti-list-details`
-      * Doc-9 Entrada almacén — `ti-truck-delivery`
-      * Doc-10 Envío material — `ti-transfer`
-      * Inventario en tránsito — `ti-truck`
-      * Descuadres — `ti-alert-circle`
-      * Catálogo de ítems — `ti-tags`
-        *(RBAC: `responsable_logistica`, `gerencia`. Gestión del catálogo maestro de 245 ítems:
-        añadir, editar, archivar. El archivado dispara automáticamente la purga en plantillas_stock
-        via trigger. Ver `logic.md §6.4`.)*
-      * Bandeja logística — `ti-inbox`
+* Elementos como `Check-in / Check-out` residen en la zona superior de la columna, anclados y separados por un `separator` visual del resto del menú dinámico.
 
-  * `Flota y taller` — `ti-car`
-    * Subgrupo:
-      * Incidencias — `ti-tool`
-      * Doc-7 Informe avería — `ti-engine`
-      * Metadata vehículo (ITV/docs) — `ti-id`
-      * Mantenimiento flota — `ti-tool-2`
-        *(Visor de mantenimiento preventivo: aceite, frenos, neumáticos.
-        RBAC lectura: `flota`, `responsable_flota`, `gerencia`.
-        RBAC edición: `responsable_flota`, `gerencia`.)*
-      * Historial eventos físicos — `ti-history`
-        *(Visor de `eventos_fisicos_vehiculo`: repostajes de combustible y AdBlue,
-        mantenimientos y otros eventos físicos registrados. Filtros por ID_vehiculo,
-        tipo_evento y rango de fechas. Independiente del Doc-8.
-        RBAC: `flota`, `responsable_flota`, `gerencia`. Ver `logic.md §19`.)*
-      * Bandeja flota — `ti-inbox`
+### 3.2 Botones Inferiores (Anclaje al fondo)
 
-  * `Coordinación y seguridad` — `ti-shield-lock`
-    * Subgrupo:
-      * Token de emergencia — `ti-cookie`
-      * RBAC roles — `ti-users`
-      * Bandeja coordinación — `ti-inbox`
+* **Toggle Expand/Collapse:** Botón anclado rígidamente en la base absoluta de la columna. Posición inmutable. Alterna 52px <-> 220px.
+* **Botón Atrás (Contextual):** Aparece como el **penúltimo botón** (justo encima del Toggle) y aparece/desaparece dinámicamente si el historial interno del Drill-down permite retroceder. No desplaza al Toggle inferior.
 
-  * `Gestión y RRHH` — `ti-id-badge`
-    * Subgrupo:
-      * Fichas empleados — `ti-user-circle`
-      * Gestión de turnos — `ti-calendar-event`
-      * Gestión tablón — `ti-news`
-        * Añadir, editar y archivar anuncios del tablón central.
-      * Marquesina — `ti-antenna`
-      * Doc-12 Solicitud vacaciones — `ti-beach`
-      * Repositorio documentos — `ti-folder-open`
-        *(Normativas, protocolos y documentación corporativa.
-        Lectura: todos los roles autenticados.
-        Gestión (crear/editar/archivar): `gerencia`, `rrhh`.)*
-      * Gestión de bajas y ausencias — `ti-calendar-x`
-        *(Registro y seguimiento de bajas médicas, ausencias justificadas
-        y días de compensación. Separado de los cuadrantes de turno.
-        RBAC: `rrhh`, `gerencia`.)*
-      * Bandeja RRHH — `ti-inbox`
+## 4. Anatomía del NavRow
 
-  * `Tablón central` — `ti-speakerphone`
-    * Sin subgrupo. Accesible a todos los roles autenticados.
-    * Vista de lectura del tablón corporativo.
-    * `gerencia` y `rrhh` ven además los controles de gestión
-      (Crear | Editar | Archivar).
-    * Cuando Doc-12 está activado por RRHH, aparece aquí accesible
-      para todos los roles.
+El elemento `<button>` base de la lista:
 
-  * `Buzón interno` (Doc-13) — `ti-message-report`
-    * Sin subgrupo. Accesible a todos los roles autenticados.
-    * Abre formulario Doc-13 (Propuestas y quejas) directamente en el home_area.
+* **Rail Icono:** Contenedor de `w-[52px]` exacto (alineado al estado colapsado para evitar temblores).
+* **Etiqueta Texto:** Visible solo si `expanded === true`. `Barlow Condensed`, `font-bold`, truncado (`truncate`).
+* **Chevrons:** Indicador `ChevronRight` si el nodo tiene hijos.
+* **Indicador Activo:** Barra vertical amarilla (`--u24-yellow`) de `3px` de grosor, anclada a `left-0`.
+* **Tooltip:** Controlado por Radix UI/shadcn. Aparece solo si `expanded === false` mostrando el texto completo.

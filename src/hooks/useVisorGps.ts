@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useActivacionStore } from '@/stores/useActivacionStore'
@@ -21,7 +21,6 @@ export function useVisorGps(idDrp?: string) {
   const [vehiculos, setVehiculos] = useState<VehiculoGps[]>([])
   const [gpsError, setGpsError] = useState<string | null>(null)
   const [publicandoGps, setPublicandoGps] = useState(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const cargarPosiciones = useCallback(async () => {
     if (!idDrp) return
@@ -79,15 +78,9 @@ export function useVisorGps(idDrp?: string) {
     )
   }, [matricula, ejecutorId])
 
-  // Publicar posición cada 30 s si hay activación activa
-  useEffect(() => {
-    if (!matricula) return
-    publicarPosicion()
-    intervalRef.current = setInterval(publicarPosicion, GPS_INTERVAL_MS)
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [matricula, publicarPosicion])
+  // La publicación GPS es opt-in — se activa manualmente mediante
+  // el botón en el VisorDRP. No auto-iniciar al montar para no
+  // lanzar el diálogo de permisos del navegador sin acción del usuario.
 
   // Recargar posiciones del visor cada 30 s
   useEffect(() => {

@@ -67,6 +67,7 @@ SELECT * FROM f_funciones_sin_security_definer();
 ### 1.3 Verificar configuración de Auth en hosted
 
 En Supabase Dashboard → Authentication → Settings:
+
 ```
 ☐ enable_signup = OFF
 ☐ enable_anonymous_sign_ins = OFF
@@ -78,11 +79,13 @@ En Supabase Dashboard → Authentication → Settings:
 ### 1.4 Verificar SSL enforcement
 
 En Supabase Dashboard → Database → SSL Enforcement:
+
 ```
 ☐ SSL enforcement = Habilitado
 ```
 
 En Supabase Dashboard → Database → Network Restrictions:
+
 ```
 ☐ allowed_cidrs configurados a los CIDRs conocidos (servidores de la app + IPs de admins)
     No dejar 0.0.0.0/0 en producción.
@@ -185,6 +188,7 @@ Ejecutar en un dispositivo real (tablet Android o similar) con la URL de producc
 En caso de incidente crítico post-deploy (sistema inoperativo):
 
 **Rollback de frontend:**
+
 ```bash
 # Revertir al deploy anterior (Vercel/Netlify soportan rollback instantáneo)
 vercel rollback
@@ -193,6 +197,7 @@ netlify rollback
 ```
 
 **Rollback de migración de base de datos:**
+
 ```bash
 # SOLO si la migración introduce datos corruptos o rompe funcionalidad crítica
 # Las migraciones de U24 son ADD COLUMN / CREATE TABLE / CREATE FUNCTION:

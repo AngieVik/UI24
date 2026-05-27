@@ -3,7 +3,7 @@
 **Versión:** 2.1 (auditada post-Sprint 14)
 **Fecha:** 2026-05-21
 **Estado del proyecto:** Sprint 14 completado · build limpio · 181 tests ✅ · listo para despliegue
-**Documentos complementarios:** `AUDITORIA.md` (hallazgos y trazabilidad) · `hoja_de_ruta_v1_backup.md` (versión anterior)
+**Documentos complementarios:** `auditoria_1.md` (hallazgos y trazabilidad) · `hoja_de_ruta_v1_backup.md` (versión anterior)
 
 ---
 
@@ -526,6 +526,7 @@ Sprint 6 cerrado. Resumen de lo entregado:
 | Tests Sprint 11 (15) | `src/test/sprint11.test.tsx` |
 
 **RPCs nuevas en migración 11:**
+
 - `rpc_crear_drp` — crea DRP en En_espera (idempotente, solo coordinacion/gerencia)
 - `rpc_transicionar_drp` — máquina de estados: preparar/iniciar/finalizar/archivar; detecta descuadres → Finalizado_Retenido
 - `rpc_agregar_dotacion_drp` — asigna vehículo al DRP + marca `estado_operativo = 'en_drp'` (idempotente)
@@ -534,6 +535,7 @@ Sprint 6 cerrado. Resumen de lo entregado:
 - `rpc_resolver_descuadre` — logística resuelve descuadre; el trigger `trg_descuadre_libera_drp_retenido` libera el DRP automáticamente
 
 **Decisiones de diseño:**
+
 - DRP es 100% online (ADR-003): ninguna mutación se encola offline.
 - Visor GPS usa polling cada 30 s + botón manual; no usa Realtime para evitar subscripciones permanentes.
 - `rpc_transicionar_drp` detecta descuadres pendientes en el momento de finalizar y transiciona a `Finalizado_Retenido` si los hay.
@@ -640,6 +642,7 @@ Sprint 6 cerrado. Resumen de lo entregado:
 **Edge Functions (16 implementadas):** `ef-alta-empleado`, `ef-baja-empleado`, `ef-reset-password`, `ef-consumir-pin`, `ef-generar-token-emergencia`, `ef-logout`, `ef-revocar-sesion-usuario`, `ef-renovar-offline-session`, `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl`, `ef-cron-rgpd`, `ef-push-avisos`, y 3 helpers compartidos (`_shared/cors.ts`, `_shared/errors.ts`, `_shared/auth.ts`).
 
 > ✅ **P-03 cerrado (2026-05-21):** `ef-cron-refresh-dashboard` y `ef_cron_purge` del listado original han sido eliminados del inventario. Decisión:
+>
 > - `ef-cron-refresh-dashboard` → **cubierto por suscripciones Realtime** (Sprint 10.2). No es necesario un cron: los terminales reciben actualizaciones en tiempo real vía canal Supabase Realtime. Añadir un cron sería redundante y generaría carga innecesaria.
 > - `ef_cron_purge` → **funcionalidad absorbida por `ef-cron-cleanup-orphans`** (limpia sesiones huérfanas) y `ef-cron-rgpd` (purga datos RGPD). No existe caso de uso diferenciado que justifique una tercera función de purga.
 > - La convención de nombres unificada (kebab-case `ef-`) fue establecida en Sprint 0.4 y aplicada en todos los entregables.

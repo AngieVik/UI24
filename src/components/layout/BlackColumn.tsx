@@ -1,4 +1,4 @@
-import { type LucideIcon, ArrowLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { type LucideIcon, ArrowLeft, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useBlackColumn } from '@/contexts/BlackColumnContext'
 import { findNode, type NavLeaf, type NavNode } from '@/components/layout/black-column-nav'
@@ -33,9 +33,10 @@ import { cn } from '@/lib/utils'
 export function BlackColumn() {
   const s = useBlackColumn()
 
-  // Padre directo del nivel actual (el último del path).
-  const parentId   = s.currentPath.length > 0 ? s.currentPath[s.currentPath.length - 1] : null
-  const parentNode = parentId ? findNode(parentId) : null
+  // Todos los nodos ancestros en el path actual (para el breadcrumb).
+  const ancestorNodes = s.currentPath
+    .map((id) => findNode(id))
+    .filter((n): n is NonNullable<typeof n> => n !== null && n !== undefined && n.kind !== 'leaf')
 
   return (
     <nav
@@ -72,18 +73,22 @@ export function BlackColumn() {
         className="mx-3 my-2 h-px shrink-0 bg-zinc-800"
       />
 
-      {/* ── Encabezado del padre activo (drill) ───────────────────── */}
-      {parentNode && parentNode.kind !== 'leaf' && (
+      {/* ── Breadcrumb completo de ancestros ──────────────────────── */}
+      {ancestorNodes.length > 0 && (
         <>
-          <div className="px-1">
-            <NavRow
-              icon={parentNode.icon}
-              label={parentNode.label}
-              hint="Cerrar este grupo y volver atrás"
-              expanded={s.expanded}
-              active={true}
-              onClick={s.goBack}
-            />
+          <div className="flex shrink-0 flex-col gap-0.5 px-1">
+            {ancestorNodes.map((node, i) => (
+              <NavRow
+                key={node.id}
+                icon={node.icon}
+                label={node.label}
+                hint="Volver a este nivel"
+                expanded={s.expanded}
+                active={true}
+                trailing={<ChevronLeft aria-hidden="true" className="size-4 shrink-0 text-u24-yellow/70" />}
+                onClick={() => s.jumpToLevel(i)}
+              />
+            ))}
           </div>
           <div
             role="separator"
@@ -100,11 +105,15 @@ export function BlackColumn() {
             key={node.id}
             node={node}
             expanded={s.expanded}
-            isSelected={(id) => s.selectedLeafId === id}
+            isSelected={(id) => s.selectedLeafId === id || s.modalLeafId === id}
             isPathActive={(id) => s.currentPath.includes(id)}
             onActivate={(n) => {
-              if (n.kind === 'leaf') s.selectLeaf(n.id)
-              else                   s.navigateInto(n.id)
+              if (n.kind === 'leaf') {
+                if ((n as NavLeaf).opensModal) s.openModal(n.id)
+                else                            s.selectLeaf(n.id)
+              } else {
+                s.navigateInto(n.id)
+              }
             }}
           />
         ))}

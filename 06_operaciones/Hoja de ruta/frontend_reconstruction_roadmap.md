@@ -1,7 +1,7 @@
 # Hoja de ruta — Reconstrucción del frontend U24
 
 > **Documento operativo de la reconstrucción del frontend** iniciada el
-> 2026-05-22 tras la auditoría post-checklist de despliegue. Trabaja en
+> 2026-05-22 tras la auditoría_2 post-checklist de despliegue. Trabaja en
 > paralelo a `hoja_de_ruta.md` (sprints macro del proyecto) pero **se
 > ejecuta primero**: ningún despliegue ni test E2E vuelve a correr hasta
 > que esté cerrada.

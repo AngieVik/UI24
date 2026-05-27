@@ -31,12 +31,20 @@ export interface BlackColumnState {
   expanded: boolean
   /** Hoja terminal activa cuyo contenido renderiza home_area. */
   selectedLeafId: string | null
+  /**
+   * Hoja con opensModal=true actualmente abierta como overlay (Dialog).
+   * null si ningún modal está abierto.
+   */
+  modalLeafId: string | null
 }
 
 type Action =
-  | { type: 'NAVIGATE_INTO'; id: string }
+  | { type: 'NAVIGATE_INTO';  id: string }
   | { type: 'GO_BACK' }
-  | { type: 'SELECT_LEAF';   id: string }
+  | { type: 'JUMP_TO_LEVEL';  index: number }
+  | { type: 'SELECT_LEAF';    id: string }
+  | { type: 'OPEN_MODAL';     id: string }
+  | { type: 'CLOSE_MODAL' }
   | { type: 'TOGGLE_EXPANDED' }
   | { type: 'GO_HOME' }
   | { type: 'GO_CHECKIN' }
@@ -45,6 +53,7 @@ const INITIAL_STATE: BlackColumnState = {
   currentPath:    [],
   expanded:       false,
   selectedLeafId: 'home',
+  modalLeafId:    null,
 }
 
 function reducer(state: BlackColumnState, action: Action): BlackColumnState {
@@ -53,7 +62,7 @@ function reducer(state: BlackColumnState, action: Action): BlackColumnState {
       return {
         ...state,
         currentPath: [...state.currentPath, action.id],
-        expanded:    true,
+        // No auto-expand — el usuario controla el panel manualmente
       }
     case 'GO_BACK': {
       if (state.currentPath.length === 0) return state
@@ -63,18 +72,28 @@ function reducer(state: BlackColumnState, action: Action): BlackColumnState {
         expanded:    true,
       }
     }
+    case 'JUMP_TO_LEVEL':
+      // Trunca el path hasta el nivel indicado (inclusive). index 0 = raíz+1.
+      return {
+        ...state,
+        currentPath: state.currentPath.slice(0, action.index + 1),
+      }
     case 'SELECT_LEAF':
       return {
         ...state,
         selectedLeafId: action.id,
-        expanded:       false,
+        // No auto-collapse — el usuario controla el panel manualmente
       }
+    case 'OPEN_MODAL':
+      return { ...state, modalLeafId: action.id }
+    case 'CLOSE_MODAL':
+      return { ...state, modalLeafId: null }
     case 'TOGGLE_EXPANDED':
       return { ...state, expanded: !state.expanded }
     case 'GO_HOME':
-      return { currentPath: [], selectedLeafId: 'home', expanded: false }
+      return { currentPath: [], selectedLeafId: 'home', expanded: false, modalLeafId: null }
     case 'GO_CHECKIN':
-      return { currentPath: [], selectedLeafId: 'checkin', expanded: false }
+      return { currentPath: [], selectedLeafId: 'checkin', expanded: false, modalLeafId: null }
     default:
       return state
   }
@@ -101,7 +120,12 @@ export interface UseBlackColumnStateReturn extends BlackColumnState {
 
   navigateInto:   (id: string) => void
   goBack:         () => void
+  /** Salta directamente al nivel `index` del path (útil para breadcrumbs). */
+  jumpToLevel:    (index: number) => void
   selectLeaf:     (id: string) => void
+  /** Abre una hoja con opensModal=true como Dialog overlay. */
+  openModal:      (id: string) => void
+  closeModal:     () => void
   toggleExpanded: () => void
   goHome:         () => void
   goCheckin:      () => void
@@ -153,7 +177,10 @@ export function useBlackColumnState(
   }, [])
 
   const goBack         = useCallback(() => dispatch({ type: 'GO_BACK' }), [])
+  const jumpToLevel    = useCallback((index: number) => dispatch({ type: 'JUMP_TO_LEVEL', index }), [])
   const selectLeaf     = useCallback((id: string) => dispatch({ type: 'SELECT_LEAF', id }), [])
+  const openModal      = useCallback((id: string) => dispatch({ type: 'OPEN_MODAL', id }), [])
+  const closeModal     = useCallback(() => dispatch({ type: 'CLOSE_MODAL' }), [])
   const toggleExpanded = useCallback(() => dispatch({ type: 'TOGGLE_EXPANDED' }), [])
   const goHome         = useCallback(() => dispatch({ type: 'GO_HOME' }), [])
   const goCheckin      = useCallback(() => dispatch({ type: 'GO_CHECKIN' }), [])
@@ -166,7 +193,10 @@ export function useBlackColumnState(
     currentNodeId,
     navigateInto,
     goBack,
+    jumpToLevel,
     selectLeaf,
+    openModal,
+    closeModal,
     toggleExpanded,
     goHome,
     goCheckin,

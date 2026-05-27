@@ -121,9 +121,7 @@ accederComoInvitado():
 
 ## 2. useCheckin
 
-> Gestiona la presencia de ID_nombre en el terminal: check-in, check-out,
-> estados `pilot` y `carry`. Orquesta el `flujo_checkout_automatico`
-> cuando el usuario que hace check-out tiene estado `pilot`.
+> Gestiona la presencia de ID_nombre en el terminal: check-in, check-out, Orquesta el `flujo_checkout_automatico` cuando el usuario que hace check-out tiene estado `pilot` o `carry`.
 
 ```typescript
 interface UseCheckin {

@@ -8,6 +8,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* ── Escala tipográfica global — 18 px base (un nivel más que el defecto 16 px) ── */
+html { font-size: 18px; }
+
 @custom-variant dark (&:is(.dark *));
 
 /* ─────────────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { findNode } from '@/components/layout/black-column-nav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 // ── D.1 Operativa ─────────────────────────────────────────────────────────
 import { PresenciaScreen } from '@/components/operativa/PresenciaScreen'
@@ -145,7 +146,10 @@ function RouterPresencias() {
 
   return (
     <AppShell ticker="Tablón · BlackColumn drill-down activo · pulsa los grupos para entrar, pulsa el padre activo o el botón de atrás para volver.">
-      <HomeArea />
+      <>
+        <HomeArea />
+        <ModalArea />
+      </>
     </AppShell>
   )
 }
@@ -289,6 +293,34 @@ function HomeArea() {
 
   // ── Placeholder honesto para cualquier hoja no cableada aún ──────────────
   return <LeafPlaceholder leafId={selectedLeafId} />
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  ModalArea — renderiza hojas con opensModal=true como Dialog overlay.
+ *  El contenido del home_area permanece detrás, sin ser reemplazado.
+ * ───────────────────────────────────────────────────────────────────────── */
+function ModalArea() {
+  const { modalLeafId, closeModal } = useBlackColumn()
+
+  const node  = modalLeafId ? findNode(modalLeafId) : null
+  const label = node?.label ?? ''
+
+  return (
+    <Dialog open={!!modalLeafId} onOpenChange={(open) => { if (!open) closeModal() }}>
+      <DialogContent className="max-h-[90dvh] max-w-screen-lg overflow-y-auto p-0">
+        <DialogHeader className="border-b px-6 py-4">
+          <DialogTitle className="font-display text-lg font-bold">{label}</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-y-auto">
+          {modalLeafId === 'drp_res'      && <ResumenDrpScreen />}
+          {modalLeafId === 'log_bandeja'  && <BandejaLogisticaScreen />}
+          {modalLeafId === 'flota_bandeja' && <BandejaFlotaScreen />}
+          {modalLeafId === 'coord_bandeja' && <BandejaCoordScreen />}
+          {modalLeafId === 'rrhh_bandeja' && <BandejaRRHHScreen />}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function LeafPlaceholder({ leafId }: { leafId: string }) {

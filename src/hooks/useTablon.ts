@@ -21,7 +21,9 @@ export function useTablon() {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
+      // tablon_anuncios may not be in generated types yet → cast
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: err } = await (supabase as any)
         .from('tablon_anuncios')
         .select('id_anuncio, seccion, titulo, contenido, estado, id_nombre_autor, timestamp_publicacion')
         .eq('estado', 'activo')

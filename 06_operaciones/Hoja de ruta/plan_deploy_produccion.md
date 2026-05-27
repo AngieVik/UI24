@@ -1,9 +1,16 @@
-# Plan de Despliegue a Producción — U24
+# Plan de Despliegue a Producción — U24 - FALLIDO
 
 **Fecha de redacción:** 2026-05-21  
 **Sprint de referencia:** 14 (gate de seguridad cerrado)  
 **Tests:** 181/181 Vitest ✅ · 0 errores TS ✅ · CLI Supabase v2.101.0 ✅  
 **Pendientes P-01..P-04:** todos cerrados ✅
+> Solo se implemento hasta fase 4, Se comprometió a Claude con demasiado contexto y generó
+> mucho codigo erroneo que ha habido que reemplazar, se opto por seguir el
+> 06_operaciones\Hoja deruta\frontend_reconstruction_roadmap.md y empezar reconstruyendo Chasis,
+> Reescritura del BlackColumn, Cableado de datos de `visual_info_home`, Reconstrucción de Screens feature,
+> Validación y reapertura del checklist de despliegue y Modo oscuro y refinamientos.
+
+**Plan de Despliegue a Producción — U24 FALLIDO**
 
 ---
 
@@ -39,6 +46,7 @@ npx web-push generate-vapid-keys
 ```
 
 Resultado esperado:
+
 ```
 Public Key:  BxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxYK=
 Private Key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=
@@ -53,6 +61,7 @@ Private Key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=
 
 1. Crear proyecto en [sentry.io](https://sentry.io) → tipo React
 2. Copiar el DSN del proyecto
+
 - [ ] `VITE_SENTRY_DSN` → añadir en `.env.production`
 
 #### 0.C — Crear `.env.production`
@@ -110,6 +119,7 @@ supabase db diff --linked
 ```
 
 Resultado esperado: diff de las 15 migraciones pendientes (0001–0014).  
+
 - [ ] Diff revisado y sin sorpresas
 
 #### 1.2 — Aplicar migraciones
@@ -266,6 +276,7 @@ npm run test:e2e
 ```
 
 Tests manuales adicionales:
+
 - [ ] Login funciona con credenciales de empleado demo
 - [ ] Login offline funciona (desactivar WiFi tras primer login)
 - [ ] Banner "Modo sin conexión" aparece al desactivar red

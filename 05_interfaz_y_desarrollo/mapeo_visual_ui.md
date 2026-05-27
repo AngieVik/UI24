@@ -1,4 +1,4 @@
-# mapeo_visual_ui
+# Mapeo visual UI
 
 > Fuente de verdad del comportamiento visual y arquitectónico de la interfaz U24.
 > Documenta qué renderiza en `home_area` para cada acción de `black_column`, el tipo de renderizado (in-place vs modal), las reglas de coexistencia, las zonas con actualización en tiempo real, el comportamiento del botón de atrás por estado de navegación, y los estados visuales offline-first.
@@ -9,14 +9,14 @@
 
 ### estado_0 — Terminal bloqueado
 
-``-`text
+` ` `text
 ┌──────────────────────────────────────────────────────┐
 │                                                      │
 │              formulario terminal_check               │
 │                   (centrado)                         │
 │                                                      │
 └──────────────────────────────────────────────────────┘
-``-`
+` ` `
 
 - Sin `black_column`, sin `header`, sin `ticker`.
 - Fondo neutro. Única acción posible: autenticarse.
@@ -26,7 +26,7 @@
 
 ### estado_1 — Terminal desbloqueado
 
-``-`text
+` ` `text
 ┌────────────────────────────────────────────────────────────────────┐
 │ HEADER  [Logo] ←──── marquesina/ticker ────→  [bandejas] [← atrás] │
 ├────┬───────────────────────────────────────────────────────────────┤
@@ -43,7 +43,7 @@
 │ M  │                                                               │
 │ N  │                                                               │
 └────┴───────────────────────────────────────────────────────────────┘
-``-`
+` ` `
 
 | Zona           | Ancho                        | Descripción                                                                           |
 | -------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
@@ -58,7 +58,7 @@
 
 Contenido del `home_area` cuando no hay ninguna navegación activa. Se restaura al pulsar `Home` (`ti-home`) o el botón de atrás desde cualquier vista.
 
-``-`text
+` ` `text
 visual_info_home
 ├── panel_personal              (visible si hay ID_nombre con checkin_on)
 │   └── por cada ID_nombre: nombre + estado + icono + telefono
@@ -76,7 +76,7 @@ visual_info_home
 │   └── Icono ti-mail → abre MODAL de bandeja (solo lectura)
 └── bandeja_entrada_personal    (icono ti-mail con iniciales por cada checkin_on)
     └── Pulsar icono → abre MODAL de bandeja (solo lectura)
-``-`
+` ` `
 
 ---
 
@@ -92,8 +92,8 @@ Tipo de renderizado:
 
 | #    | black_column ítem                  | Icono                   | Tipo render | Componente en home_area          | Observaciones Técnicas y de Diseño                                                                                                                                                                                                                           |
 | ---- | -------------------------------- | ----------------------- | ----------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1    | **Home** | `ti-home`               | retorno     | `visual_info_home`               | Contrae todo. Limpia home. Siempre accesible.                                                                                                                                                                                                                |
-| 2    | **Check-in** | `ti-login`              | in-place    | `terminal_check`                 | Reemplaza `visual_info_home`. Formulario check-in/check-out.                                                                                                                                                                                                 |
+| 1    | **Home** | `ti-home`               | retorno     | `visual_info_home`               | Contrae todo. Limpia home. Siempre accesible.                                                                                                                                                                                                                                |
+| 2    | **Check-in** | `ti-login`              | in-place    | `terminal_check`                 | Reemplaza `visual_info_home`. Formulario check-in/check-out.                                                                                                                                                                                                                 |
 | 3    | **Operativa rutinaria** | `ti-ambulance`          | sin-render  | —                                | Expande/colapsa subgrupo.                                                                                                                                                                                                                                    |
 | 3.1  | → Doc-10 Envío material          | `ti-file-text`          | in-place    | Formulario Doc-10                | Origen: vehículo o backpack activo.                                                                                                                                                                                                                          |
 | 3.2  | → Doc-6 Gasto material           | `ti-package`            | in-place    | Formulario Doc-6                 | Selección de ítem y cantidad. Restricción: Requiere ID_Vehiculo activo.                                                                                                                                                                                      |
@@ -110,7 +110,7 @@ Tipo de renderizado:
 | 4.2  | → Visor DRP                      | `ti-selector`           | in-place    | `visor_drp`                      | DRPs Activos expandibles. **DRPs Finalizados (48h):** UI `opacity-60`, `isReadOnly=true`. Bloqueado incondicionalmente por RLS. **Salida DRP:** Si no hay red, acción se encola (IndexedDB) y muestra Toast de aviso; *no lanza error visual*.             |
 | 4.3  | → Resumen DRP                    | `ti-chart-bar`          | modal       | `resumen_drp`                    | RBAC: gerencia, coordinación. Icono atenuado para otros roles (sin acción).                                                                                                                                                                                  |
 | 4.4  | → Logística DRP                  | `ti-package`            | in-place    | `logistica_drp`                  | Bandeja mixta: Alertas de stock son *auto-dismiss* (sin botones mutación). Doc-10 es flujo interactivo.                                                                                                                                                      |
-| 4.5  | → Crear DRP                      | `ti-circle-plus`        | in-place    | Formulario `crear_drp`           | Combobox avanzado. **Excluye:** `critico` o `En_curso`. **Badge alerta:** Vehículos en `En_preparacion`.                                                                                                                                         |
+| 4.5  | → Crear DRP                      | `ti-circle-plus`        | in-place    | Formulario `crear_drp`           | Combobox avanzado. **Excluye:** `critico` o `En_curso`. **Badge alerta:** Vehículos en `En_preparacion`.                                                                                                                                                     |
 | 4.6  | → Estados DRP                    | `ti-toggle-left`        | in-place    | `selector_estados_drp`           | Modificar fase del DRP activo. Si se activa `En curso` tempranamente → Modal: "Cuenta atrás | Marcar hora de inicio".                                                                                                                                        |
 | 5    | **Módulos especiales** | `ti-puzzle`             | sin-render  | —                                | RBAC subgrupo: logística, coordinación, gerencia.                                                                                                                                                                                                            |
 | 5.1  | → PSA                            | `ti-first-aid-kit`      | in-place    | Vista `modulo_psa`               | Al cerrar, job automático transiciona Subinventario a `En_Transito`.                                                                                                                                                                                         |
@@ -211,7 +211,6 @@ Si no hay vehículo activo, muestran aviso visual en `home_area`:
 ### 5.4 RBAC — Ítems con acceso restringido
 
 - Icono **oculto**: Roles sin permisos absolutos para la vista.
-
 - Icono **atenuado (sin acción)**: Resumen DRP (Lectura limitada para roles sin permisos de alteración).
 
 ---
@@ -293,33 +292,33 @@ Dado que las tablets operan en áreas de baja cobertura, la UI debe reaccionar e
 
 ### Navegación básica
 
-``-`text
+` ` `text
 [Home]          → visual_info_home
 [Check-in]      → terminal_check (in-place) ← [atrás] → visual_info_home
 [Cualquier doc] → formulario (in-place) ← [atrás] → visual_info_home
 [Bandeja]       → modal ← [X o atrás] → fondo anterior
-``-`
+` ` `
 
 ### Navegación con DRP activo
 
-``-`text
+` ` `text
 visual_info_home
   └── visual_info_drp (sub-componente)
         ├── desplegable operativa_drp
         │   └── [doc seleccionado] → modal sobre home_area
         ├── [+ Doc-1] → modal-ligero sobre home_area
         └── [ti-door-enter] → modulo_filiacion (in-place)
-``-`
+` ` `
 
 ### Navegación black_column con accordion
 
-``-`text
+` ` `text
 [DRP accordion]          → expande subgrupo (no cambia home_area)
   [→ Visor DRP]          → visor_drp in-place
   [→ Resumen DRP]        → resumen_drp modal (sobre lo que hubiera)
   [atrás desde in-place] → visual_info_home (accordion DRP sigue expandido)
   [Home]                 → visual_info_home (accordion se colapsa)
-``-`
+` ` `
 
 ## 🗺️ ESPECIFICACIÓN ARQUITECTÓNICA Y VISUAL DE LA UI (U24)
 
@@ -502,68 +501,4 @@ Gestión profunda de inventario (Optimizado para paginación si se abre offline)
   - *Inventario en Tránsito.*
   - *Doc-9* (Entrada de Almacén).
   - *Doc-10* (Envío de Material).
-- **Bandeja Logística:** Centro de notificaciones y confirmaciones de envíos.
-
----
-
-### 🚐 7. FLOTA
-
-Gestión técnica del parque móvil.
-
-- **Incidencias:**
-  - Tableros Kanban/Listas para: *Incidencias abiertas*, *Incidencias Ancladas* (Críticas), *Últimas Incidencias*.
-- **Visor Mantenimiento:**
-  - Tabla principal de vehículos.
-  - Badges semánticos de proximidad a mantenimiento.
-  - Filtros, Ordenación y Vista de Detalle *in-place*.
-- **Mantenimiento Flota:**
-  - Formularios de estado: *Aceite*, *Frenos*, *Neumáticos*.
-  - *Configuración de Umbrales de alerta* (ej. avisar a los 10.000km).
-  - *Doc-7* (Informe de Avería). (Nota Técnica: Las fotos adjuntas deben comprimirse vía Canvas API a 1200px WebP antes de subirse).
-- **Vehículos Metadata:**
-  - *Documentación y dispositivo* (ITV, Seguros).
-  - *Kilometraje general.*
-  - *Historial eventos físicos.*
-- **Bandeja Flota:** Centro de recepción de informes de avería (Doc-7) de la plantilla.
-
----
-
-### 🛡️ 8. COORDINACIÓN Y SEGURIDAD
-
-Panel de mando para administradores del sistema.
-
-- **Módulo Emergencias:** Generador de tokens offline.
-  - *Galleta pequeña / Galleta* (Tokens temporales o persistentes).
-- **Dispositivos Validados:** Gestión de terminales confiables y revocación de tablets robadas/extraviadas.
-- **Visor Seguimiento Operativo:** Mapa o listado maestro de toda la plantilla y flota activa.
-- **RBAC:** Panel de asignación de roles.
-- **Forzar Checkout:** Botón rojo para expulsar usuarios de turnos prolongados por error.
-- **Cambio de Password.**
-- **Bandeja Coordinación:** Mensajes escalados a administración.
-
----
-
-### 👥 9. GESTIÓN Y RRHH
-
-Recursos humanos y planificación corporativa.
-
-- **Personal:**
-  - *Fichas empleados.*
-  - *Gestión de bajas* (Incapacidades temporales, permisos).
-- **Planificación Laboral:**
-  - *Planificación de Servicios.*
-  - *Gestión de cuadrantes* (UI estilo calendario/grid).
-  - *Doc-12* (Solicitud de Vacaciones).
-- **Comunicación:**
-  - *Gestión tablón* (Publicación de noticias globales).
-  - *Marquesina* (Configuración del texto del Ticker superior).
-- **Repositorio Documentos:** Acceso a manuales operativos o PDFs corporativos (Carga diferida obligatoria).
-- **Bandeja RRHH:** Recepción de peticiones de Doc-12 y justificantes.
-
-### Atrás — contextual
-
-- Solo cuando estás dentro de sección o subsección.
-
-### Expand/collapse
-
-- toggle manual de etiquetas (siempre presente)
+- **Bandeja Logística:** Centro de notificaciones
