@@ -219,7 +219,7 @@
     * `nombre_drp`, `fecha`, `hora`, `ubicación`.
   * `agregar_dotacion_vehiculo` (repetible):
     * `ID_vehiculo` — **Combobox filtrado** (ver `componentes.md → selector_vehiculo_drp`).
-      * Excluye vehículos con `condicion_tecnica = 'inoperativo_critico'`.
+      * Excluye vehículos con `condicion_tecnica = 'critico'`.
       * Excluye vehículos ya asignados a un DRP en estado `En_curso`.
       * Los vehículos en `En_preparacion` se muestran con badge de advertencia
         "Ya en DRP" — seleccionables pero con confirmación adicional.

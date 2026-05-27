@@ -53,7 +53,7 @@ describe('Doc6GastoMaterialScreen — gates', () => {
   it('muestra mensaje si no hay matrícula activa', () => {
     matriculaMock = ''
     renderWithShell(<Doc6GastoMaterialScreen />)
-    expect(screen.getByText(/necesitas un vehículo activo/i)).toBeInTheDocument()
+    expect(screen.getByText(/no hay turno activo/i)).toBeInTheDocument()
   })
 
   it('muestra skeleton mientras carga', () => {

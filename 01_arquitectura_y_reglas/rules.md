@@ -89,7 +89,7 @@ El frontend es un entorno intrínsecamente inseguro. La seguridad y el control d
 * **Lógica de negocio atómica en DB (Inventario):** Queda terminantemente prohibido realizar sustracciones o cálculos matemáticos de inventario desde peticiones asíncronas del cliente para evitar Condiciones de Carrera (Race Conditions). Estas operaciones se ejecutarán atómicamente a nivel de base de datos usando Funciones RPC y Triggers en PostgreSQL.
 * **Normalización relacional (3NF):** La base de datos debe reflejar entidades puras del negocio. Queda prohibido replicar interfaces de usuario como entidades o tablas independientes.
 * **Sesiones de emergencia (Plan B):** La revocación de tokens temporales de emergencia debe aislarse en una tabla `sesiones_emergencia` con marca de tiempo. Supabase Edge Functions ejecutará un cronjob que purgará estas sesiones automáticamente sin depender de las acciones del usuario.
-* **Políticas RLS de prohibición incondicional:** Para tablas con inmutabilidad de negocio (ej. `doc1_asistencias`), las políticas RLS de UPDATE y DELETE deben devolver `USING (FALSE)` de forma estricta e incondicional — independientemente de los claims del JWT o del rol del usuario.
+* **Políticas RLS de prohibición incondicional:** Para tablas con inmutabilidad de negocio (ej. doc1_asistencias) y para cualquier entidad en estado terminal (ej. DRPs, sus recursos y asistencias vinculadas donde estado = 'Finalizado'), las políticas RLS de UPDATE e INSERT deben devolver USING (FALSE) de forma estricta e incondicional — independientemente de los claims del JWT o del rol del usuario.
 
 ## Rendimiento y tráfico de red (Budget)
 

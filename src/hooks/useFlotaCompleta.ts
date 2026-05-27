@@ -3,10 +3,11 @@ import { supabase } from '@/lib/supabase'
 import { useRealtimeInvalidator } from '@/hooks/useRealtimeInvalidator'
 
 export interface VehiculoFila {
-  matricula:         string
-  tipo:              string
-  condicion_tecnica: string
-  estado_operativo:  string
+  matricula:            string
+  tipo:                 string
+  condicion_tecnica:    string
+  estado_operativo:     string
+  subestado_operativo:  string | null
 }
 
 /**
@@ -31,7 +32,7 @@ export function useFlotaCompleta() {
     queryFn: async (): Promise<VehiculoFila[]> => {
       const { data, error } = await supabase
         .from('vehiculos')
-        .select('matricula, tipo, condicion_tecnica, estado_operativo')
+        .select('matricula, tipo, condicion_tecnica, estado_operativo, subestado_operativo')
         .order('matricula')
       if (error) throw error
       return (data ?? []) as VehiculoFila[]

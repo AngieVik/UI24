@@ -307,13 +307,13 @@ necesario.
 * Carga la lista de vehículos ejecutando la RPC `get_vehiculos_disponibles_para_drp()`:
 
   ```sql
-  -- Excluye inoperativo_critico
+  -- Excluye critico
   -- Excluye vehículos ya en DRP En_curso
   -- Incluye con badge "Ya en DRP" si están en DRP En_preparacion
   SELECT id_vehiculo, matricula, estado_operativo, condicion_tecnica,
          drp_activo_nombre, drp_activo_estado
     FROM vehiculos
-   WHERE condicion_tecnica != 'inoperativo_critico'
+   WHERE condicion_tecnica != 'critico'
      AND (
        drp_activo_id IS NULL
        OR drp_activo_estado != 'En_curso'
@@ -325,7 +325,7 @@ necesario.
 
 | Vehículo | Visualización | Seleccionable |
 |---|---|---|
-| `condicion_tecnica = inoperativo_critico` | No aparece en la lista | ✗ |
+| `condicion_tecnica = critico` | No aparece en la lista | ✗ |
 | En DRP `En_curso` | No aparece en la lista | ✗ |
 | En DRP `En_preparacion` | Badge naranja "Ya en DRP [nombre]" | ✓ con confirmación |
 | Disponible (`operativo` o `averiado_leve`) | Normal | ✓ directo |
@@ -743,7 +743,7 @@ en `procesarCola()` cuando `pendingCount` llega a 0 sin errores.
 | `disponible` | `bg-green-100 text-green-800` | ✅ |
 | `en_servicio` | `bg-green-100 text-green-700` | ✅ (no azul) |
 | `en_mantenimiento` | `bg-amber-100 text-amber-800` | ✅ |
-| `inoperativo_critico` | `bg-red-100 text-red-800` | ✅ |
+| `critico` | `bg-red-100 text-red-800` | ✅ |
 | `dado_de_baja` | `bg-gray-100 text-gray-700` | ✅ |
 | DRP `En_preparacion` | `bg-[#FFF5B8] text-amber-800` | ✅ (amarillo soft del sistema) |
 | DRP `En_curso` | `bg-green-100 text-green-800` | ✅ (no azul) |

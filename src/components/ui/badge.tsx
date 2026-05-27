@@ -19,6 +19,17 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // ── Variantes semánticas U24 (diseño_chupiwachi §9.3) ──
+        ok:
+          "border-green-200 bg-green-50 text-green-700 dark:border-transparent dark:bg-green-950/40 dark:text-green-400",
+        warn:
+          "border-amber-200 bg-amber-50 text-amber-700 dark:border-transparent dark:bg-amber-950/40 dark:text-amber-400",
+        crit:
+          "border-red-200 bg-red-50 text-red-700 dark:border-transparent dark:bg-red-950/40 dark:text-red-400",
+        info:
+          "border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-transparent dark:bg-zinc-800 dark:text-zinc-300",
+        accent:
+          "border-[var(--u24-yellow)] bg-[var(--u24-yellow)] text-[var(--u24-black)]",
       },
     },
     defaultVariants: {

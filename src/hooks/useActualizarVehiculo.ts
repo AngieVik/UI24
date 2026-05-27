@@ -2,8 +2,14 @@ import { useState } from 'react'
 import { useOfflineMutation } from '@/hooks/useOfflineMutation'
 import { useActivacionStore } from '@/stores/useActivacionStore'
 
+/** Estado general del vehículo ('activado'/'desactivado') o subestado operativo. */
 export type EstadoOperativo =
-  | 'desactivado' | 'en_espera' | 'activado' | 'ruta' | 'estacionado' | 'alerta'
+  | 'desactivado'
+  | 'activado'
+  | 'en_espera'
+  | 'ruta'
+  | 'estacionado'
+  | 'alerta'
 
 export type TipoServicio =
   | 'programado' | 'dispositivo' | 'traslado' | 'guardia_urgencias'
@@ -85,8 +91,8 @@ export function useActualizarVehiculo() {
             matricula:     data.matricula,
           })
         }
-        // Si salió de activado, limpiar useActivacionStore.
-        if (vars.estado_destino !== 'activado') {
+        // Al desactivar, limpiar useActivacionStore.
+        if (vars.estado_destino === 'desactivado') {
           const current = useActivacionStore.getState().matricula
           if (current === vars.matricula) {
             useActivacionStore.getState().clearActivacion()

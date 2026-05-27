@@ -67,11 +67,13 @@ Cada fase usa esta estructura:
 ## Fase A — Chasis correcto ✅ (cerrada 2026-05-22)
 
 ### 🎯 Objetivo
+
 Poner el terminal en el estado_1 correcto según `mapeo_visual_ui.md` §1:
 sin gates inventados, con `BlackColumn` + `Header` + `home_area` desde el
 primer momento tras login.
 
 ### 📤 Entregado
+
 - `diseño_chupiwachi.md` (15 secciones) — fuente de verdad visual.
 - shadcn/ui inicializado (CLI, preset Nova, base Radix) + 22 primitives.
 - `lucide-react` operativo, Tabler eliminado, Geist eliminado.
@@ -90,6 +92,7 @@ primer momento tras login.
   agrandados).
 
 ### ✅ DoD cerrada
+
 - [x] `npx tsc -b` sin errores.
 - [x] `npm run dev` arranca sin warnings de Vite.
 - [x] Login funciona con `admin/12345678` contra Supabase prod.
@@ -104,6 +107,7 @@ primer momento tras login.
 ## Fase B — Reescritura del black_column 🟡 (en curso)
 
 ### 🎯 Objetivo
+
 Llegar a un `BlackColumn` con la **estructura de navegación drill-down
 definitiva** (3 niveles raíz → grupo → grupillo), anchura fluida
 (colapsa a 60 px tras seleccionar hoja, expande al entrar a grupo),
@@ -241,6 +245,7 @@ Buzón interno (Doc-13) (hoja raíz)
 ### 🛤️ Sub-fases de Fase B (cada una se cierra antes de pasar a la siguiente)
 
 #### B.1 — Backend: Custom Access Token Hook
+
 - Migración `supabase/migrations/2026XXXX_custom_access_token_hook.sql`.
 - Función `public.custom_access_token_hook(event jsonb) returns jsonb`
   que lee `fichas_empleados.rol` + `id_nombre` por `auth_user_id` y los
@@ -257,6 +262,7 @@ Buzón interno (Doc-13) (hoja raíz)
   - [ ] `useAuthStore` expone selector `rol` derivado del claim.
 
 #### B.2 — Frontend: `black-column-nav.ts` con tipos + RBAC
+
 - Crear `src/components/layout/black-column-nav.ts`.
 - Tipos: `NavLeaf | NavGroup | NavGrupillo` con campo `rolesPermitidos: Rol[]`.
 - Importar lucide icons en este archivo, exportar `NAV_TREE` constante.
@@ -268,6 +274,7 @@ Buzón interno (Doc-13) (hoja raíz)
   - [ ] `filterByRol` testeado con Vitest (al menos los 6 roles).
 
 #### B.3 — Frontend: máquina de estado `useBlackColumnState`
+
 - Hook que maneja:
   - `currentPath: string[]` (ids del breadcrumb actual; `[]` = raíz).
   - `expanded: boolean`.
@@ -281,6 +288,7 @@ Buzón interno (Doc-13) (hoja raíz)
   - [ ] Tests de transiciones en Vitest verdes.
 
 #### B.4 — Frontend: componente `BlackColumn` reescrito
+
 - Implementar el drill-down con `transition-[width] duration-200`.
 - Render condicional: items raíz vs hijos del nodo activo.
 - Botones fijos: Home, Check-in, Atrás (contextual), Expand/Collapse.
@@ -295,6 +303,7 @@ Buzón interno (Doc-13) (hoja raíz)
   - [ ] Foco por teclado (Tab + Enter + flechas).
 
 #### B.5 — Integración en `App.tsx`
+
 - `App.tsx` recibe `selectedLeafId` y renderiza el Screen correspondiente
   (placeholders honestos para Fase D).
 - Click en Home → `selectedLeafId = 'home'` → renderiza `VisualInfoHome`.
@@ -305,6 +314,7 @@ Buzón interno (Doc-13) (hoja raíz)
         renderizándose en home_area al pulsarla.
 
 #### B.6 — Tests + documentación
+
 - Vitest: `BlackColumn.test.tsx` con casos de drill, RBAC, toggle.
 - `diseño_chupiwachi.md §10.1` reescrita con la versión final.
 - Demo visual con la usuaria en localhost.
@@ -314,11 +324,13 @@ Buzón interno (Doc-13) (hoja raíz)
   - [ ] Visto bueno de la usuaria en demo.
 
 ### 📥 Entrada
+
 - Fase A cerrada.
 - Decisión consensuada sobre los puntos abiertos (ver §"Decisiones a
   tomar").
 
 ### 📤 Salida
+
 - `src/components/layout/BlackColumn.tsx` definitivo.
 - `src/components/layout/black-column-nav.ts` — árbol exportable de items
   con tipo `NavTree`, RBAC, iconos, etiquetas, RPC requeridas para activar.
@@ -326,6 +338,7 @@ Buzón interno (Doc-13) (hoja raíz)
 - Sección §10.1 de `diseño_chupiwachi.md` actualizada con la versión final.
 
 ### 🧩 Sub-tareas
+
 1. Confirmar el árbol final contra `mapeo_visual_ui.md §3` y
    `black_column.md`. Resolver discrepancias (ej. mapping `Disc3` para
    "Vehículos" — ver §"Decisiones").
@@ -347,6 +360,7 @@ Buzón interno (Doc-13) (hoja raíz)
    en hoja emite `onSelect`.
 
 ### ✅ DoD
+
 - [ ] `BlackColumn` renderiza los 11 items raíz con sus subgrupos correctos
       y separators en las posiciones del spec.
 - [ ] El indicador amarillo de 3 px aparece a la izquierda del ítem
@@ -361,6 +375,7 @@ Buzón interno (Doc-13) (hoja raíz)
 - [ ] Sección §10.1 de `diseño_chupiwachi.md` actualizada.
 
 ### ⚠️ Riesgos
+
 - **R-B1**: RBAC del JWT requiere que el hook de auth de Supabase inyecte
   los claims. Si no están, hay que generarlos como fallback desde
   `fichas_empleados.rol`. Mitigación: empezar con fallback y consolidar
@@ -374,6 +389,7 @@ Buzón interno (Doc-13) (hoja raíz)
   defaults.
 
 ### ❓ Decisiones a tomar antes de empezar
+
 1. **Iconos sustitutos**: ¿aceptamos `Disc3` para "Vehículos" y
    `Settings2` para "Mantenimiento" o buscamos alternativas?
    (Alternativas: `Car` ya usado en grupo padre, `Wrench` ya usado en
@@ -391,15 +407,18 @@ Buzón interno (Doc-13) (hoja raíz)
 ## Fase C — Cableado de datos de `visual_info_home`
 
 ### 🎯 Objetivo
+
 Poblar `VisualInfoHome` con datos reales desde Supabase y los stores
 Zustand. Convertir los placeholders honestos en información operativa.
 
 ### 📥 Entrada
+
 - Fase B cerrada.
 - Esquema Supabase estable (`fichas_empleados`, `vehiculos`, `drps`,
   `bandejas_mensajes`, `personal_en_turno` o vista equivalente).
 
 ### 📤 Salida
+
 - `useVisualInfoHome()` hook que orquesta los datos de los 4 sub-paneles.
 - Stores actualizados: `usePersonaStore`, `useActivacionStore`,
   `useDrpStore`, `useBandejasStore` sincronizados via Supabase Realtime.
@@ -409,6 +428,7 @@ Zustand. Convertir los placeholders honestos en información operativa.
   los datos esperados.
 
 ### 🧩 Sub-tareas
+
 1. Verificar y, si hace falta, crear vistas Supabase para denormalizar
    queries del home (evitar N+1).
 2. Cablear `usePersonaStore` a `personal_en_turno` con Realtime.
@@ -423,6 +443,7 @@ Zustand. Convertir los placeholders honestos en información operativa.
 8. Avatar fallback con iniciales reales (`MA`, `RS`, etc.) en lugar de `—`.
 
 ### ✅ DoD
+
 - [ ] Los 4 sub-paneles muestran datos reales o estado vacío justificado.
 - [ ] Las suscripciones Realtime se desuscriben al desmontar.
 - [ ] Si `realtime_kill_switch === true` se degrada a polling cada 30 s.
@@ -430,12 +451,14 @@ Zustand. Convertir los placeholders honestos en información operativa.
 - [ ] §10.4 de `diseño_chupiwachi.md` actualizada con el cableado.
 
 ### ⚠️ Riesgos
+
 - **R-C1**: Saturación de Realtime con muchos terminales. Mitigación:
   filtros precisos por `id_terminal` y `id_nombre`.
 - **R-C2**: Datos derivados de varios joins. Mitigación: vistas
   materializadas o RPC `select` específico.
 
 ### ❓ Decisiones a tomar antes de empezar
+
 1. ¿Mantenemos los stores Zustand existentes (`usePersonaStore`,
    `useActivacionStore`, etc.) o los rehacemos?
 2. ¿TanStack Query (obligatorio por `rules.md §6`) reemplaza la
@@ -448,15 +471,18 @@ Zustand. Convertir los placeholders honestos en información operativa.
 ## Fase D — Reconstrucción de Screens feature (modular)
 
 ### 🎯 Objetivo
+
 Reescribir, una a una, las pantallas operativas que se borraron en Fase A,
 usando shadcn/ui + tokens U24 + RHF + Zod. Cada Screen es un sub-objetivo
 independiente con su propio DoD.
 
 ### 📥 Entrada
+
 - Fase C cerrada (stores poblados).
 - Para cada Screen: hooks viejos auditados (mantener vs reescribir).
 
 ### 📤 Salida
+
 - 1 archivo TSX por Screen en `src/components/<dominio>/`.
 - Cada Screen documentado en `diseño_chupiwachi.md §8.6` con
   capturas/descripción.
@@ -464,64 +490,120 @@ independiente con su propio DoD.
 
 ### 🧩 Sub-fases (orden propuesto)
 
-**D.1 — Operativa rutinaria** (item 3 del black_column)
-1. `CheckinScreen` (item 3 reemplaza al VehiclePicker borrado).
-2. `Doc6GastoMaterialScreen`.
-3. `Doc8ParteTrabajoScreen` (vista del Doc-8 activo).
-4. `Doc2InformeAsistencialScreen`.
-5. `Doc11AvisoUrgenteScreen`.
-6. `RepostajeCombustibleScreen` y `RepostajeAdBlueScreen`.
-7. `Checklist360Screen` (era `ChecklistScreen` antiguo).
-8. `VehiculosScreen` (vista combinada, item 3.10).
+**D.1 — Operativa** (item 3 del black_column, 4 secciones)
+
+**Vehículos**
+
+1. ✅ `VehiculosScreen` (vista combinada 3 zonas — cerrada 2026-05-27).
+
+**Operativas Rutinarias**
+2. ✅ `Doc10EnvioMaterialScreen` (instancia operativa, leafId `doc10_op`).
+3. ✅ `Doc6GastoMaterialScreen` (cerrada 2026-05-26).
+4. ✅ `Doc8ParteTrabajoScreen` (vista del Doc-8 activo — cerrada 2026-05-27).
+5. ✅ `Checklist360Screen` (formulario 360° con herencia de incidencias — cerrada 2026-05-27).
+
+**Documentos Clínicos**
+6. `Doc2InformeAsistencialScreen`.
+7. `Doc11AvisoUrgenteScreen`.
+
+**Mantenimiento**
+8. `RepostajeCombustibleScreen`.
+9. `RepostajeAdBlueScreen`.
+10. `Doc7InformeAveriaScreen`.
+
+**Pre-requisitos cerrados (D.1.1d.x)**:
+
+- `AutorizarTerminalScreen` + `CheckinInicialScreen` + `PresenciaScreen`
+  (modelo "sesión del terminal" con usuario máquina por fingerprint).
 
 **D.2 — DRP** (item 4)
-1. `OperativaDrpScreen`.
-2. `VisorDrpScreen`.
-3. `ResumenDrpScreen` (modal con RBAC).
+
+1. `VisorDrpScreen`.
+2. `EstadosDrpScreen`.
+3. `OperativaDrpScreen` (modal con RBAC).
 4. `LogisticaDrpScreen`.
-5. `CrearDrpScreen`.
-6. `EstadosDrpScreen`.
+5. `OpcionesDrpScreen`.
+6. `CrearDrpScreen`.
 
 **D.3 — Módulos especiales** (item 5)
+
 1. `ModuloPsaScreen`.
 2. `ModuloFiliacionScreen`.
 
 **D.4 — Logística y almacén** (item 6)
-1. `InventarioMaestroScreen` (DataTable).
-2. `Doc9EntradaAlmacenScreen`.
-3. `Doc10EnvioMaterialScreen` (instancia logística).
-4. `InventarioTransitoScreen`.
-5. `DescuadresScreen`.
-6. `CatalogoItemsScreen`.
+
+- **Inventario Maestro:** `InventarioMaestroScreen` (DataTable).
+  - *Auditoría de Inventarios.*
+  - *Inventarios y Almacén (Locations).*
+  - *Inventarios Dinámicos:* Creación de Subinventarios, Tipos de plantilla libre, subgrupos.
+  - *Catálogo de Ítems:* Alta y baja de artículos. `CatalogoItemsScreen`
+  - *Descuadres y Ajuste Manual.* `DescuadresScreen`
+- **Stock:**
+  - *Historial de stock.*
+  - *Plantillas de stock / Gestión de plantillas.*
+  - *Alertas de stock* (Visualización de umbrales rotos).
+- **Movimientos:**
+  - *Últimos movimientos.*
+  - *Inventario en Tránsito.*`InventarioTransitoScreen`.
+  - *Doc-9* (Entrada de Almacén).`Doc9EntradaAlmacenScreen`.
+  - *Doc-10* (Envío de Material).`Doc10EnvioMaterialScreen` (instancia logística).
+- **Bandeja Logística:**
 
 **D.5 — Flota y taller** (item 7)
-1. `IncidenciasScreen`.
-2. `Doc7InformeAveriaScreen`.
-3. `MetadataVehiculoScreen`.
-4. `MantenimientoFlotaScreen`.
-5. `HistorialEventosFisicosScreen`.
+
+- **Incidencias:**
+  - Tableros Kanban/Listas para: *Incidencias abiertas*, *Incidencias Ancladas* (Críticas), *Últimas Incidencias*.
+- **Visor Mantenimiento:**
+  - Tabla principal de vehículos.
+  - Badges semánticos de proximidad a mantenimiento.
+  - Filtros, Ordenación y Vista de Detalle *in-place*.
+- **Mantenimiento Flota:**
+  - Formularios de estado: *Aceite*, *Frenos*, *Neumáticos*.
+  - *Configuración de Umbrales de alerta* (ej. avisar a los 10.000km).
+  - *Doc-7* (Informe de Avería). (Nota Técnica: Las fotos adjuntas deben comprimirse vía Canvas API a 1200px WebP antes de subirse).
+- **Vehículos Metadata:**
+  - *Documentación y dispositivo* (ITV, Seguros).
+  - *Kilometraje general.*
+  - *Historial eventos físicos.*
+- **Bandeja Flota:**
 
 **D.6 — Coordinación y seguridad** (item 8)
-1. `TokenEmergenciaScreen`.
-2. `RbacRolesScreen`.
+
+- **Módulo Emergencias:** Generador de tokens offline.
+  - *Galleta pequeña / Galleta* (Tokens temporales o persistentes).
+- **Dispositivos Validados:** Gestión de terminales confiables y revocación de tablets robadas/extraviadas.
+- **Visor Seguimiento Operativo:** Mapa o listado maestro de toda la plantilla y flota activa.
+- **RBAC:** Panel de asignación de roles.
+- **Forzar Checkout:** Botón rojo para expulsar usuarios de turnos prolongados por error.
+- **Cambio de Password.**
+- **Bandeja Coordinación:** Mensajes escalados a administración.
 
 **D.7 — Gestión y RRHH** (item 9)
-1. `FichasEmpleadosScreen`.
-2. `GestionTurnosScreen`.
-3. `GestionTablonScreen`.
-4. `MarquesinaScreen`.
-5. `Doc12SolicitudVacacionesScreen`.
-6. `RepositorioDocumentosScreen`.
-7. `GestionBajasScreen`.
+
+- **Personal:**
+  - *Fichas empleados.*
+  - *Gestión de bajas* (Incapacidades temporales, permisos).
+- **Planificación Laboral:**
+  - *Planificación de Servicios.*
+  - *Gestión de cuadrantes* (UI estilo calendario/grid).
+  - *Doc-12* (Solicitud de Vacaciones).
+- **Comunicación:**
+  - *Gestión tablón* (Publicación de noticias globales).
+  - *Marquesina* (Configuración del texto del Ticker superior).
+- **Repositorio Documentos:** Acceso a manuales operativos o PDFs corporativos (Carga diferida obligatoria).
+- **Bandeja RRHH:** Recepción de peticiones de Doc-12 y justificantes.
 
 **D.8 — Tablón central + Buzón interno** (items 10–11)
+
 1. `TablonCentralScreen`.
 2. `BuzonInternoScreen` (Doc-13).
 
 **D.9 — Bandejas** (overlay desde header + sub-items 6.7, 7.6, 8.3, 9.8)
+
 1. `BandejaModal` (componente `flujos_transicion` parametrizable).
 
 ### ✅ DoD de cada Screen
+
 - [ ] Usa exclusivamente primitives de `src/components/ui/`.
 - [ ] Sin clases CSS custom: solo Tailwind + tokens.
 - [ ] Formularios con `Form` shadcn + RHF + Zod (`diseño_chupiwachi.md §14`).
@@ -533,6 +615,7 @@ independiente con su propio DoD.
 - [ ] §8.6 de `diseño_chupiwachi.md` actualizada.
 
 ### ⚠️ Riesgos transversales
+
 - **R-D1**: la deuda offline (cola, idempotencia) puede aparecer al
   reescribir Screens. Mantener tests de `useOfflineQueue` verdes.
 - **R-D2**: regresiones en RLS al cambiar la forma de las queries.
@@ -541,6 +624,7 @@ independiente con su propio DoD.
   sesión, dividir en D.7.1 / D.7.2.
 
 ### ❓ Decisiones a tomar antes de empezar
+
 1. ¿Empezamos por **D.1 Operativa rutinaria** (camino crítico del turno)
    o por **D.5 Flota** (donde tenemos más hooks ya escritos)?
 2. ¿Reescribimos `useOfflineQueue` o lo damos por bueno?
@@ -551,22 +635,26 @@ independiente con su propio DoD.
 ## Fase E — Validación y reapertura del checklist de despliegue
 
 ### 🎯 Objetivo
+
 Devolver el proyecto al estado "listo para despliegue" siguiendo el
 `deployment_checklist.md` original. Hasta aquí no se vuelven a hacer
 builds de producción ni pushes a Vercel.
 
 ### 📥 Entrada
+
 - Fase D completa (todos los Screens implementados).
 - `npx tsc -b` y `npm test` verdes.
 - E2E Playwright actualizados al nuevo árbol DOM.
 
 ### 📤 Salida
+
 - `deployment_checklist.md` con todos los puntos en verde.
 - Build de producción local (`npm run build`) sin superar 3 MB / 800 KB.
 - Bypass de desarrollo (`Acceso dev`) eliminado del código.
 - Tests Vitest + Playwright verdes en CI.
 
 ### 🧩 Sub-tareas
+
 1. Borrar el bloque "Bypass de desarrollo" de `LoginScreen.tsx`.
    Marca: `Bypass de desarrollo — eliminar al cerrar Fase B` *(originalmente
    apuntaba a Fase B; queda como Fase E para mantener el flujo)*.
@@ -576,6 +664,7 @@ builds de producción ni pushes a Vercel.
 5. Validación de `force_update` banner.
 
 ### ✅ DoD
+
 - [ ] Los 10 puntos del `deployment_checklist.md` están en verde.
 - [ ] `npm run build` cumple `bundle ≤ 3 MB` y `entry ≤ 800 KB`.
 - [ ] Bypass de desarrollo eliminado y verificado con grep.
@@ -583,6 +672,7 @@ builds de producción ni pushes a Vercel.
 - [ ] Se autoriza el primer push a Vercel.
 
 ### ❓ Decisiones a tomar antes de empezar
+
 1. ¿Activamos modo oscuro como toggle visible o lo dejamos detrás de
    `prefers-color-scheme` solamente? (depende del feedback de Fase D)
 2. ¿Habilitamos Sentry en `dev` para capturar errores tempranos o solo
@@ -593,19 +683,23 @@ builds de producción ni pushes a Vercel.
 ## Fase F — Modo oscuro y refinamientos
 
 ### 🎯 Objetivo
+
 Auditar la app entera en modo oscuro, ajustar contraste donde falle WCAG
 AA, refinar animaciones de transición light↔dark, y dejar un
 `ThemeToggle` en una ubicación discreta del Header.
 
 ### 📥 Entrada
+
 Fase E cerrada y desplegada.
 
 ### 📤 Salida
+
 - `ThemeToggle` cableado en el Header.
 - Captura de cada Screen en light + dark + screenshot tests Playwright.
 - Sección §13 de `diseño_chupiwachi.md` ampliada con los ajustes finales.
 
 ### 🧩 Sub-tareas
+
 1. Recorrido visual de todos los Screens en `.dark`.
 2. Corregir contrastes que no pasen AA.
 3. Decidir si la `BlackColumn` cambia o se queda igual en dark (decisión
@@ -615,6 +709,7 @@ Fase E cerrada y desplegada.
    que sobrevive a F5 y a cierre de pestaña.
 
 ### ✅ DoD
+
 - [ ] Todas las vistas pasan contraste AA en ambos modos.
 - [ ] `ThemeToggle` accesible por teclado (Tab + Enter).
 - [ ] Sin destellos al cambiar de modo (sin "flash of unstyled content").
@@ -650,6 +745,7 @@ Si la usuaria abre una nueva sesión con otro agente, este es el bloque a
 copiar y pegar al inicio del prompt:
 
 > Soy AngieVik, trabajo en U24. Lee en este orden:
+>
 > 1. `01_arquitectura_y_reglas/rules.md` (v2.1, fuente de verdad técnica).
 > 2. `05_interfaz_y_desarrollo/diseño_chupiwachi.md` (fuente de verdad visual).
 > 3. `06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md` (este documento).

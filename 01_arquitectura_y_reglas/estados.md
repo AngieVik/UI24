@@ -147,22 +147,22 @@ Variable **ortogonal** a `estado_operativo`. Se actualiza de forma independiente
 |---|---|---|
 | `operativo` | Sin incidencias mecánicas. Estado por defecto. | — |
 | `averiado_leve` | Incidencia leve o moderada reportada. Informativo. | Doc-7 Leve/Moderada guardado |
-| `inoperativo_critico` | Fallo grave confirmado. Advertencia bloqueante. | Doc-7 Grave guardado |
+| `critico` | Fallo grave confirmado. Advertencia bloqueante. | Doc-7 Grave guardado |
 
 **Transiciones:**
 
 ```
 operativo           → averiado_leve       (Doc-7 Leve/Moderada)
-operativo           → inoperativo_critico (Doc-7 Grave)
+operativo           → critico (Doc-7 Grave)
 averiado_leve       → operativo           (Doc-7 → Reparada_Operativa)
-inoperativo_critico → operativo           (Doc-7 → Reparada_Operativa)
-averiado_leve       → inoperativo_critico (Doc-7 escalado a Grave)
+critico → operativo           (Doc-7 → Reparada_Operativa)
+averiado_leve       → critico (Doc-7 escalado a Grave)
 ```
 
 **Efecto en activación:**
 
 - `operativo` / `averiado_leve` → activación permitida, badge informativo visible.
-- `inoperativo_critico` → advertencia bloqueante. Requiere confirmación explícita
+- `critico` → advertencia bloqueante. Requiere confirmación explícita
   de `gerencia` o `coordinación` para proceder con la activación.
 
 **Zustand:** `useVehiculoStore → condicionTecnica`

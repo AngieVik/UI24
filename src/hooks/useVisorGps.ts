@@ -42,7 +42,7 @@ export function useVisorGps(idDrp?: string) {
           lat: v?.lat ?? null,
           lng: v?.lng ?? null,
           gps_timestamp: v?.gps_timestamp ?? null,
-          estado_operativo: v?.estado_operativo ?? 'inactivo',
+          estado_operativo: v?.estado_operativo ?? 'desactivado',
         }
       })
       setVehiculos(parsed)

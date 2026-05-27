@@ -1114,6 +1114,285 @@ export function LoginForm() {
 Cada vez que se toque un componente o token, se añade una entrada aquí
 con fecha, autor (Claude o humano), archivos tocados y resumen del cambio.
 
+### 2026-05-27 (D.1.5) — Checklist360Screen
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Decisiones consensuadas**:
+- Reconstrucción completa desde cero (el `ChecklistScreen` antiguo del Sprint 9 no se reutiliza).
+- Tabla `doc_checklist360` ya existía (Sprint 9). Migración D.1.5 actualiza el trigger
+  para entender el nuevo formato JSONB (`estado: OK|OBSERVACION|INOPERATIVO|NO_APLICA`)
+  además del antiguo (`ok: bool`) con retrocompatibilidad.
+- RPC `rpc_obtener_checklist_anterior(p_matricula)` SECURITY DEFINER nueva: devuelve
+  `items_revisados` del último checklist cerrado del vehículo para lógica de herencia.
+  Fail-safe: devuelve `{}` ante cualquier error (principio de no-obstrucción).
+- Herencia: solo ítems con estado `OBSERVACION` o `INOPERATIVO` se pre-cargan.
+  `es_incidencia_heredada = true` marca los heredados. UI especial para `danos_previos_chapa`
+  con botones "Todo sigue igual" / "Modificar o añadir daños".
+- VIR: sección "Adaptación VIR 4x4" solo visible cuando `vehiculos.tipo = 'VIR'`.
+  Detección via `useQuery(['vehiculo_tipo', matricula])`.
+- Submit: modal de confirmación con conteo de incidencias → `rpc_cerrar_checklist`
+  (ya existía) → `marcarChecklistCerrado()` en store → vista de éxito/offline.
+- Catálogo hardcodeado en `src/data/checklist360Catalog.ts`: 7 secciones, 32 ítems,
+  sub-campos condicionales (select, multiselect, text) por ítem.
+- Badge semántico `warn` para ítems heredados (usa variante añadida en D.1.4).
+
+**Backend (migración 20260527000002_checklist360_v2_rpc.sql)**:
+- Trigger `trg_fn_checklist_genera_doc7` actualizado: entiende formato nuevo y antiguo.
+  Mapa: `INOPERATIVO → Grave`, `OBSERVACION → Leve` en `doc7_averias`.
+- `rpc_obtener_checklist_anterior(p_matricula TEXT) RETURNS JSONB` — SECURITY DEFINER.
+- GRANTs `service_role` para `doc_checklist360` (D-12 hardening).
+- `supabase.ts` — añadido tipo `rpc_obtener_checklist_anterior` con comentario D.1.5.
+
+**Archivos creados/modificados**:
+- `supabase/migrations/20260527000002_checklist360_v2_rpc.sql` — nuevo.
+- `src/data/checklist360Catalog.ts` — catálogo TypeScript de 32 ítems en 7 secciones.
+- `src/hooks/useChecklist360Activo.ts` — query del checklist actual por `id_checklist`.
+- `src/hooks/useChecklist360Anterior.ts` — RPC herencia, fail-safe on error.
+- `src/hooks/useCerrarChecklist360.ts` — `useOfflineMutation` sobre `rpc_cerrar_checklist`.
+- `src/components/operativa/Checklist360Screen.tsx` — Screen completa (gate, form, modal).
+- `App.tsx` — routing `selectedLeafId === 'chk360'`.
+
+**Tests**: 248 verde (eran 217). +31 nuevos en `Checklist360Screen.test.tsx`:
+- Gate sin id_parte o id_checklist (3).
+- Loading skeleton / error (2).
+- Checklist cerrado — readonly summary, badge Completado, lista incidencias (4).
+- Formulario: matrícula, badge counter, botón deshabilitado, secciones visibles (4).
+- Botones de estado: OK, OBS despliega sub-campos, volver a OK oculta sub-campos, N/A (4).
+- VIR: sin sección no-VIR, con sección VIR, badge VIR 4x4 (3).
+- Herencia: pre-rellena OBS/INO, badge Heredado, UI especial danos_previos_chapa, no pre-rellena OK (4).
+- Envío: botón habilitado al completar, modal, cancelar, confirmar→cerrar, feedback online, offline, error (7).
+
+---
+
+### 2026-05-27 (D.1.4) — Doc8ParteTrabajoScreen
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Decisiones consensuadas**:
+- **Vista 100% readonly** salvo campo de anotaciones libres (`notas TEXT`).
+- **Contenido**: encabezado del parte (km, timestamps, estado), dotación
+  (pilot/carry/tipo_servicio), personal en turno (reutiliza
+  `usePersonalEnTurno`), estado del Checklist360 (desde `useActivacionStore`),
+  gastos de material del turno (Doc-6 filtrados por `id_activacion`),
+  y textarea de anotaciones con botón "Guardar anotación".
+- **Gate**: si `id_parte === ''` → pantalla de aviso "Sin turno activo".
+- **Acceso histórico**: solo con activación activa; no hay vista de partes
+  cerrados desde este Screen.
+
+**Badge** — variantes semánticas U24 añadidas a `src/components/ui/badge.tsx`:
+- `ok` · `warn` · `crit` · `info` · `accent` (spec `diseño_chupiwachi §9.3`).
+- Primera pantalla en usarlas. El resto de Screens las usarán a partir de D.1.5.
+
+**shadcn/ui** — instalado `Textarea` via CLI.
+
+**Backend** — migración `20260527000001_doc8_notas_rpc.sql`:
+- `doc8_partes_trabajo` +columna `notas TEXT` nullable.
+- Policy `SELECT` para `authenticated` (la tabla tenía RLS sin policies).
+- `GRANT SELECT/INSERT/UPDATE` a `service_role`.
+- **RPC `rpc_anotar_parte(p_mutation_uuid, p_id_parte, p_notas)`**:
+  - Idempotente via `idempotency_keys`.
+  - Valida estado `Abierto_En_Turno` antes de mutar.
+  - `SECURITY DEFINER`, `GRANT` a `authenticated`.
+- `supabase.ts` actualizado manualmente con columna `notas` (pendiente
+  regenerar con `supabase gen types` en Fase E).
+
+**Frontend** — archivos nuevos:
+- `src/hooks/useDoc8Activo.ts` — TanStack Query + Realtime invalidator.
+  Join con `activaciones_vehiculo` para pilot/carry/tipo_servicio.
+- `src/hooks/useDoc6DelTurno.ts` — gastos de la activación con join a
+  `catalogo_items` para nombre y categoría.
+- `src/hooks/useAnotarParte.ts` — `useOfflineMutation` sobre `rpc_anotar_parte`.
+- `src/components/operativa/Doc8ParteTrabajoScreen.tsx` — Screen principal
+  con 6 cards + gate + DataCell helper.
+- `App.tsx` — routing `selectedLeafId === 'doc8'`.
+
+**Tests**: 217 verde (eran 188). +29 nuevos en `Doc8ParteTrabajoScreen.test.tsx`:
+- Gate sin activación (2).
+- Loading skeleton / error (2).
+- Encabezado: matrícula, km, estado badge, estado Cerrado (4).
+- Dotación: pilot, carry, tipo servicio formateado, carry null (4).
+- Personal en turno: tabla, count badge, empty state (3).
+- Checklist360: badge pendiente/completado, hint (3).
+- Gastos: ítem+cantidad, count badge, empty state (3).
+- Anotaciones: habilitada/deshabilitada, guardar disabled sin cambios,
+  guardar habilitado al escribir, llama RPC, feedback éxito, feedback
+  offline, error visible, sin botón si cerrado (8).
+
+---
+
+### 2026-05-27 (D.1.3) — Doc10EnvioMaterialScreen
+
+**Autor**: Claude (con supervisión humana de AngieVik).
+
+**Decisiones consensuadas**:
+- **Operador firma el doc**: selector entre presentes del terminal.
+- **Destinos**: todas las locations salvo el propio vehículo + opción
+  "destino externo" (campo libre para hospital/clínica/centro).
+- **UX**: misma estructura que Doc-6 (lista agrupada por categoría +
+  carrito + confirmar) con cabecera de selectores operador/destino.
+
+**Backend** — migración `doc10_destino_externo_y_rpc`:
+- `doc10_transferencias` ahora acepta `destino_externo TEXT` y
+  `location_destino` es nullable. Constraint XOR garantiza que
+  exactamente uno esté presente.
+- GRANT SELECT/INSERT/UPDATE a service_role en doc10_transferencias,
+  inventario_en_transito; SELECT a authenticated en locations.
+- Policies SELECT en locations y doc10_transferencias.
+- **RPC `rpc_doc10_enviar_material(p_mutation_uuid, p_id_nombre_operador,
+  p_matricula_origen, p_location_destino, p_destino_externo, p_items)`**
+  orquesta atomicamente:
+  - Valida operador (existe + activo + con presencia).
+  - Valida destino XOR.
+  - Por cada item: lock `FOR UPDATE`, valida stock, descuenta
+    `inventario_vehiculo`, inserta `inventario_en_transito` solo si
+    destino es interno.
+  - Idempotencia con `mutation_uuid`.
+
+**Frontend**:
+- `src/hooks/useLocations.ts` (nuevo) — query de todas las locations
+  con staleTime 5 min.
+- `src/hooks/useEnviarMaterial.ts` (nuevo) — wrapper `useOfflineMutation`
+  con validación de destino XOR en cliente.
+- `src/components/operativa/Doc10EnvioMaterialScreen.tsx` (nuevo) —
+  3 cards: cabecera (operador+destino+destino_externo opcional),
+  lista de inventario con carrito, footer con submit.
+- App.tsx: `selectedLeafId === 'doc10_op'` → Doc10EnvioMaterialScreen.
+
+**Tests**: 188 verde (eran 177). +11 nuevos en
+`Doc10EnvioMaterialScreen.test.tsx`:
+- Gates (sin matrícula, sin operador).
+- Selectores: destino excluye propio vehículo + añade externo.
+- Destino externo despliega campo libre.
+- Lista agrupada por categoría.
+- Submit con destino interno → llama enviar con location_destino.
+- Submit con destino externo requiere texto y envía destino_externo.
+- Feedback tras éxito.
+- Error visible.
+
+**Pendiente fuera de scope**: cambio análogo en `rpc_deducir_material`
+(Doc-6) para aceptar `p_id_nombre_operador` explícito en lugar de
+derivar de `auth.uid()`. Se arreglará cuando se valide Doc-6 con
+sesión del terminal (probablemente en D.1.4 Doc-8 o como bugfix).
+
+---
+
+### 2026-05-27 (bug fix) — Activado no se podía seleccionar
+
+**Reportado por AngieVik**: "no puedo poner 'activado' en un vehiculo,
+es su estado basal cuando esta trabajando/operativo, y es el unico que
+no puedo seleccionar".
+
+**Causa**: el `useEffect` de `VehiculosScreen` dependía del objeto
+`selectedVehiculo` (computado con `useMemo` sobre `flota`). Cada vez
+que Realtime invalidaba `['flota_completa']` y la query refetcheaba,
+TanStack Query devolvía un array nuevo y `flota.find(...)` retornaba
+una referencia distinta. El useEffect se re-disparaba y
+`setEstadoDestino(estado_actual)` sobreescribía la selección del
+usuario, devolviendo "Activado" a "Desactivado" antes de que pudiera
+pulsar Aplicar.
+
+**Fix**: dependencia del useEffect en `selectedMatricula` (string
+estable). Solo se preselecciona el estado al cambiar el vehículo,
+no en cada refetch.
+
+---
+
+### 2026-05-27 — D.1.8 VehiculosScreen vista 3 zonas
+
+**Autor**: Claude (basado en `_apuntes/Apuntes(ignorar).md#operativa` +
+`mapeo_visual_ui.md §3.1`).
+
+**Modelo correcto** (sustituye al form lineal previo):
+
+```
+┌─────────────────────────────────────────────┐
+│ Zona superior — selector_vehiculos          │
+│  Lista de toda la flota con badges          │
+│  estado_operativo + condicion_tecnica       │
+│  (Realtime, click selecciona)               │
+├─────────────────────────────────────────────┤
+│ Zona media — selector_estados_ID_vehiculo   │
+│  Cambio de estado del vehículo activo +     │
+│  pilot / carry / km_inicio / km_fin         │
+│  según la transición                        │
+├─────────────────────────────────────────────┤
+│ Zona inferior — tipo_servicio               │
+│  Programado / Dispositivo / Traslado /      │
+│  Guardia urgencias / DRP / Privado /        │
+│  Simulacro / Formación / Sin asignar        │
+└─────────────────────────────────────────────┘
+```
+
+**Migración enums** (`enums_estado_op_tipo_servicio_v2`):
+
+- `estado_operativo`: +6 valores nuevos
+  (`desactivado`, `en_espera`, `activado`, `ruta`, `estacionado`, `alerta`).
+- `tipo_servicio`: +7 valores nuevos
+  (`dispositivo`, `guardia_urgencias`, `drp`, `privado`, `simulacro`,
+   `formacion`, `sin_asignar`; `programado` y `traslado` ya existían).
+- Mapeo de filas existentes: `inactivo→desactivado`,
+  `activo→activado`, `en_drp→ruta`, `urgente|evento→sin_asignar`.
+- Defaults actualizados: `vehiculos.estado_operativo='desactivado'`,
+  `activaciones_vehiculo.tipo_servicio='sin_asignar'`.
+- Valores viejos quedan en el enum (Postgres no permite DROP) — limpieza
+  en Fase E con recreación del tipo.
+
+**Nuevo RPC orquestador** (`rpc_actualizar_vehiculo`):
+
+Reemplaza `rpc_checkin_vehiculo` y `rpc_checkin_vehiculo_v2`. Una
+única firma cubre todas las transiciones:
+
+```sql
+rpc_actualizar_vehiculo(
+  p_mutation_uuid, p_matricula, p_estado_destino,
+  p_tipo_servicio?, p_pilot?, p_carry?, p_km_inicio?, p_km_fin?
+)
+```
+
+Lógica interna:
+- `→ activado` desde cualquier otro estado: crea activación + abre
+  Doc-8 + crea checklist360. Requiere pilot + km_inicio.
+- `activado →` cualquier otro: cierra activación abierta (km_fin
+  fallback = km_inicio + 1).
+- Activación abierta + tipo_servicio / pilot / carry distinto:
+  actualiza la activación.
+- En cualquier caso: UPDATE `vehiculos.estado_operativo`.
+
+**Nuevos hooks**:
+
+- `src/hooks/useFlotaCompleta.ts` — lista de TODA la flota con
+  Realtime invalidator.
+- `src/hooks/useActualizarVehiculo.ts` — wrapper sobre
+  `useOfflineMutation` para `rpc_actualizar_vehiculo`. Sincroniza
+  `useActivacionStore` (set al activar, clear al desactivar).
+
+**VehiculosScreen reescrito** (`src/components/operativa/VehiculosScreen.tsx`):
+- Zona superior con `<ul role="listbox">` y filas seleccionables.
+- Zona media condicional al vehículo seleccionado, con campos
+  visibles según la transición (pilot+km_inicio si activar, km_fin
+  si desactivar).
+- Zona inferior con selector `tipo_servicio`.
+- Botón "Aplicar cambios" enviado al RPC.
+
+**Tests**: 177 verde (eran 171). +12 nuevos en VehiculosScreen.test.tsx
+cubriendo las 3 zonas + transiciones:
+- Lista carga / error / vacío / render con badges.
+- Zona media aparece tras seleccionar.
+- Activar pide pilot + km_inicio.
+- Desactivar desde activado pide km_fin.
+- Auto-selección de pilot con 1 presente.
+- Submit deshabilitado sin pilot al activar.
+- Tipo_servicio se incluye en el submit.
+- Error visible.
+
+**Pendiente** (no en MVP de esta sub-fase):
+- Historial de eventos físicos / operativos por vehículo.
+- Flujo dedicado para `alerta` (apertura automática de incidencia).
+- Combobox avanzado para DRP que filtra estados conflictivos.
+
+---
+
 ### 2026-05-26 (bug fix) — VehiculosScreen v2: rpc_checkin_vehiculo_v2
 
 **Autor**: Claude (fix de bug reportado por AngieVik).

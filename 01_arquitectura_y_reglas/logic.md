@@ -1323,7 +1323,7 @@ Al recuperar conexión:
 | Guardar informe | Doc-2, Doc-3, Doc-4, Doc-5 | UUID pre-generado en cliente |
 | Guardar aviso | Doc-11 | |
 | Registrar gastos (sin stock) | Doc-6 metadata | Stock descontado localmente por optimismo; RPC reconcilia al reconectar |
-| **Informe de avería** | **Doc-7** | `condicion_tecnica` cambia optimistamente en Zustand de forma inmediata. El Doc-7 se encola en IndexedDB. Al reconectar: Doc-7 persiste en Supabase y, si `condicion_tecnica = inoperativo_critico`, el vehículo queda bloqueado globalmente vía Realtime. |
+| **Informe de avería** | **Doc-7** | `condicion_tecnica` cambia optimistamente en Zustand de forma inmediata. El Doc-7 se encola en IndexedDB. Al reconectar: Doc-7 persiste en Supabase y, si `condicion_tecnica = critico`, el vehículo queda bloqueado globalmente vía Realtime. |
 
 ### 17.3 Mutaciones que NO soportan cola offline
 
@@ -1364,7 +1364,7 @@ se entregan a través de Supabase Realtime a los terminales afectados.
 | Doc-10 con discrepancia | "Descuadre pendiente de revisión: Doc-10 [id]." | `bandeja_entrada_logistica` |
 | PIN de emergencia no consumido próximo a expirar | (no aplica — PIN se genera y comparte por canal externo) | — |
 | DRP finaliza con dotaciones activas | Timestamps automáticos aplicados | Sin aviso adicional al usuario |
-| `condicion_tecnica → 'inoperativo_critico'` con `estado_operativo ∈ {ruta, alerta}` | "🚨 [ID_vehiculo] detenido automáticamente. Condición técnica: INOPERATIVO CRÍTICO. Estado anterior: [estado_anterior]. Coordenadas: [coords\|no disponibles]." | Canal `global:alertas_criticas` → terminales coordinación/gerencia + `bandeja_entrada_coordinacion` |
+| `condicion_tecnica → 'critico'` con `estado_operativo ∈ {ruta, alerta}` | "🚨 [ID_vehiculo] detenido automáticamente. Condición técnica: INOPERATIVO CRÍTICO. Estado anterior: [estado_anterior]. Coordenadas: [coords\|no disponibles]." | Canal `global:alertas_criticas` → terminales coordinación/gerencia + `bandeja_entrada_coordinacion` |
 
 ---
 
@@ -2702,7 +2702,7 @@ CREATE TRIGGER trg_validar_km_inicio
 
 ### 32.1 Contexto
 
-Cuando `condicion_tecnica = 'inoperativo_critico'`, el flujo estándar de activación
+Cuando `condicion_tecnica = 'critico'`, el flujo estándar de activación
 está bloqueado (ver `nucleo_operativa_rutinaria.md §flujo_activacion` y
 `hooks.md §3 useVehiculo.activar`). Este bloqueo es la regla; el desbloqueo
 excepcional es la excepción — requiere intervención explícita del centro de mando.
@@ -2712,7 +2712,7 @@ excepcional es la excepción — requiere intervención explícita del centro de
 ```
 TERMINAL DE VEHÍCULO (pilot)
 
-  1. Intenta activar vehículo con condicion_tecnica = 'inoperativo_critico'
+  1. Intenta activar vehículo con condicion_tecnica = 'critico'
   2. UI muestra bloqueo + botón "Solicitar Desbloqueo Excepcional"
   3. Al pulsar el botón:
        POST Edge Function 'solicitar_desbloqueo_excepcional':
@@ -2956,7 +2956,7 @@ BEGIN
     UPDATE vehiculos
        SET condicion_tecnica = 'averiado_leve'
      WHERE id = NEW.id_vehiculo
-       AND condicion_tecnica NOT IN ('averiado_grave', 'inoperativo_critico');
+       AND condicion_tecnica NOT IN ('averiado_grave', 'critico');
   END IF;
   RETURN NEW;
 END;
@@ -2973,7 +2973,7 @@ CREATE TRIGGER trg_checklist_genera_doc7
 |---|---|
 | Checklist guardado con estado `Completado` | Sin acción de flota |
 | Checklist guardado con estado `Completado_Con_Incidencias` | Doc-7 auto-generado con gravedad `Leve` → inyectado en `bandeja_entrada_flota` + `condicion_tecnica = 'averiado_leve'` actualizado en `vehiculos` (si no hay estado técnico más grave ya activo) |
-| Doc-7 en bandeja de flota | Técnico de flota lo recibe, lo revisa y puede escalarlo a `inoperativo_critico` si lo considera necesario (flujo normal de Doc-7) |
+| Doc-7 en bandeja de flota | Técnico de flota lo recibe, lo revisa y puede escalarlo a `critico` si lo considera necesario (flujo normal de Doc-7) |
 
 ### 35.4 Trazabilidad
 
@@ -2992,7 +2992,7 @@ Si el formulario `doc_checklist360` incluye un campo `gravedad_estimada`
 ```
 
 De lo contrario, el default `'Leve'` es siempre seguro — nunca fuerza un
-`inoperativo_critico` automático sin revisión humana de flota.
+`critico` automático sin revisión humana de flota.
 
 ---
 
@@ -3337,7 +3337,7 @@ BEGIN
 
   -- Mapeo de gravedad a condicion_tecnica
   RETURN CASE v_max_gravedad
-    WHEN 'Grave'    THEN 'inoperativo_critico'
+    WHEN 'Grave'    THEN 'critico'
     WHEN 'Moderado' THEN 'averiado_leve'
     WHEN 'Leve'     THEN 'averiado_leve'
     ELSE                 'operativo'   -- NULL → no quedan Doc-7 activos
@@ -3382,7 +3382,7 @@ CREATE TRIGGER trg_doc7_cierre_evaluar_condicion
 | Solo con gravedad `Leve` | `averiado_leve` |
 | Solo con gravedad `Moderado` | `averiado_leve` |
 | Mezcla `Leve` + `Moderado` | `averiado_leve` |
-| Al menos uno con gravedad `Grave` | `inoperativo_critico` |
+| Al menos uno con gravedad `Grave` | `critico` |
 
 ### 40.5 Propagación a terminales
 
@@ -3553,6 +3553,7 @@ estas filas del cálculo de km recorridos o tratar el valor como `0`.
 
 > **Migración requerida:** si `km_fin` era `NOT NULL` en la migración inicial,
 > debe añadirse la columna como nullable:
+>
 > ```sql
 > ALTER TABLE doc8_partes_trabajo ALTER COLUMN km_fin DROP NOT NULL;
 > ```
@@ -5178,6 +5179,7 @@ Este módulo cubre el **derecho al olvido individual** (RGPD Art. 17): una perso
 interesada solicita la eliminación de sus datos antes de que expire el plazo automático.
 
 El proceso es deliberadamente manual en dos fases para garantizar trazabilidad:
+
 1. **Solicitud** (`rpc_solicitar_borrado_rgpd`): registra la solicitud y queda en estado `'pendiente'`.
 2. **Ejecución** (`rpc_procesar_borrado_rgpd`): un segundo responsable revisa y ejecuta la purga.
 
@@ -5472,6 +5474,7 @@ vehiculo_con_pilot_activo → Coordinación ejecuta forzar_checkout_administrati
 ```
 
 El orden correcto para una baja de vehículo en operación es:
+
 1. Cancelar o finalizar el DRP (si aplica)
 2. Forzar checkout del pilot (si aplica)
 3. Ejecutar `rpc_baja_vehiculo`
@@ -5768,6 +5771,7 @@ async function cambiarPassword(
 ```
 
 **UX en caso de `offline_session_error`:**
+
 ```
 Toast de advertencia (no error):
 "Contraseña actualizada correctamente.
@@ -5835,9 +5839,9 @@ Deno.serve(async (req) => {
 ### 59.4 Impacto en otros terminales
 
 Si el empleado usa múltiples terminales (inusual en U24, pero posible):
-- `u24_offline_session` solo se actualiza en el terminal donde ejecuta el cambio.
-- Los demás terminales mantienen el hash de la contraseña anterior → login offline fallará.
-- **Solución operativa:** el empleado debe hacer un check-in online en cada terminal
+* `u24_offline_session` solo se actualiza en el terminal donde ejecuta el cambio.
+* Los demás terminales mantienen el hash de la contraseña anterior → login offline fallará.
+* **Solución operativa:** el empleado debe hacer un check-in online en cada terminal
   para regenerar el `u24_offline_session` con el nuevo hash. Los check-ins online
   siempre funcionan (Supabase Auth tiene el nuevo hash actualizado en el paso 2).
 
@@ -5877,9 +5881,9 @@ En un sistema offline-first, las RPCs reciben payloads que fueron generados en e
 cliente horas o días antes de su sincronización. Es crítico distinguir qué timestamps
 genera el servidor y cuáles deben respetarse del payload del cliente:
 
-- **Servidor genera:** timestamps de trazabilidad técnica — registran cuándo llegó
+* **Servidor genera:** timestamps de trazabilidad técnica — registran cuándo llegó
   el dato a la base de datos, no cuándo ocurrió el evento.
-- **Cliente aporta:** timestamps transaccionales — registran cuándo ocurrió el evento
+* **Cliente aporta:** timestamps transaccionales — registran cuándo ocurrió el evento
   real en el campo (apertura de box, cierre de sesión clínica, etc.).
 
 Usar `NOW()` para campos transaccionales en RPCs borra la evidencia de cuándo ocurrió
@@ -6108,9 +6112,9 @@ El traspaso de terminal ocurre cuando un empleado (cedente) termina su turno y e
 
 Si el cedente tenía mutaciones pendientes en su cola offline (`useOfflineQueue`) en el terminal antes del traspaso:
 
-- La cola offline está en IndexedDB del terminal físico, **no del empleado**. Al hacer el traspaso, el receptor hereda el terminal y su IndexedDB.
-- Las mutaciones pendientes del cedente **deben sincronizarse antes del traspaso** — el coordinador debe verificar que `pendingCount === 0` antes de ejecutar `rpc_transferir_galleta`.
-- Si hay mutaciones pendientes: el coordinador verá una advertencia en el panel: *"Este terminal tiene N operaciones sin sincronizar. Asegúrate de que esté en línea antes de traspasar."*
+* La cola offline está en IndexedDB del terminal físico, **no del empleado**. Al hacer el traspaso, el receptor hereda el terminal y su IndexedDB.
+* Las mutaciones pendientes del cedente **deben sincronizarse antes del traspaso** — el coordinador debe verificar que `pendingCount === 0` antes de ejecutar `rpc_transferir_galleta`.
+* Si hay mutaciones pendientes: el coordinador verá una advertencia en el panel: *"Este terminal tiene N operaciones sin sincronizar. Asegúrate de que esté en línea antes de traspasar."*
 
 ### 63.5 Postcondiciones garantizadas
 
@@ -6124,9 +6128,9 @@ Si el cedente tenía mutaciones pendientes en su cola offline (`useOfflineQueue`
 
 ### 63.6 Referencia cruzada
 
-- Especificación completa de la RPC: `rls_y_rpcs.md §29`
-- Flujo de UI en el terminal receptor: `terminal_check.md §Traspaso de terminal`
-- Auditoría: eventos `galleta_revocada` + `galleta_emitida` en `auditoria_rbac`
+* Especificación completa de la RPC: `rls_y_rpcs.md §29`
+* Flujo de UI en el terminal receptor: `terminal_check.md §Traspaso de terminal`
+* Auditoría: eventos `galleta_revocada` + `galleta_emitida` en `auditoria_rbac`
 
 ---
 
@@ -6209,9 +6213,9 @@ async function handleCheckout(idNombre: string) {
 
 ### 64.6 Referencia cruzada
 
-- Payload `QueueBackupPayload`: `payloads_y_contratos.md §D.3`
-- Tabla `queue_backup_sessions`: `er_y_seeds.md §Dominio: Infraestructura y versiones`
-- Disparadores: `payloads_y_contratos.md §D.3.5`
-- Recuperación técnica: `payloads_y_contratos.md §D.3.6`
+* Payload `QueueBackupPayload`: `payloads_y_contratos.md §D.3`
+* Tabla `queue_backup_sessions`: `er_y_seeds.md §Dominio: Infraestructura y versiones`
+* Disparadores: `payloads_y_contratos.md §D.3.5`
+* Recuperación técnica: `payloads_y_contratos.md §D.3.6`
 
 **Notificación a coordinación:** si se revocan > 3 galletas en una ejecución, generar Doc-11 a coordinación con la lista de terminales revocados para revisión manual.

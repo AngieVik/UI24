@@ -878,6 +878,8 @@ export type Database = {
           id_parte: string
           km_fin: number | null
           km_inicio: number | null
+          /** Añadida en D.1.4 — migración 20260527000001_doc8_notas_rpc.sql */
+          notas: string | null
           timestamp_fin: string | null
           timestamp_inicio: string
         }
@@ -888,6 +890,7 @@ export type Database = {
           id_parte?: string
           km_fin?: number | null
           km_inicio?: number | null
+          notas?: string | null
           timestamp_fin?: string | null
           timestamp_inicio?: string
         }
@@ -898,6 +901,7 @@ export type Database = {
           id_parte?: string
           km_fin?: number | null
           km_inicio?: number | null
+          notas?: string | null
           timestamp_fin?: string | null
           timestamp_inicio?: string
         }
@@ -2007,6 +2011,7 @@ export type Database = {
           lng: number | null
           matricula: string
           plantilla_id: string | null
+          subestado_operativo: Database["public"]["Enums"]["subestado_operativo"] | null
           tipo: Database["public"]["Enums"]["tipo_vehiculo"]
         }
         Insert: {
@@ -2017,6 +2022,7 @@ export type Database = {
           lng?: number | null
           matricula: string
           plantilla_id?: string | null
+          subestado_operativo?: Database["public"]["Enums"]["subestado_operativo"] | null
           tipo: Database["public"]["Enums"]["tipo_vehiculo"]
         }
         Update: {
@@ -2027,6 +2033,7 @@ export type Database = {
           lng?: number | null
           matricula?: string
           plantilla_id?: string | null
+          subestado_operativo?: Database["public"]["Enums"]["subestado_operativo"] | null
           tipo?: Database["public"]["Enums"]["tipo_vehiculo"]
         }
         Relationships: [
@@ -2179,11 +2186,30 @@ export type Database = {
         }
         Returns: Json
       }
+      /** Añadida en D.1.5 — migración 20260527000002_checklist360_v2_rpc.sql */
+      rpc_obtener_checklist_anterior: {
+        Args: { p_matricula: string }
+        Returns: Json
+      }
       rpc_cerrar_informe_svb: {
         Args: {
           p_datos_paciente?: Json
           p_id_doc: string
           p_mutation_uuid: string
+        }
+        Returns: Json
+      }
+      /** Añadida en D.1.6 — migración 20260527000003_schema_corrections.sql */
+      rpc_actualizar_vehiculo: {
+        Args: {
+          p_mutation_uuid: string
+          p_matricula: string
+          p_estado_destino: string
+          p_tipo_servicio?: string | null
+          p_pilot?: string | null
+          p_carry?: string | null
+          p_km_inicio?: number | null
+          p_km_fin?: number | null
         }
         Returns: Json
       }
@@ -2336,8 +2362,12 @@ export type Database = {
       condicion_tecnica:
         | "operativo"
         | "averiado_leve"
+        | "critico"
+        /** @deprecated usar 'critico' — mantenido para compat histórica */
         | "averiado_grave"
+        /** @deprecated usar 'critico' */
         | "en_taller"
+        /** @deprecated usar 'critico' */
         | "dado_de_baja"
       entidad_imputable: "sin_imputar" | "vehiculo" | "drp" | "persona"
       estado_desbloqueo: "pendiente" | "aprobada" | "rechazada" | "expirada"
@@ -2352,7 +2382,15 @@ export type Database = {
         | "Cancelado"
       estado_informe: "borrador" | "cerrado"
       estado_mochila: "disponible" | "desplegada" | "en_revision"
-      estado_operativo: "inactivo" | "activo" | "en_drp"
+      estado_operativo:
+        | "activado"
+        | "desactivado"
+        | "en_drp"
+        /** @deprecated usar 'desactivado' */
+        | "inactivo"
+        /** @deprecated usar 'activado' */
+        | "activo"
+      subestado_operativo: "en_espera" | "ruta" | "estacionado" | "alerta"
       estado_paciente_filiacion:
         | "en_espera"
         | "en_consulta"
@@ -2433,9 +2471,32 @@ export type Database = {
         | "merma"
         | "recuperacion_descuadre"
         | "merma_definitiva_residual"
-      tipo_servicio: "urgente" | "programado" | "evento" | "traslado"
+      tipo_servicio:
+        | "programado"
+        | "dispositivo"
+        | "traslado"
+        | "guardia_urgencias"
+        | "drp"
+        | "privado"
+        | "simulacro"
+        | "formacion"
+        | "sin_asignar"
+        /** @deprecated */
+        | "urgente"
+        /** @deprecated */
+        | "evento"
       tipo_turno: "T" | "L" | "V" | "B" | "C"
-      tipo_vehiculo: "A1" | "A2" | "B" | "C" | "VIR" | "Quad" | "BKP"
+      tipo_vehiculo:
+        | "A1"
+        | "A2"
+        | "B"
+        | "C"
+        | "VIR"
+        | "Quad"
+        | "Unidad Movil"
+        | "Logistica"
+        /** @deprecated usar 'Logistica' */
+        | "BKP"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2566,6 +2627,7 @@ export const Constants = {
       condicion_tecnica: [
         "operativo",
         "averiado_leve",
+        "critico",
         "averiado_grave",
         "en_taller",
         "dado_de_baja",
@@ -2584,7 +2646,8 @@ export const Constants = {
       ],
       estado_informe: ["borrador", "cerrado"],
       estado_mochila: ["disponible", "desplegada", "en_revision"],
-      estado_operativo: ["inactivo", "activo", "en_drp"],
+      estado_operativo: ["activado", "desactivado", "en_drp", "inactivo", "activo"],
+      subestado_operativo: ["en_espera", "ruta", "estacionado", "alerta"],
       estado_paciente_filiacion: [
         "en_espera",
         "en_consulta",
@@ -2672,9 +2735,21 @@ export const Constants = {
         "recuperacion_descuadre",
         "merma_definitiva_residual",
       ],
-      tipo_servicio: ["urgente", "programado", "evento", "traslado"],
+      tipo_servicio: [
+        "programado",
+        "dispositivo",
+        "traslado",
+        "guardia_urgencias",
+        "drp",
+        "privado",
+        "simulacro",
+        "formacion",
+        "sin_asignar",
+        "urgente",
+        "evento",
+      ],
       tipo_turno: ["T", "L", "V", "B", "C"],
-      tipo_vehiculo: ["A1", "A2", "B", "C", "VIR", "Quad", "BKP"],
+      tipo_vehiculo: ["A1", "A2", "B", "C", "VIR", "Quad", "Unidad Movil", "Logistica", "BKP"],
     },
   },
 } as const

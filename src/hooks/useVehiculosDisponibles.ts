@@ -29,9 +29,8 @@ export function useVehiculosDisponibles() {
       const { data, error } = await supabase
         .from('vehiculos')
         .select('matricula, tipo, condicion_tecnica')
-        .eq('estado_operativo', 'inactivo')
-        .neq('condicion_tecnica', 'dado_de_baja')
-        .neq('condicion_tecnica', 'en_taller')
+        .in('estado_operativo', ['desactivado', 'inactivo'])
+        .neq('condicion_tecnica', 'critico')
         .order('matricula')
       if (error) throw error
       return data ?? []

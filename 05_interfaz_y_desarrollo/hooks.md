@@ -422,7 +422,7 @@ type EstadoOperativo =
 type CondicionTecnica =
   | "operativo" // sin incidencias
   | "averiado_leve" // incidencia leve/moderada (Doc-7) — badge amarillo
-  | "inoperativo_critico"; // fallo grave (Doc-7) — badge rojo, confirmación requerida
+  | "critico"; // fallo grave (Doc-7) — badge rojo, confirmación requerida
 
 // Dimensión 3: tipo de servicio asignado al turno
 type TipoServicio =
@@ -444,7 +444,7 @@ type TipoServicio =
 ```
 1. Modal: "¿Activar ID_vehiculo?" — Sí | No
 
-2. Si condicion_tecnica = 'inoperativo_critico':
+2. Si condicion_tecnica = 'critico':
    FLUJO DE DESBLOQUEO EXCEPCIONAL (ver logic.md §32):
 
    A. Si vehiculoStore[id].overrideCritico = false (estado por defecto):
@@ -599,7 +599,7 @@ PASO 1 — INMEDIATO (optimismo local, con o sin red):
   - useVehiculoStore[id].condicionTecnica = condicion
   - Badge de condicion_tecnica actualizado en la UI de este terminal
 
-PASO 1.5 — TRANSICIÓN FORZADA (solo si condicion = 'inoperativo_critico'):
+PASO 1.5 — TRANSICIÓN FORZADA (solo si condicion = 'critico'):
 
   Evaluar: estadoActual = useVehiculoStore[id].estadoOperativo
   Si estadoActual ∈ { 'ruta', 'alerta' }:
@@ -619,12 +619,12 @@ PASO 1.5 — TRANSICIÓN FORZADA (solo si condicion = 'inoperativo_critico'):
            tipo:              'vehiculo_forzado_estacionado',
            id_vehiculo:       id,
            estado_anterior:   estadoActual,   // 'ruta' | 'alerta'
-           condicion_tecnica: 'inoperativo_critico',
+           condicion_tecnica: 'critico',
            timestamp:         NOW(),
            coords:            coords | null
          }
        → Recibido por todos los terminales con rol coordinación/gerencia
-         (ver logic.md §18 — fila «inoperativo_critico con estado activo»)
+         (ver logic.md §18 — fila «critico con estado activo»)
 
   Si estadoActual ∉ { 'ruta', 'alerta' }:
     No se aplica transición forzada. El badge de condicion_tecnica
@@ -636,7 +636,7 @@ PASO 2 — SEGÚN ESTADO DE RED:
   CASO A — Online:
     - INSERT Doc-7 en Supabase
     - UPDATE vehiculos SET condicion_tecnica = condicion
-    - Si condicion = 'inoperativo_critico':
+    - Si condicion = 'critico':
         → Realtime propaga el bloqueo a todos los terminales que muestran el vehículo
     - Sin entrada en Doc-8 (la avería genera Doc-7 propio)
 
@@ -644,7 +644,7 @@ PASO 2 — SEGÚN ESTADO DE RED:
     - useOfflineQueue.enqueue('doc7_create', { vehiculoId: id, condicion, ...formData })
     - El cambio de condicion_tecnica en Zustand ya es visible localmente (PASO 1)
     - La transición forzada de PASO 1.5 (si aplicó) también queda en Zustand localmente
-      y se encolará como 'vehiculo_estado_update' con { estado: 'estacionado', motivo: 'inoperativo_critico' }
+      y se encolará como 'vehiculo_estado_update' con { estado: 'estacionado', motivo: 'critico' }
 
     DIRECTIVA DE BALIZAMIENTO FÍSICO (ejecutar INMEDIATAMENTE tras encolar):
       Si formData.gravedad === 'Grave':
@@ -677,7 +677,7 @@ PASO 2 — SEGÚN ESTADO DE RED:
     - Al reconectar:
         → useOfflineQueue replaya el Doc-7 → INSERT en Supabase
         → Replaya el cambio de estado_operativo → UPDATE en Supabase
-        → Si condicion = 'inoperativo_critico':
+        → Si condicion = 'critico':
             Realtime propaga el bloqueo global a todos los terminales
         → Auditoría del acceso offline registrada (ver logic.md §25)
 ```
@@ -2126,7 +2126,7 @@ useEffect(() => {
 | `doc5_create`     | Descargo de responsabilidad                                                                                                                                                                                                                                                                                                                  |
 | `doc11_create`    | Aviso urgente                                                                                                                                                                                                                                                                                                                                |
 | `doc6_metadata`   | Metadata del gasto (stock descontado localmente por optimismo; RPC reconcilia al reconectar)                                                                                                                                                                                                                                                 |
-| `doc7_create`     | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `inoperativo_critico`. **Si `gravedad = 'Grave'` y se encola offline: modal rojo de balizamiento físico obligatorio antes de continuar (ver §3 setCondicionTecnica CASO B — Directiva de Balizamiento Físico).** |
+| `doc7_create`     | Informe de avería. `condicion_tecnica` ya aplicado optimistamente en Zustand. Al replay: Doc-7 persiste + bloqueo global si `critico`. **Si `gravedad = 'Grave'` y se encola offline: modal rojo de balizamiento físico obligatorio antes de continuar (ver §3 setCondicionTecnica CASO B — Directiva de Balizamiento Físico).** |
 | `purge_drafts`    | Borrado de borrador realizado offline. El SW ejecuta el DELETE al reconectar. Idempotente: si el draft ya no existe en Supabase, el error 404 se trata como éxito.                                                                                                                                                                           |
 
 **Operaciones NO aptas para cola:**
@@ -3744,11 +3744,13 @@ storage: createJSONStorage(() => idbStorageWithQuotaGuard),
 ```
 
 **UX cuando la purga extrema no es suficiente:**
+
 ```
 Toast de error crítico:
 "Almacenamiento del dispositivo lleno. Libera espacio para continuar operando.
  Los datos de turno actuales no han podido guardarse localmente."
 ```
+
 Adicionalmente, si el empleado tiene sesión activa, se inserta un aviso en `doc11_avisos`
 (`tipo_aviso = 'storage_critico'`, `destinatario_rol = 'coordinacion'`).
 
@@ -3936,7 +3938,7 @@ es un complemento del sistema de bandejas in-app, nunca su sustituto.
 | `tipo_aviso` | `destinatario_rol` | Título push | Cuerpo push |
 |---|---|---|---|
 | `terminal_sin_galleta` | `coordinacion` | "⚠️ Terminal sin galleta activa" | "Un terminal ha quedado inaccesible. Acción requerida." |
-| `inoperativo_critico` | `coordinacion`, `responsable_flota` | "🚨 Vehículo inoperativo crítico" | "Un vehículo requiere intervención inmediata." |
+| `critico` | `coordinacion`, `responsable_flota` | "🚨 Vehículo inoperativo crítico" | "Un vehículo requiere intervención inmediata." |
 | `rotura_stock` | `logistica`, `responsable_logistica` | "📦 Rotura de stock" | "Material agotado en inventario. Revisar logística." |
 | `storage_critico` | `coordinacion` | "💾 Almacenamiento lleno" | "Un terminal tiene el almacenamiento lleno. Datos offline en riesgo." |
 
@@ -3993,7 +3995,7 @@ CREATE POLICY "propietario_o_admin" ON push_subscriptions
 // hooks/usePushNotifications.ts
 const CRITICAL_TIPOS = [
   'terminal_sin_galleta',
-  'inoperativo_critico',
+  'critico',
   'rotura_stock',
   'storage_critico',
 ] as const
@@ -4101,11 +4103,11 @@ Disparada por Database Webhook de Supabase en INSERT a `doc11_avisos`.
 // supabase/functions/ef-enviar-push-critico/index.ts
 import webpush from 'npm:web-push@3'
 
-const CRITICAL_TIPOS = ['terminal_sin_galleta', 'inoperativo_critico', 'rotura_stock', 'storage_critico']
+const CRITICAL_TIPOS = ['terminal_sin_galleta', 'critico', 'rotura_stock', 'storage_critico']
 
 const PUSH_TEXTOS: Record<string, { titulo: string; cuerpo: string }> = {
   terminal_sin_galleta: { titulo: '⚠️ Terminal sin galleta activa',  cuerpo: 'Un terminal ha quedado inaccesible. Acción requerida.' },
-  inoperativo_critico:  { titulo: '🚨 Vehículo inoperativo crítico', cuerpo: 'Un vehículo requiere intervención inmediata.' },
+  critico:  { titulo: '🚨 Vehículo inoperativo crítico', cuerpo: 'Un vehículo requiere intervención inmediata.' },
   rotura_stock:         { titulo: '📦 Rotura de stock',              cuerpo: 'Material agotado en inventario. Revisar logística.' },
   storage_critico:      { titulo: '💾 Almacenamiento lleno',         cuerpo: 'Un terminal tiene el almacenamiento lleno. Datos offline en riesgo.' },
 }

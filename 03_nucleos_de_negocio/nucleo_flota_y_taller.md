@@ -32,13 +32,13 @@
 ## Flujo Doc-7 criticidad Grave
 
 * Al guardar un Doc-7 con nivel `Grave`:
-  1. El vehículo afectado cambia automáticamente `condicion_tecnica → 'inoperativo_critico'`.
+  1. El vehículo afectado cambia automáticamente `condicion_tecnica → 'critico'`.
   2. Se genera un Doc-11 automático dirigido a `flota` y `coordinación`
      con los datos del Doc-7.
 * Al guardar un Doc-7 con nivel `Leve` o `Moderado`:
   * `condicion_tecnica → 'averiado_leve'` (si no había ya un Doc-7 `Grave` activo).
   * Si ya existía un Doc-7 `Grave` activo para ese vehículo, el badge permanece en
-    `inoperativo_critico` — el nuevo Doc-7 queda registrado pero no degrada la condición.
+    `critico` — el nuevo Doc-7 queda registrado pero no degrada la condición.
 * `timestamp_incidencia` registrado automáticamente al guardar.
 * `timestamp_cambio_estado` registrado en cada transición:
   `Reportada_Pendiente` → `En_Proceso_Taller` → `Reparada_Operativa`.
@@ -53,7 +53,7 @@ de la criticidad máxima de todos los Doc-7 que aún permanecen activos para ese
 |---|---|
 | Ningún Doc-7 activo | `operativo` |
 | Solo `Leve` / `Moderado` | `averiado_leve` |
-| Al menos uno `Grave` | `inoperativo_critico` (sin cambio) |
+| Al menos uno `Grave` | `critico` (sin cambio) |
 
 Esto garantiza que reparar un fallo secundario no oculte un fallo primario grave.
 Ver `logic.md §40` para el trigger SQL completo.

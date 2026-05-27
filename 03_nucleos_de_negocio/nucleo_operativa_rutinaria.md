@@ -14,7 +14,7 @@
   * Al pulsar una fila → expande la Zona inferior para ese vehículo.
   * `condicion_tecnica` como badge secundario junto a cada fila:
     * `averiado_leve` → badge amarillo; no bloquea la activación.
-    * `inoperativo_critico` → badge rojo; la activación requiere confirmación
+    * `critico` → badge rojo; la activación requiere confirmación
       explícita de `gerencia` o `coordinación`.
 
   > **Nota de layout:** `selector_vehiculos` ya no forma parte de
@@ -43,10 +43,10 @@
   * **Dimensión 2 — `condicion_tecnica`** (badge secundario, no selector manual):
     * `operativo`: sin incidencias.
     * `averiado_leve`: incidencia leve/moderada (Doc-7). Badge informativo amarillo.
-    * `inoperativo_critico`: fallo grave (Doc-7). Badge rojo. Activación
+    * `critico`: fallo grave (Doc-7). Badge rojo. Activación
       requiere confirmación explícita de `gerencia` o `coordinación`.
       **Transición forzada:** si el vehículo se encuentra en `ruta` o `alerta`
-      cuando la condición muta a `inoperativo_critico`, el sistema fuerza
+      cuando la condición muta a `critico`, el sistema fuerza
       automáticamente `estado_operativo → estacionado` sin intervención manual.
       Se capturan coordenadas GPS y se emite aviso de criticidad alta al canal
       de coordinación. Ver `hooks.md §3 setCondicionTecnica PASO 1.5` y
@@ -54,7 +54,7 @@
 
   * **Flujo de activación** (`desactivado → en_espera`):
     1. Modal: "¿Activar `ID_vehiculo`?" — Sí | No.
-    2. Si `condicion_tecnica = inoperativo_critico`:
+    2. Si `condicion_tecnica = critico`:
        * **Bloqueo estricto.** La activación directa está vedada.
        * Botón disponible: "Solicitar Desbloqueo Excepcional".
          → Envía notificación a bandeja de coordinación con opción Autorizar | Denegar.

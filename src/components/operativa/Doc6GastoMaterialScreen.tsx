@@ -123,7 +123,7 @@ export function Doc6GastoMaterialScreen() {
         </div>
         <h2 className="font-display text-lg font-bold leading-tight">Doc-6 — Gasto de material</h2>
         <p className="font-body text-base font-light text-muted-foreground">
-          Necesitas un vehículo activo. Ve a Operativa → Vehículos para activarlo.
+          No hay turno activo. Inicia un turno desde Operativa → Vehículos.
         </p>
       </div>
     )

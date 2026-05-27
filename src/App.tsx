@@ -9,6 +9,9 @@ import { VisualInfoHome } from '@/components/layout/VisualInfoHome'
 import { PresenciaScreen } from '@/components/operativa/PresenciaScreen'
 import { VehiculosScreen } from '@/components/operativa/VehiculosScreen'
 import { Doc6GastoMaterialScreen } from '@/components/operativa/Doc6GastoMaterialScreen'
+import { Doc10EnvioMaterialScreen } from '@/components/operativa/Doc10EnvioMaterialScreen'
+import { Doc8ParteTrabajoScreen } from '@/components/operativa/Doc8ParteTrabajoScreen'
+import { Checklist360Screen } from '@/components/operativa/Checklist360Screen'
 import { useBlackColumn } from '@/contexts/BlackColumnContext'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 import { findNode } from '@/components/layout/black-column-nav'
@@ -107,6 +110,18 @@ function HomeArea() {
 
   if (selectedLeafId === 'doc6') {
     return <Doc6GastoMaterialScreen />
+  }
+
+  if (selectedLeafId === 'doc10_op') {
+    return <Doc10EnvioMaterialScreen />
+  }
+
+  if (selectedLeafId === 'doc8') {
+    return <Doc8ParteTrabajoScreen />
+  }
+
+  if (selectedLeafId === 'chk360') {
+    return <Checklist360Screen />
   }
 
   return <LeafPlaceholder leafId={selectedLeafId} />

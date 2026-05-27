@@ -119,7 +119,7 @@
       y alertas críticas desde cualquier terminal).
     * **`solicitud_desbloqueo_excepcional`** — notificación de alta prioridad
       generada cuando un pilot intenta activar un vehículo con
-      `condicion_tecnica = inoperativo_critico`.
+      `condicion_tecnica = critico`.
       Contenido: ID_vehiculo, ID_piloto_solicitante, motivo_urgencia, timestamp.
       Acciones disponibles directamente en la bandeja:
       * **Autorizar** → Edge Function `conceder_desbloqueo`: inyecta
@@ -131,7 +131,7 @@
       (el pilot deberá re-solicitarla si sigue siendo necesario).
       Ver `logic.md §32` para el flujo completo.
     * Avisos automáticos del sistema (ver `logic.md §18`): detención forzada de
-      vehículo por `inoperativo_critico`, DRP no activado a la hora programada, etc.
+      vehículo por `critico`, DRP no activado a la hora programada, etc.
     * Mensajes internos entre roles *(a definir en detalle
       cuando se implemente el sistema de mensajería)*.
   * Flujo de estados y acciones: ver `componentes.md → flujos_transicion`.
@@ -171,7 +171,7 @@
     * `ID_vehiculo` y `matricula`.
     * `ID_nombre` del pilot y carry activos (o "Sin pilot" / "Sin carry" si no aplica).
     * Badge `estado_operativo`: `en_espera` | `activado` | `ruta` | `estacionado` | `alerta`.
-    * Badge `condicion_tecnica`: `operativo` | `averiado_leve` | `inoperativo_critico`.
+    * Badge `condicion_tecnica`: `operativo` | `averiado_leve` | `critico`.
     * Coordenadas GPS (lat, lon) con timestamp del último ping o del historial
       (ver `logic.md §29` para el mecanismo de obtención).
   * **Acciones por tarjeta:**

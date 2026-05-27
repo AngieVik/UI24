@@ -33,9 +33,8 @@ export function useCheckin() {
       const { data, error } = await supabase
         .from('vehiculos')
         .select('*')
-        .neq('condicion_tecnica', 'dado_de_baja')
-        .neq('condicion_tecnica', 'en_taller')
-        .eq('estado_operativo', 'inactivo')
+        .neq('condicion_tecnica', 'critico')
+        .in('estado_operativo', ['desactivado', 'inactivo'])
         .order('matricula')
 
       if (error) throw error
