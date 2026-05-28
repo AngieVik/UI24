@@ -2,51 +2,14 @@ import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, FlaskConical, WifiOff } from 'lucide-react'
+import { Eye, EyeOff, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
 import { useLoginFlow } from '@/hooks/useLoginFlow'
-import { useAuthStore } from '@/stores/useAuthStore'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import logoUrl from '@/assets/logo.svg'
-
-/* ─────────────────────────────────────────────────────────────────────────
- *  Bypass de desarrollo — SOLO se renderiza si `import.meta.env.DEV === true`.
- *  Inyecta una sesión falsa en el store para poder navegar la UI sin tocar
- *  Supabase. Útil mientras reconstruimos el frontend sin depender de red.
- *  Borrar este bloque entero al cerrar Fase B.
- * ───────────────────────────────────────────────────────────────────────── */
-function buildFakeSession(id_nombre = 'admin', rol = 'gerencia') {
-  const nowSec = Math.floor(Date.now() / 1000)
-  return {
-    access_token:  'dev-bypass-token',
-    refresh_token: 'dev-bypass-refresh',
-    token_type:    'bearer',
-    expires_in:    3600,
-    expires_at:    nowSec + 3600,
-    user: {
-      id: '00000000-0000-0000-0000-000000000dev',
-      aud: 'authenticated',
-      role: 'authenticated',
-      email: `${id_nombre}@u24.com`,
-      // app_metadata es la fuente de verdad — el hook real inyecta aquí.
-      app_metadata: {
-        provider: 'email',
-        providers: ['email'],
-        rol,
-        id_nombre,
-      },
-      user_metadata: { id_nombre, rol },
-      identities: [],
-      created_at: new Date(0).toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any
-}
 
 const schema = z.object({
   identificador: z.string().min(1, 'Identificador requerido'),
@@ -188,31 +151,6 @@ export function LoginScreen() {
               </Button>
             </form>
 
-            {/* ── Bypass de desarrollo — eliminar al cerrar Fase B ── */}
-            {import.meta.env.DEV && (
-              <>
-                <div className="flex items-center gap-2 pt-1">
-                  <Separator className="flex-1" />
-                  <span className="font-body text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Solo desarrollo
-                  </span>
-                  <Separator className="flex-1" />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-dashed"
-                  onClick={() => useAuthStore.getState().setSession(buildFakeSession('admin'))}
-                >
-                  <FlaskConical aria-hidden="true" className="size-4" />
-                  Acceso dev (saltar Supabase)
-                </Button>
-                <p className="font-body text-[11px] font-light text-muted-foreground">
-                  Inyecta una sesión local como <code className="font-medium text-foreground">admin</code> sin
-                  llamar a Supabase. Útil para navegar la UI sin red. No persiste tras cerrar sesión.
-                </p>
-              </>
-            )}
           </CardContent>
         </Card>
 

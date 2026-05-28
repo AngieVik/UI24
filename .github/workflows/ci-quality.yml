@@ -113,3 +113,14 @@ jobs:
         env:
           VITE_SUPABASE_URL: http://localhost:54321
           VITE_SUPABASE_ANON_KEY: placeholder-ci-key
+
+      - name: Informe de tamaño del bundle
+        run: |
+          echo "📦 Chunks JS generados:"
+          find dist/assets -name "*.js" -not -name "*.map" \
+            -exec ls -lh {} \; | sort -k5 -h
+          TOTAL=$(find dist/assets -name "*.js" -not -name "*.map" \
+            | xargs wc -c | tail -1 | awk '{print $1}')
+          echo ""
+          echo "Total JS sin map: $((TOTAL / 1024)) KB"
+          echo "(Límite: 3072 KB total · 800 KB entry chunk — verificado por bundleSizeGuard en Vite)"

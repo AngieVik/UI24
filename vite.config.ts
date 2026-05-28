@@ -1,13 +1,47 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
+function bundleSizeGuard(): Plugin {
+  const MAX_TOTAL = 3 * 1024 * 1024  // 3 MB
+  const MAX_ENTRY = 800 * 1024        // 800 KB
+
+  return {
+    name: 'u24-bundle-size-guard',
+    generateBundle(_opts, bundle) {
+      let totalBytes = 0
+      let maxEntryBytes = 0
+
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== 'chunk') continue
+        const bytes = Buffer.byteLength(chunk.code, 'utf8')
+        totalBytes += bytes
+        if (chunk.isEntry) maxEntryBytes = Math.max(maxEntryBytes, bytes)
+      }
+
+      if (totalBytes > MAX_TOTAL) {
+        this.error(
+          `Bundle total ${(totalBytes / 1024 / 1024).toFixed(2)} MB supera el límite de 3 MB. ` +
+          'Añade más manualChunks o elimina dependencias.'
+        )
+      }
+      if (maxEntryBytes > MAX_ENTRY) {
+        this.error(
+          `Entry chunk ${(maxEntryBytes / 1024).toFixed(0)} KB supera el límite de 800 KB. ` +
+          'Extrae más código del entry point con manualChunks.'
+        )
+      }
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    bundleSizeGuard(),
     VitePWA({
       registerType: 'autoUpdate',
       // Genera el SW con Workbox durante el build
