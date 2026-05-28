@@ -16,10 +16,22 @@ interface AuthState {
    * Rol del usuario — leído de session.user.app_metadata.rol (inyectado
    * por el Custom Access Token Hook). `null` mientras no haya sesión.
    * El valor `'sin_rol'` significa que el JWT no trae rol (usuario sin
-   * ficha). `'inactivo'` significa que su ficha tiene activo=false.
+   * ficha ni galleta de emergencia). `'inactivo'` significa que su ficha
+   * tiene activo=false.
+   *
+   * Fallback de roles (regla aprobada Fase D — correcciones críticas):
+   *   - Sesión vía galleta/PIN de emergencia sin rol explícito en BD → `invitado`
+   *     (puede ver Check-in | Check-out, nada más).
+   *   - Sin check-in, sin cookie y sin rol en BD → `sin_rol`
+   *     (pantalla en blanco, ningún nodo visible).
    */
   rol: Rol | null
   setSession: (session: Session | null) => void
+  /**
+   * Sobreescribe el rol derivado del JWT. Úsalo SOLO cuando el flujo de
+   * acceso de emergencia necesita elevar `sin_rol` a `invitado`.
+   */
+  overrideRol: (rol: Rol) => void
   clearSession: () => void
 }
 
@@ -85,6 +97,10 @@ export const useAuthStore = create<AuthState>()(
           ejecutorId: extractEjecutorId(session),
           rol:        extractRol(session),
         })
+      },
+
+      overrideRol(rol) {
+        set({ rol })
       },
 
       clearSession() {

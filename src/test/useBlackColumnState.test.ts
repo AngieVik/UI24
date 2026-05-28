@@ -23,19 +23,29 @@ describe('useBlackColumnState — inicial', () => {
     expect(ids).toEqual(['checkin'])
   })
 
-  it('rol sin_rol no ve ni hojas fijas ni hijos', () => {
+  it('rol sin_rol no ve ni hojas fijas ni hijos — pantalla en blanco', () => {
     const { result } = renderHook(() => useBlackColumnState({ rol: 'sin_rol' }))
     expect(result.current.fixedLeaves).toHaveLength(0)
     expect(result.current.visibleChildren).toHaveLength(0)
   })
+
+  it('rol invitado ve la hoja fija Check-in pero no grupos operativos', () => {
+    const { result } = renderHook(() => useBlackColumnState({ rol: 'invitado' }))
+    const fixedIds = result.current.fixedLeaves.map((l) => l.id)
+    expect(fixedIds).toContain('checkin')
+    // Los grupos operativos (drp, logistica, rrhh…) no incluyen invitado
+    const treeIds = result.current.visibleChildren.map((n) => n.id)
+    expect(treeIds).not.toContain('operativa')
+    expect(treeIds).not.toContain('drp')
+  })
 })
 
 describe('useBlackColumnState — navigateInto', () => {
-  it('entrar a un grupo: push al path, expanded=true', () => {
+  it('entrar a un grupo: push al path, usuario controla expanded manualmente', () => {
     const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
     act(() => result.current.navigateInto('operativa'))
     expect(result.current.currentPath).toEqual(['operativa'])
-    expect(result.current.expanded).toBe(true)
+    expect(result.current.expanded).toBe(false) // navigateInto NO auto-expande
     expect(result.current.canGoBack).toBe(true)
     expect(result.current.currentNodeId).toBe('operativa')
   })
@@ -45,7 +55,7 @@ describe('useBlackColumnState — navigateInto', () => {
     act(() => result.current.navigateInto('operativa'))
     act(() => result.current.navigateInto('op_docs_turno'))
     expect(result.current.currentPath).toEqual(['operativa', 'op_docs_turno'])
-    expect(result.current.expanded).toBe(true)
+    expect(result.current.expanded).toBe(false) // navigateInto NO auto-expande
   })
 
   it('intentar entrar a una hoja terminal NO modifica el estado', () => {

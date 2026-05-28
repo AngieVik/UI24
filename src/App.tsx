@@ -48,14 +48,12 @@ import { DescuadresScreen } from '@/components/logistica/DescuadresScreen'
 import { StockScreen } from '@/components/logistica/StockScreen'
 import { MovimientosScreen } from '@/components/logistica/MovimientosScreen'
 import { Doc9EntradaAlmacenScreen } from '@/components/logistica/Doc9EntradaAlmacenScreen'
-import { BandejaLogisticaScreen } from '@/components/logistica/BandejaLogisticaScreen'
 
 // ── D.5 Flota ──────────────────────────────────────────────────────────────
 import { IncidenciasScreen } from '@/components/flota/IncidenciasScreen'
 import { VisorMantenimientoScreen } from '@/components/flota/VisorMantenimientoScreen'
 import { MantenimientoFlotaScreen } from '@/components/flota/MantenimientoFlotaScreen'
 import { VehiculosMetadataScreen } from '@/components/flota/VehiculosMetadataScreen'
-import { BandejaFlotaScreen } from '@/components/flota/BandejaFlotaScreen'
 
 // ── D.6 Coordinación ───────────────────────────────────────────────────────
 import { ModuloEmergenciasScreen } from '@/components/coordinacion/ModuloEmergenciasScreen'
@@ -64,7 +62,6 @@ import { VisorSeguimientoScreen } from '@/components/coordinacion/VisorSeguimien
 import { RbacScreen } from '@/components/coordinacion/RbacScreen'
 import { ForzarCheckoutScreen } from '@/components/coordinacion/ForzarCheckoutScreen'
 import { CambioPasswordScreen } from '@/components/coordinacion/CambioPasswordScreen'
-import { BandejaCoordScreen } from '@/components/coordinacion/BandejaCoordScreen'
 
 // ── D.7 RRHH ───────────────────────────────────────────────────────────────
 import { FichasEmpleadosScreen } from '@/components/rrhh/FichasEmpleadosScreen'
@@ -74,7 +71,9 @@ import { Doc12VacacionesScreen } from '@/components/rrhh/Doc12VacacionesScreen'
 import { ComunicacionScreen } from '@/components/rrhh/ComunicacionScreen'
 import { ServiciosScreen } from '@/components/rrhh/ServiciosScreen'
 import { RepositorioScreen } from '@/components/rrhh/RepositorioScreen'
-import { BandejaRRHHScreen } from '@/components/rrhh/BandejaRRHHScreen'
+
+// ── Modal overlays (opensModal=true) ──────────────────────────────────────
+import { BandejaModal, type BandejaCanal } from '@/components/layout/BandejaModal'
 
 // ── D.8 Tablón + Buzón ─────────────────────────────────────────────────────
 import { TablonCentralScreen } from '@/components/tablonBuzon/TablonCentralScreen'
@@ -208,7 +207,7 @@ function HomeArea() {
   if (selectedLeafId === 'drp_est') return <EstadosDrpScreen />
   if (selectedLeafId === 'drp_op')  return <OperativaDrpScreen />
   if (selectedLeafId === 'drp_log') return <LogisticaDrpScreen />
-  if (selectedLeafId === 'drp_res') return <ResumenDrpScreen />
+  // drp_res → opensModal=true, se abre en ModalArea como overlay. No ruta aquí.
 
   // ── D.3 Módulos especiales ─────────────────────────────────────────────────
   if (selectedLeafId === 'mod_psa')       return <ModuloPsaScreen />
@@ -230,9 +229,9 @@ function HomeArea() {
   // ── D.4 Movimientos ────────────────────────────────────────────────────────
   if (selectedLeafId === 'log_mov_ultimos')  return <MovimientosScreen vista="ultimos" />
   if (selectedLeafId === 'log_mov_transito') return <MovimientosScreen vista="transito" />
-  if (selectedLeafId === 'doc9')             return <Doc9EntradaAlmacenScreen />
-  if (selectedLeafId === 'doc10_log')        return <Doc10EnvioMaterialScreen />  // mismo componente
-  if (selectedLeafId === 'log_bandeja')      return <BandejaLogisticaScreen />
+  if (selectedLeafId === 'doc9')      return <Doc9EntradaAlmacenScreen />
+  if (selectedLeafId === 'doc10_log') return <Doc10EnvioMaterialScreen />  // mismo componente
+  // log_bandeja → opensModal=true, se abre en ModalArea. No ruta aquí.
 
   // ── D.5 Incidencias ────────────────────────────────────────────────────────
   if (selectedLeafId === 'flota_inc_abiertas') return <IncidenciasScreen vista="abiertas" />
@@ -256,7 +255,7 @@ function HomeArea() {
   if (selectedLeafId === 'fmeta_docs')    return <VehiculosMetadataScreen vista="docs" />
   if (selectedLeafId === 'fmeta_km')      return <VehiculosMetadataScreen vista="km" />
   if (selectedLeafId === 'fmeta_eventos') return <VehiculosMetadataScreen vista="eventos" />
-  if (selectedLeafId === 'flota_bandeja') return <BandejaFlotaScreen />
+  // flota_bandeja → opensModal=true, se abre en ModalArea. No ruta aquí.
 
   // ── D.6 Coordinación — emergencias ────────────────────────────────────────
   if (selectedLeafId === 'emerg_galleta_pq') return <ModuloEmergenciasScreen vista="pq" />
@@ -266,9 +265,9 @@ function HomeArea() {
   if (selectedLeafId === 'coord_dispositivos') return <DispositivosValidadosScreen />
   if (selectedLeafId === 'coord_visor')        return <VisorSeguimientoScreen />
   if (selectedLeafId === 'coord_rbac')         return <RbacScreen />
-  if (selectedLeafId === 'coord_force_chk')    return <ForzarCheckoutScreen />
-  if (selectedLeafId === 'coord_password')     return <CambioPasswordScreen />
-  if (selectedLeafId === 'coord_bandeja')      return <BandejaCoordScreen />
+  if (selectedLeafId === 'coord_force_chk') return <ForzarCheckoutScreen />
+  if (selectedLeafId === 'coord_password')  return <CambioPasswordScreen />
+  // coord_bandeja → opensModal=true, se abre en ModalArea. No ruta aquí.
 
   // ── D.7 RRHH — personal ───────────────────────────────────────────────────
   if (selectedLeafId === 'rrhh_fichas') return <FichasEmpleadosScreen />
@@ -285,7 +284,7 @@ function HomeArea() {
 
   // ── D.7 RRHH — repositorio + bandeja ─────────────────────────────────────
   if (selectedLeafId === 'rrhh_repositorio') return <RepositorioScreen />
-  if (selectedLeafId === 'rrhh_bandeja')     return <BandejaRRHHScreen />
+  // rrhh_bandeja → opensModal=true, se abre en ModalArea. No ruta aquí.
 
   // ── D.8 Tablón central + Buzón interno ────────────────────────────────────
   if (selectedLeafId === 'tablon') return <TablonCentralScreen />
@@ -298,29 +297,43 @@ function HomeArea() {
 /* ─────────────────────────────────────────────────────────────────────────
  *  ModalArea — renderiza hojas con opensModal=true como Dialog overlay.
  *  El contenido del home_area permanece detrás, sin ser reemplazado.
+ *
+ *  Bandejas → BandejaModal (self-contained, max-w-md).
+ *  drp_res  → Dialog genérico con ResumenDrpScreen dentro.
  * ───────────────────────────────────────────────────────────────────────── */
+const BANDEJA_CANAL: Partial<Record<string, BandejaCanal>> = {
+  log_bandeja:   'logistica',
+  flota_bandeja: 'flota',
+  coord_bandeja: 'coordinacion',
+  rrhh_bandeja:  'rrhh',
+}
+
 function ModalArea() {
   const { modalLeafId, closeModal } = useBlackColumn()
 
-  const node  = modalLeafId ? findNode(modalLeafId) : null
-  const label = node?.label ?? ''
+  if (!modalLeafId) return null
 
-  return (
-    <Dialog open={!!modalLeafId} onOpenChange={(open) => { if (!open) closeModal() }}>
-      <DialogContent className="max-h-[90dvh] max-w-screen-lg overflow-y-auto p-0">
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle className="font-display text-lg font-bold">{label}</DialogTitle>
-        </DialogHeader>
-        <div className="overflow-y-auto">
-          {modalLeafId === 'drp_res'      && <ResumenDrpScreen />}
-          {modalLeafId === 'log_bandeja'  && <BandejaLogisticaScreen />}
-          {modalLeafId === 'flota_bandeja' && <BandejaFlotaScreen />}
-          {modalLeafId === 'coord_bandeja' && <BandejaCoordScreen />}
-          {modalLeafId === 'rrhh_bandeja' && <BandejaRRHHScreen />}
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
+  const canal = BANDEJA_CANAL[modalLeafId]
+  if (canal) {
+    return <BandejaModal open onClose={closeModal} canal={canal} />
+  }
+
+  if (modalLeafId === 'drp_res') {
+    return (
+      <Dialog open onOpenChange={(v) => { if (!v) closeModal() }}>
+        <DialogContent className="max-h-[90dvh] max-w-screen-lg overflow-y-auto p-0">
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle className="font-display text-lg font-bold">Resumen DRP</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto">
+            <ResumenDrpScreen />
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return null
 }
 
 function LeafPlaceholder({ leafId }: { leafId: string }) {

@@ -697,9 +697,9 @@ Lista viva. Se cierra cuando la fase responsable la resuelve.
 | D-12 | BD/Seguridad | Sprint 14 hardening revocó GRANTs masivamente a TODOS los roles (authenticated, anon Y service_role): solo quedaron TRUNCATE/REFERENCES/TRIGGER. Bloqueaba SELECT desde el cliente Y desde Edge Functions con service_role. Restauradas progresivamente: Fase C en 9 tablas para authenticated; Fase D.1.1d.1 service_role SELECT/INSERT/UPDATE/DELETE en fichas_empleados, galletas_terminales, presencias_activas_terminal. Auditoría completa pendiente. | Fase E (previo a despliegue) |
 | D-13 | BD/Seguridad | `presencias_activas_terminal` y `activaciones_vehiculo` tenían RLS enabled SIN policies (denegando todo). Migración `20260525000002_rls_policies_presencias_activaciones.sql` añadió SELECT permisivo a authenticated en ambas. Las policies son intencionalmente liberales para Fase C; auditar el resto de tablas y endurecer si el modelo de amenaza lo pide. | Fase E (previo a despliegue) |
 | D-14 | **BD — CRÍTICO** | Migraciones `20260527000003_enum_fixes.sql` (enum `estado_operativo`, `condicion_tecnica`, `tipo_vehiculo`, `rpc_actualizar_vehiculo`) y `20260527000004_turno_shift.sql` (hace `doc8_partes_trabajo.id_activacion` nullable, añade `id_nombre TEXT NOT NULL`, crea `rpc_abrir_turno` / `rpc_cerrar_turno`) **NO han sido aplicadas al Supabase real**. Hasta que no se apliquen con `supabase db push` o SQL Editor, ningún flujo de runtime que dependa del turno, el Doc-8 o la activación de vehículo funcionará correctamente. | Aplicar antes de cualquier prueba E2E o despliegue |
-| D-15 | BD | `ServiciosScreen` (`rrhh_servicios`) usa tabla `servicios_planificados` y RPCs `rpc_planificar_servicio` / `rpc_cancelar_servicio` que **no existen en el schema actual**. Crear migración con tabla + RPCs antes de usar la pantalla en runtime. | Fase E (previo a despliegue) |
-| D-16 | BD | `RepositorioScreen` (`rrhh_repositorio`) usa tabla `repositorio_documentos` que **no existe en el schema actual**. Crear migración con la tabla (id, nombre, categoria, descripcion, url, version, fecha_alta, activo) antes de usar la pantalla en runtime. | Fase E (previo a despliegue) |
-| D-17 | UX | Los leafIds con `opensModal: true` en `black-column-nav.ts` (`log_bandeja`, `flota_bandeja`, `coord_bandeja`, `rrhh_bandeja`, `drp_res`) actualmente renderizan como pantalla completa en `HomeArea`. El componente `BandejaModal` está listo pero no está integrado como overlay flotante. Implementar: detectar `opensModal` en `HomeArea`, conservar la pantalla anterior visible debajo, y abrir el `BandejaModal` / `ResumenDrpScreen` sobre ella. | Fase E o Fase F |
+| D-15 | BD | `ServiciosScreen` (`rrhh_servicios`) usa tabla `servicios_planificados` y RPCs `rpc_planificar_servicio` / `rpc_cancelar_servicio` que **no existen en el schema actual**. Crear migración con tabla + RPCs antes de usar la pantalla en runtime. | Fase F |
+| D-16 | BD | `RepositorioScreen` (`rrhh_repositorio`) usa tabla `repositorio_documentos` que **no existe en el schema actual**. Crear migración con la tabla (id, nombre, categoria, descripcion, url, version, fecha_alta, activo) antes de usar la pantalla en runtime. | Fase F |
+| D-17 | UX **[Fase E — PRIORITARIO]** | Los leafIds con `opensModal: true` en `black-column-nav.ts` (`log_bandeja`, `flota_bandeja`, `coord_bandeja`, `rrhh_bandeja`, `drp_res`) actualmente renderizan como pantalla completa en `HomeArea`. El componente `BandejaModal` está listo pero no está integrado como overlay flotante. Implementar: detectar `opensModal` en `HomeArea`, conservar la pantalla anterior visible debajo, y abrir el `BandejaModal` / `ResumenDrpScreen` sobre ella. Debe resolverse antes de escribir los E2E de Playwright. | Fase E |
 
 ---
 
@@ -708,27 +708,10 @@ Lista viva. Se cierra cuando la fase responsable la resuelve.
 Si la usuaria abre una nueva sesión con otro agente, este es el bloque a
 copiar y pegar al inicio del prompt:
 
-# Soy AngieVik, trabajo en U24. Lee en este orden
+# Soy AngieVik, trabajo en U24
 
-> 1. `01_arquitectura_y_reglas/rules.md` (v2.1, fuente de verdad técnica).
-> 2. `05_interfaz_y_desarrollo/diseño_chupiwachi.md` (fuente de verdad visual).
-> 3. `05_interfaz_y_desarrollo/mapeo_visual_ui.md` (mapeado tecinco de la app).
-> 4. `06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md` (este documento).
-*Acabamos de terminar la Fase D. de reconstrucción del frontend.
-    * Antes de empezar la fase E, hazme las pregunta que necesites hasta estar 90% seguro de el objetivo antes de empezar.
-    * No tocar la BD ni hacer despliegues sin permiso explícito.
-
-*Necesito que apliques las siguientes correcciones críticas de RBAC, Layout y CSS.
-    1. SEGURIDAD Y RBAC (Fallback de Roles):
-        -Modifica la lógica de roles (en el custom_access_token_hook de Supabase y/o en el store del frontend).
-        - Si un usuario accede mediante una galleta/token de emergencia (sin rol explícito en BD), se le debe asignar automáticamente el rol 'invitado'. En el mapa de navegación (`filterByRol`), el rol 'invitado' SÍ debe tener permisos para ver la sección fija de "Check-in | Check-out".
-        - Si un usuario logra entrar sin check-in, sin cookie y sin rol en BD, la última barrera de seguridad debe autoasignarle el rol 'sin_rol'. Este rol no tiene permisos sobre ningún nodo del árbol, devolviendo una pantalla en blanco sin opciones.
-    2. LAYOUT (Visor DRP y Modales):
-       - El componente `Visor DRP` ya no debe ser un modal superpuesto. Modifica el árbol de navegación y su lógica para que sea un renderizado `[in-place]` inyectado directamente en el `home_area`.
-       - Actualiza las reglas del sistema: Borra la norma anterior sobre modales para estas vistas. A partir de ahora, los modales superpuestos quedan estrictamente restringidos a mensajes de confirmación o acciones que lo requieran expresamente.
-    3. DISEÑO FLUIDO ESTRICTO:
-       - Revisa el sistema de tokens (`index.css` o configuración de Tailwind). Garantiza que tanto las fuentes (variables `--text-*`) como los espaciados interactivos (`gap`, `padding`) muten y escalen de forma estrictamente proporcional al viewport del terminal móvil o tablet.
-       - Usa `clamp()` basado en la granularidad de breakpoints (Base `<640px` hasta `2xl`). Está terminantemente prohibido que haya saltos bruscos de layout al redimensionar.
+Lee tu archivo `.claude/CLAUDE.md` para tener el contexto de la Fase ` ` que acabamos de terminar.
+Directiva estricta: No tocar la BD ni hacer despliegues de migraciones sin mi permiso explícito.
 
 ---
 

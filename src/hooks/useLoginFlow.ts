@@ -118,6 +118,11 @@ export function useLoginFlow() {
         tipoGalleta: data.tipo_galleta ?? 'temporal',
         fingerprint,
       })
+      // Fallback RBAC: acceso por PIN de emergencia sin rol explícito en BD
+      // → invitado (puede ver Check-in | Check-out, nada más).
+      if (useAuthStore.getState().rol === 'sin_rol') {
+        useAuthStore.getState().overrideRol('invitado')
+      }
       setState((s) => ({ ...s, isLoading: false }))
       return true
     } catch {

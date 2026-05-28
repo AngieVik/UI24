@@ -1,8 +1,8 @@
 # Checklist de Despliegue a Producción — U24
 
 > Ejecutar en orden estricto. Cada paso debe completarse antes de continuar.
-> Responsable: técnico de guardia + gerencia.
-> Fecha esperada: cuando Sprint 14 esté en verde en CI.
+
+> Fecha esperada:
 
 ---
 

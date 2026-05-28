@@ -182,6 +182,16 @@ Tipo de renderizado:
 - Parte superior: lista completa de la flota (`selector_vehiculos`) con ID, matrícula, badge de `estado_operativo` y badge de `condicion_tecnica`.
 - Al seleccionar un vehículo de la lista: se expande debajo el panel `selector_estados_ID_vehiculo`.
 
+### 4.6 Política estricta de modales (vigente desde Fase D — correcciones críticas)
+
+> **Regla:** Los modales superpuestos quedan estrictamente restringidos a:
+> 1. **Mensajes de confirmación** (alertas destructivas, diálogos `AlertDialog`).
+> 2. **Acciones explícitamente modales** anotadas con `opensModal: true` en `black-column-nav.ts` (bandejas de entrada) o marcadas como tales en este documento (docs DRP desde `visual_info_drp`).
+>
+> **Cualquier vista de contenido — incluyendo el Visor DRP (`drp_vis`) — se renderiza siempre como `in-place` en el `home_area`.** El Visor DRP nunca es un modal superpuesto; lo fue en un diseño anterior que queda derogado.
+>
+> Las bandejas de entrada (`log_bandeja`, `flota_bandeja`, `coord_bandeja`, `rrhh_bandeja`) y el Resumen DRP (`drp_res`) mantienen su anotación `opensModal: true` porque son vistas de sólo lectura que no reemplazan el contexto operativo activo. Cualquier nueva vista que se añada al árbol de navegación debe ser `in-place` salvo aprobación explícita y documentación aquí.
+
 ---
 
 ## 5. Reglas de coexistencia

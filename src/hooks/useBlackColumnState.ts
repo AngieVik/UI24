@@ -16,12 +16,12 @@ import type { Rol } from '@/lib/auth-roles'
  *  Modelo drill-down con auto-colapso tras seleccionar hoja.
  *
  *  Reglas:
- *    - navigateInto(id) → push al path + expanded=true
+ *    - navigateInto(id) → push al path; expanded NO cambia (usuario controla)
  *    - goBack()         → pop del path + expanded=true (re-muestra labels)
- *    - selectLeaf(id)   → selectedLeafId=id + expanded=false (autocolapsa)
- *    - toggleExpanded() → toggle manual (override del comportamiento auto)
- *    - goHome()         → path=[], selectedLeafId='home', expanded=false
- *    - goCheckin()      → path=[], selectedLeafId='checkin', expanded=false
+ *    - selectLeaf(id)   → selectedLeafId=id; expanded NO cambia (usuario controla)
+ *    - toggleExpanded() → toggle manual
+ *    - goHome()         → path=[], selectedLeafId='home', expanded=false (colapsa siempre)
+ *    - goCheckin()      → path=[], selectedLeafId='checkin'; expanded no cambia
  * ───────────────────────────────────────────────────────────────────────── */
 
 export interface BlackColumnState {

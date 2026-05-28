@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   NAV_TREE,
+  NAV_FIXED_LEAVES,
   filterByRol,
   findNode,
   getPathTo,
@@ -215,5 +216,41 @@ describe('rolPuedeVer', () => {
     const operativa = NAV_TREE.find((n) => n.id === 'operativa')!
     expect(rolPuedeVer(operativa, 'sin_rol')).toBe(false)
     expect(rolPuedeVer(operativa, 'inactivo')).toBe(false)
+  })
+})
+
+/* ─────────────────────────────────────────────────────────────────────────
+ *  Fallback RBAC (correcciones críticas Fase D)
+ *  Regla: galleta emergencia sin rol → invitado (puede ver Check-in).
+ *         sin_rol → ningún nodo visible, pantalla en blanco.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+describe('RBAC fallback — invitado y sin_rol', () => {
+  it('invitado puede ver la hoja fija Check-in | Check-out', () => {
+    const checkin = NAV_FIXED_LEAVES.find((l) => l.id === 'checkin')!
+    expect(checkin).toBeDefined()
+    expect(rolPuedeVer(checkin, 'invitado')).toBe(true)
+  })
+
+  it('sin_rol NO puede ver la hoja fija Check-in | Check-out', () => {
+    const checkin = NAV_FIXED_LEAVES.find((l) => l.id === 'checkin')!
+    expect(rolPuedeVer(checkin, 'sin_rol')).toBe(false)
+  })
+
+  it('invitado solo ve las hojas raíz globales (tablón, buzón) — no grupos operativos', () => {
+    const filtered = filterByRol(NAV_TREE, 'invitado')
+    const ids = filtered.map((n) => n.id)
+    expect(ids).toContain('tablon')
+    expect(ids).toContain('doc13')
+    expect(ids).not.toContain('operativa')
+    expect(ids).not.toContain('drp')
+    expect(ids).not.toContain('logistica')
+    expect(ids).not.toContain('rrhh')
+  })
+
+  it('sin_rol no ve ningún nodo del árbol ni hojas fijas', () => {
+    expect(filterByRol(NAV_TREE, 'sin_rol')).toHaveLength(0)
+    const checkin = NAV_FIXED_LEAVES.find((l) => l.id === 'checkin')!
+    expect(rolPuedeVer(checkin, 'sin_rol')).toBe(false)
   })
 })
