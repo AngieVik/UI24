@@ -708,14 +708,27 @@ Lista viva. Se cierra cuando la fase responsable la resuelve.
 Si la usuaria abre una nueva sesión con otro agente, este es el bloque a
 copiar y pegar al inicio del prompt:
 
-> Soy AngieVik, trabajo en U24. Lee en este orden:
->
+# Soy AngieVik, trabajo en U24. Lee en este orden
+
 > 1. `01_arquitectura_y_reglas/rules.md` (v2.1, fuente de verdad técnica).
 > 2. `05_interfaz_y_desarrollo/diseño_chupiwachi.md` (fuente de verdad visual).
-> 3. `06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md` (este documento).
-> Estamos en la Fase X. Antes de empezar la fase, hazme la pregunta de la
-> sección "❓ Decisiones a tomar antes de empezar". No tocar la BD ni
-> hacer despliegues sin permiso explícito.
+> 3. `05_interfaz_y_desarrollo/mapeo_visual_ui.md` (mapeado tecinco de la app).
+> 4. `06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md` (este documento).
+*Acabamos de terminar la Fase D. de reconstrucción del frontend.
+    * Antes de empezar la fase E, hazme las pregunta que necesites hasta estar 90% seguro de el objetivo antes de empezar.
+    * No tocar la BD ni hacer despliegues sin permiso explícito.
+
+*Necesito que apliques las siguientes correcciones críticas de RBAC, Layout y CSS.
+    1. SEGURIDAD Y RBAC (Fallback de Roles):
+        -Modifica la lógica de roles (en el custom_access_token_hook de Supabase y/o en el store del frontend).
+        - Si un usuario accede mediante una galleta/token de emergencia (sin rol explícito en BD), se le debe asignar automáticamente el rol 'invitado'. En el mapa de navegación (`filterByRol`), el rol 'invitado' SÍ debe tener permisos para ver la sección fija de "Check-in | Check-out".
+        - Si un usuario logra entrar sin check-in, sin cookie y sin rol en BD, la última barrera de seguridad debe autoasignarle el rol 'sin_rol'. Este rol no tiene permisos sobre ningún nodo del árbol, devolviendo una pantalla en blanco sin opciones.
+    2. LAYOUT (Visor DRP y Modales):
+       - El componente `Visor DRP` ya no debe ser un modal superpuesto. Modifica el árbol de navegación y su lógica para que sea un renderizado `[in-place]` inyectado directamente en el `home_area`.
+       - Actualiza las reglas del sistema: Borra la norma anterior sobre modales para estas vistas. A partir de ahora, los modales superpuestos quedan estrictamente restringidos a mensajes de confirmación o acciones que lo requieran expresamente.
+    3. DISEÑO FLUIDO ESTRICTO:
+       - Revisa el sistema de tokens (`index.css` o configuración de Tailwind). Garantiza que tanto las fuentes (variables `--text-*`) como los espaciados interactivos (`gap`, `padding`) muten y escalen de forma estrictamente proporcional al viewport del terminal móvil o tablet.
+       - Usa `clamp()` basado en la granularidad de breakpoints (Base `<640px` hasta `2xl`). Está terminantemente prohibido que haya saltos bruscos de layout al redimensionar.
 
 ---
 
