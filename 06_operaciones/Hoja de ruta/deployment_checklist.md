@@ -233,10 +233,10 @@ URL de producción:        https://u24-terminal.vercel.app  (Vercel — angievik
 URL de rollback frontend: https://u24-terminal-4po60jatw-angieviks-projects.vercel.app
 Inspector Vercel:         https://vercel.com/angieviks-projects/u24-terminal/3Fh9QtFcgK9nrb5FBSiYGiLiioWr
 
-Fase 0 completada:  ☑ Pass  ⬜ Fail
-Fase 1 completada:  ☑ Pass  ⬜ Fail
-Fase 2 completada:  ☑ Pass  ⬜ Fail
-Fase 3 completada:  ☑ Pass  ⬜ Fail
+Fase 0 completada:  ⬜ Pass  ⬜ Fail
+Fase 1 completada:  ⬜ Pass  ⬜ Fail
+Fase 2 completada:  ⬜ Pass  ⬜ Fail
+Fase 3 completada:  ⬜ Pass  ⬜ Fail
 Fase 4 completada:  ⬜ Pass  ⬜ Fail  ← EN CURSO (smoke tests manuales)
 Fase 5 completada:  ⬜ Pass  ⬜ Fail
 

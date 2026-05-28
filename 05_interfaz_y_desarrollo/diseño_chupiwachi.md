@@ -17,7 +17,7 @@ Toda primitiva interactiva debe provenir de **shadcn/ui**, apoyada en Radix UI y
 El espacio es un recurso crítico en pantallas móviles de ambulancias.
 
 * **Regla minimalista:** Minimizar `gap`, márgenes y paddings. Preferible una fila compacta (`text-xs p-1`) a columnas desproporcionadas.
-* **Granularidad de breakpoints:** Base (`<640px`), `sm` (`640px+`), `md` (`768px+`), `lg` (`1024px+`), `xl` (`1280px+`), `2xl` (`1536px+`).
+* **Granularidad de breakpoints y escalado fluido:** Base (`<640px`), `sm` (`640px+`), `md` (`768px+`), `lg` (`1024px+`), `xl` (`1280px+`), `2xl` (`1536px+`). El sistema aplica un cálculo fluid design mediante la función `clamp()` en variables raíz (`--text-*`, `p-*`, `gap-*`). Esto garantiza que tanto las fuentes como los espaciados interactivos muten y escalen de forma estrictamente proporcional al viewport del terminal móvil o tablet sin provocar saltos bruscos de layout.
 * **Adaptabilidad algorítmica (Fluid design):** Uso de `clamp()` en Tailwind para anchos y tipografías. Estilo base uniforme desde móvil a monitor.
 * **Cambio estructural justificado:** Prohibidos rediseños puramente estéticos. El layout solo muta por limitación física (ej. colapsar una tabla masiva en tarjetas en base).
 
@@ -29,7 +29,7 @@ El espacio es un recurso crítico en pantallas móviles de ambulancias.
   * `Barlow` Regular (Cuerpos): Formularios, descripciones > 2 líneas.
 * **Pesos Permitidos:** `300` (Metadatos/horas), `500` (Cuerpos), `700` (Etiquetas/Navegación), `900` (EXCLUSIVO alertas críticas y Doc-11).
 
-Una sola escala, con `clamp()` para fluid design.
+* **Una sola escala, con `clamp()` para fluid design.**
 
 | Token | clamp() | Uso |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ Configuración adaptativa para Tailwind v4 (`@theme`).
 
 ## 5. Layout Base (Chasis)
 
-* **`black_column`:** `w-[60px]` colapsada, `w-[220px]` expandida. Fondo `--u24-black`.
+* **`black_column`:** `w-[40px]` colapsada, `w-[160px]` expandida. Fondo `--u24-black`.
 * **Header:** `h-[60px]`. Fondo `--u24-black`. Contiene Logo 44px interactivo (`goHome`), Ticker/Marquesina central y bandeja derecha.
 * **Z-Index Mapeo:** `z-0` (base), `z-20` (popovers), `z-30` (Banner offline), `z-40` (Header), `z-60` (Modales shadcn), `z-99` (Alarma Doc-11).
 

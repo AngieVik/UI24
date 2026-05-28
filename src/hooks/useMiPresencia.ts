@@ -1,8 +1,9 @@
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useActivacionStore } from '@/stores/useActivacionStore'
+import { useTurnoStore } from '@/stores/useTurnoStore'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 import { useCheckoutTrabajador } from '@/hooks/useCheckoutTrabajador'
-import { useCerrarTurno } from '@/hooks/useCerrarTurno'
-import { useTurnoStore } from '@/stores/useTurnoStore'
+import { useCerrarTurnoPorNombre } from '@/hooks/useCerrarTurnoPorNombre'
 
 interface UseMiPresenciaResult {
   ejecutorId: string | null
@@ -16,11 +17,18 @@ interface UseMiPresenciaResult {
 }
 
 /**
- * Hook compuesto para `PresenciaScreen` v5 (D.1.1d.2, turno-aware).
+ * Hook compuesto para `PresenciaScreen`.
  *
- * El check-out llama a `ef-checkout-trabajador`. Cuando el ÚLTIMO
- * trabajador sale, también cierra el turno (rpc_cerrar_turno), lo que
- * cierra el Doc-8 activo y limpia los stores.
+ * Regla de turno (D.1 refactor):
+ *   – El turno empieza al hacer check-in (rpc_abrir_turno en CheckinInicialScreen
+ *     o en PresenciaScreen.onSubmitSumar).
+ *   – El turno acaba al hacer check-out, independientemente del vehículo.
+ *
+ * Por tanto, checkout siempre llama a rpc_cerrar_turno_por_nombre para
+ * cualquier trabajador que sale, no solo el último.
+ *
+ * Si el trabajador que sale es el ejecutor del terminal, además se limpian
+ * useTurnoStore y useActivacionStore.
  *
  * La sesión Supabase del terminal NO se toca.
  */
@@ -28,21 +36,20 @@ export function useMiPresencia(): UseMiPresenciaResult {
   const ejecutorId = useAuthStore((s) => s.ejecutorId)
   const personal   = usePersonalEnTurno()
   const { checkout: doCheckout, isSubmitting, error } = useCheckoutTrabajador()
-  const { cerrar, isSubmitting: cerrando } = useCerrarTurno()
+  const { cerrarPorNombre, isSubmitting: cerrando } = useCerrarTurnoPorNombre()
 
   async function checkout(id_nombre: string) {
-    const isLastWorker = personal.data.length === 1 &&
-      personal.data.some((p) => p.id_nombre === id_nombre)
-
+    // 1. Check-out de presencia (edge function)
     const res = await doCheckout({ id_nombre_target: id_nombre })
     if (!res) return null
 
-    if (isLastWorker) {
-      // Last worker leaving — close the shift doc
-      const idParte = useTurnoStore.getState().id_parte
-      if (idParte) {
-        await cerrar({ id_parte: idParte })
-      }
+    // 2. Cerrar el turno del trabajador (siempre, sin importar si es el último)
+    await cerrarPorNombre({ id_nombre })
+
+    // 3. Si el que sale es el ejecutor del terminal, limpiar stores locales
+    if (id_nombre === ejecutorId) {
+      useTurnoStore.getState().clearTurno()
+      useActivacionStore.getState().clearActivacion()
     }
 
     return { noop: !!res.noop }

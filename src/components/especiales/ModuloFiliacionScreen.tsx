@@ -3,24 +3,31 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { useFiliacion, type EstadoPaciente } from '@/hooks/useFiliacion'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 
 const ESTADO_LABEL: Record<EstadoPaciente, string> = {
-  en_espera:   'En espera',
+  en_espera: 'En espera',
   en_consulta: 'En consulta',
-  alta:        'Alta',
+  alta: 'Alta',
 }
 
 const ESTADO_VARIANT: Record<EstadoPaciente, 'warn' | 'ok' | 'secondary'> = {
-  en_espera:   'warn',
+  en_espera: 'warn',
   en_consulta: 'ok',
-  alta:        'secondary',
+  alta: 'secondary',
 }
 
 const SIGUIENTE_ESTADO: Partial<Record<EstadoPaciente, EstadoPaciente>> = {
-  en_espera:   'en_consulta',
+  en_espera: 'en_consulta',
   en_consulta: 'alta',
 }
 
@@ -31,9 +38,15 @@ function fmtTime(iso: string): string {
 export function ModuloFiliacionScreen() {
   const isOnline = useGlobalStore((s) => s.isOnline)
   const {
-    idSesion, pacientes,
-    isLoadingSesion, isLoadingPacientes, isSubmitting, error,
-    abrirSesion, admitirPaciente, actualizarEstado,
+    idSesion,
+    pacientes,
+    isLoadingSesion,
+    isLoadingPacientes,
+    isSubmitting,
+    error,
+    abrirSesion,
+    admitirPaciente,
+    actualizarEstado,
   } = useFiliacion()
 
   if (!isOnline) {
@@ -56,8 +69,8 @@ export function ModuloFiliacionScreen() {
         </div>
         <h2 className="font-display text-lg font-bold">Módulo de filiación</h2>
         <p className="font-body text-sm text-muted-foreground">
-          Gestión de pacientes en tiempo real durante dispositivos y emergencias.
-          Abre una sesión para comenzar.
+          Gestión de pacientes en tiempo real durante dispositivos y emergencias. Abre una sesión
+          para comenzar.
         </p>
         <Button
           onClick={() => abrirSesion()}
@@ -66,18 +79,21 @@ export function ModuloFiliacionScreen() {
         >
           {isLoadingSesion ? 'Abriendo sesión…' : 'Abrir sesión de filiación'}
         </Button>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
       </div>
     )
   }
 
-  const enEspera   = pacientes.filter((p) => p.estado === 'en_espera').length
+  const enEspera = pacientes.filter((p) => p.estado === 'en_espera').length
   const enConsulta = pacientes.filter((p) => p.estado === 'en_consulta').length
-  const conAlta    = pacientes.filter((p) => p.estado === 'alta').length
+  const conAlta = pacientes.filter((p) => p.estado === 'alta').length
 
   return (
     <div className="mx-auto flex w-full max-w-screen-lg flex-col gap-3 p-3">
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -98,26 +114,36 @@ export function ModuloFiliacionScreen() {
         </Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Contadores */}
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="flex flex-col items-center gap-1 py-4">
             <span className="font-display text-2xl font-bold">{enEspera}</span>
-            <Badge variant="warn" className="text-xs">En espera</Badge>
+            <Badge variant="warn" className="text-xs">
+              En espera
+            </Badge>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex flex-col items-center gap-1 py-4">
             <span className="font-display text-2xl font-bold">{enConsulta}</span>
-            <Badge variant="ok" className="text-xs">En consulta</Badge>
+            <Badge variant="ok" className="text-xs">
+              En consulta
+            </Badge>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex flex-col items-center gap-1 py-4">
             <span className="font-display text-2xl font-bold">{conAlta}</span>
-            <Badge variant="secondary" className="text-xs">Alta</Badge>
+            <Badge variant="secondary" className="text-xs">
+              Alta
+            </Badge>
           </CardContent>
         </Card>
       </div>
@@ -159,9 +185,7 @@ export function ModuloFiliacionScreen() {
                       <TableCell className="font-bold">{i + 1}</TableCell>
                       <TableCell className="text-xs">{fmtTime(p.timestamp_admision)}</TableCell>
                       <TableCell>
-                        <Badge variant={ESTADO_VARIANT[p.estado]}>
-                          {ESTADO_LABEL[p.estado]}
-                        </Badge>
+                        <Badge variant={ESTADO_VARIANT[p.estado]}>{ESTADO_LABEL[p.estado]}</Badge>
                       </TableCell>
                       <TableCell>
                         {nextEstado && (

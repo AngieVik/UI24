@@ -39,21 +39,21 @@ export interface BlackColumnState {
 }
 
 type Action =
-  | { type: 'NAVIGATE_INTO';  id: string }
+  | { type: 'NAVIGATE_INTO'; id: string }
   | { type: 'GO_BACK' }
-  | { type: 'JUMP_TO_LEVEL';  index: number }
-  | { type: 'SELECT_LEAF';    id: string }
-  | { type: 'OPEN_MODAL';     id: string }
+  | { type: 'JUMP_TO_LEVEL'; index: number }
+  | { type: 'SELECT_LEAF'; id: string }
+  | { type: 'OPEN_MODAL'; id: string }
   | { type: 'CLOSE_MODAL' }
   | { type: 'TOGGLE_EXPANDED' }
   | { type: 'GO_HOME' }
   | { type: 'GO_CHECKIN' }
 
 const INITIAL_STATE: BlackColumnState = {
-  currentPath:    [],
-  expanded:       false,
+  currentPath: [],
+  expanded: false,
   selectedLeafId: 'home',
-  modalLeafId:    null,
+  modalLeafId: null,
 }
 
 function reducer(state: BlackColumnState, action: Action): BlackColumnState {
@@ -69,14 +69,16 @@ function reducer(state: BlackColumnState, action: Action): BlackColumnState {
       return {
         ...state,
         currentPath: state.currentPath.slice(0, -1),
-        expanded:    true,
+        expanded: true,
       }
     }
     case 'JUMP_TO_LEVEL':
-      // Trunca el path hasta el nivel indicado (inclusive). index 0 = raíz+1.
+      // Sube al nivel del ancestro en el índice dado: el ancestro[i] desaparece
+      // del path y pasa a ser visible como item en el listado.
+      // index 0 → raíz ([]), index 1 → primer nivel, etc.
       return {
         ...state,
-        currentPath: state.currentPath.slice(0, action.index + 1),
+        currentPath: state.currentPath.slice(0, action.index),
       }
     case 'SELECT_LEAF':
       return {
@@ -93,7 +95,12 @@ function reducer(state: BlackColumnState, action: Action): BlackColumnState {
     case 'GO_HOME':
       return { currentPath: [], selectedLeafId: 'home', expanded: false, modalLeafId: null }
     case 'GO_CHECKIN':
-      return { currentPath: [], selectedLeafId: 'checkin', expanded: false, modalLeafId: null }
+      return {
+        currentPath: [],
+        selectedLeafId: 'checkin',
+        expanded: state.expanded,
+        modalLeafId: null,
+      }
     default:
       return state
   }
@@ -103,9 +110,9 @@ export interface UseBlackColumnStateOptions {
   /** Permite forzar el rol (testing). Si no se pasa, se lee de useAuthStore. */
   rol?: Rol | null
   /** Inyectables para tests; en producción usa los exports del módulo nav. */
-  navTree?:    readonly NavNode[]
-  navFixed?:   readonly NavLeaf[]
-  initial?:    Partial<BlackColumnState>
+  navTree?: readonly NavNode[]
+  navFixed?: readonly NavLeaf[]
+  initial?: Partial<BlackColumnState>
 }
 
 export interface UseBlackColumnStateReturn extends BlackColumnState {
@@ -118,25 +125,25 @@ export interface UseBlackColumnStateReturn extends BlackColumnState {
   /** Id del nodo en el que estamos (último del path) o null si raíz. */
   currentNodeId: string | null
 
-  navigateInto:   (id: string) => void
-  goBack:         () => void
+  navigateInto: (id: string) => void
+  goBack: () => void
   /** Salta directamente al nivel `index` del path (útil para breadcrumbs). */
-  jumpToLevel:    (index: number) => void
-  selectLeaf:     (id: string) => void
+  jumpToLevel: (index: number) => void
+  selectLeaf: (id: string) => void
   /** Abre una hoja con opensModal=true como Dialog overlay. */
-  openModal:      (id: string) => void
-  closeModal:     () => void
+  openModal: (id: string) => void
+  closeModal: () => void
   toggleExpanded: () => void
-  goHome:         () => void
-  goCheckin:      () => void
+  goHome: () => void
+  goCheckin: () => void
 }
 
 export function useBlackColumnState(
-  options: UseBlackColumnStateOptions = {},
+  options: UseBlackColumnStateOptions = {}
 ): UseBlackColumnStateReturn {
   const rolFromStore = useAuthStore((s) => s.rol)
-  const rol      = options.rol      !== undefined ? options.rol      : rolFromStore
-  const navTree  = options.navTree  ?? NAV_TREE
+  const rol = options.rol !== undefined ? options.rol : rolFromStore
+  const navTree = options.navTree ?? NAV_TREE
   const navFixed = options.navFixed ?? NAV_FIXED_LEAVES
 
   const [state, dispatch] = useReducer(reducer, {
@@ -146,27 +153,24 @@ export function useBlackColumnState(
 
   // Hojas fijas filtradas por rol.
   const fixedLeaves = useMemo<readonly NavLeaf[]>(
-    () => navFixed.filter((l) => {
-      if (rol == null || rol === 'sin_rol' || rol === 'inactivo') return false
-      return l.rolesPermitidos.includes(rol)
-    }),
-    [navFixed, rol],
+    () =>
+      navFixed.filter((l) => {
+        if (rol == null || rol === 'sin_rol' || rol === 'inactivo') return false
+        return l.rolesPermitidos.includes(rol)
+      }),
+    [navFixed, rol]
   )
 
   // Árbol completo filtrado por rol (recalcula solo si rol o tree cambian).
-  const treeForRol = useMemo<NavNode[]>(
-    () => filterByRol(navTree, rol),
-    [navTree, rol],
-  )
+  const treeForRol = useMemo<NavNode[]>(() => filterByRol(navTree, rol), [navTree, rol])
 
   // Nodo activo y sus hijos visibles.
-  const currentNodeId = state.currentPath.length > 0
-    ? state.currentPath[state.currentPath.length - 1]
-    : null
+  const currentNodeId =
+    state.currentPath.length > 0 ? state.currentPath[state.currentPath.length - 1] : null
 
   const visibleChildren = useMemo<readonly NavNode[]>(
     () => getChildrenOf(currentNodeId, treeForRol),
-    [currentNodeId, treeForRol],
+    [currentNodeId, treeForRol]
   )
 
   const navigateInto = useCallback((id: string) => {
@@ -176,20 +180,20 @@ export function useBlackColumnState(
     dispatch({ type: 'NAVIGATE_INTO', id })
   }, [])
 
-  const goBack         = useCallback(() => dispatch({ type: 'GO_BACK' }), [])
-  const jumpToLevel    = useCallback((index: number) => dispatch({ type: 'JUMP_TO_LEVEL', index }), [])
-  const selectLeaf     = useCallback((id: string) => dispatch({ type: 'SELECT_LEAF', id }), [])
-  const openModal      = useCallback((id: string) => dispatch({ type: 'OPEN_MODAL', id }), [])
-  const closeModal     = useCallback(() => dispatch({ type: 'CLOSE_MODAL' }), [])
+  const goBack = useCallback(() => dispatch({ type: 'GO_BACK' }), [])
+  const jumpToLevel = useCallback((index: number) => dispatch({ type: 'JUMP_TO_LEVEL', index }), [])
+  const selectLeaf = useCallback((id: string) => dispatch({ type: 'SELECT_LEAF', id }), [])
+  const openModal = useCallback((id: string) => dispatch({ type: 'OPEN_MODAL', id }), [])
+  const closeModal = useCallback(() => dispatch({ type: 'CLOSE_MODAL' }), [])
   const toggleExpanded = useCallback(() => dispatch({ type: 'TOGGLE_EXPANDED' }), [])
-  const goHome         = useCallback(() => dispatch({ type: 'GO_HOME' }), [])
-  const goCheckin      = useCallback(() => dispatch({ type: 'GO_CHECKIN' }), [])
+  const goHome = useCallback(() => dispatch({ type: 'GO_HOME' }), [])
+  const goCheckin = useCallback(() => dispatch({ type: 'GO_CHECKIN' }), [])
 
   return {
     ...state,
     fixedLeaves,
     visibleChildren,
-    canGoBack:     state.currentPath.length > 0,
+    canGoBack: state.currentPath.length > 0,
     currentNodeId,
     navigateInto,
     goBack,

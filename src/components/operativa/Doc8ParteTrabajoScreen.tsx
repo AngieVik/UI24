@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
-import {
-  Car,
-  CheckSquare,
-  ClipboardList,
-  Package,
-  Save,
-  Users,
-} from 'lucide-react'
+import { Car, CheckSquare, ClipboardList, Package, Save, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { useTurnoStore } from '@/stores/useTurnoStore'
 import { useActivacionStore } from '@/stores/useActivacionStore'
@@ -24,15 +24,15 @@ import { formatRol } from '@/lib/formatRol'
 // ── Helpers ───────────────────────────────────────────────────
 
 const TIPO_SERVICIO_LABELS: Record<string, string> = {
-  programado:        'Programado',
-  dispositivo:       'Dispositivo',
-  traslado:          'Traslado',
+  programado: 'Programado',
+  dispositivo: 'Dispositivo',
+  traslado: 'Traslado',
   guardia_urgencias: 'Guardia urgencias',
-  drp:               'DRP',
-  privado:           'Privado',
-  simulacro:         'Simulacro',
-  formacion:         'Formación',
-  sin_asignar:       'Sin asignar',
+  drp: 'DRP',
+  privado: 'Privado',
+  simulacro: 'Simulacro',
+  formacion: 'Formación',
+  sin_asignar: 'Sin asignar',
 }
 
 function formatTipoServicio(tipo: string | null): string {
@@ -43,22 +43,26 @@ function formatTipoServicio(tipo: string | null): string {
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-ES', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
 function fmtTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleTimeString('es-ES', {
-    hour: '2-digit', minute: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
 // ── Componente principal ──────────────────────────────────────
 
 export function Doc8ParteTrabajoScreen() {
-  const idParte     = useTurnoStore((s) => s.id_parte)
+  const idParte = useTurnoStore((s) => s.id_parte)
   const turnoActivo = useTurnoStore((s) => s.turnoActivo)
 
   // Gate: sin turno activo
@@ -68,9 +72,7 @@ export function Doc8ParteTrabajoScreen() {
         <div className="grid size-12 place-items-center rounded-md bg-muted text-muted-foreground/70">
           <ClipboardList aria-hidden="true" className="size-6" />
         </div>
-        <h2 className="font-display text-lg font-bold leading-tight">
-          Doc-8 — Parte de trabajo
-        </h2>
+        <h2 className="font-display text-lg font-bold leading-tight">Doc-8 — Parte de trabajo</h2>
         <p className="font-body text-base font-light text-muted-foreground">
           No hay turno activo. Haz check-in desde la pantalla de presencia.
         </p>
@@ -90,17 +92,17 @@ interface Doc8ContentProps {
 function Doc8Content({ idParte }: Doc8ContentProps) {
   const { data: doc8, isLoading, isError } = useDoc8Activo()
   const checklistCerrado = useActivacionStore((s) => s.checklistCerrado)
-  const idActivacion     = useActivacionStore((s) => s.id_activacion)
+  const idActivacion = useActivacionStore((s) => s.id_activacion)
 
   const { data: gastos, isLoading: gastosLoading } = useDoc6DelTurno(
-    doc8?.id_activacion ?? idActivacion ?? null,
+    doc8?.id_activacion ?? idActivacion ?? null
   )
-  const personal   = usePersonalEnTurno()
+  const personal = usePersonalEnTurno()
   const { anotar, isSubmitting, error: anotarError } = useAnotarParte()
 
   const [localNotas, setLocalNotas] = useState('')
-  const [notasInit, setNotasInit]   = useState(false)
-  const [feedback, setFeedback]     = useState<string | null>(null)
+  const [notasInit, setNotasInit] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   useEffect(() => {
     if (doc8 && !notasInit) {
@@ -110,8 +112,8 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
   }, [doc8, notasInit])
 
   const notasSinCambios = localNotas === (doc8?.notas ?? '')
-  const parteAbierto    = doc8?.estado === 'Abierto_En_Turno'
-  const tieneVehiculo   = !!doc8?.id_activacion
+  const parteAbierto = doc8?.estado === 'Abierto_En_Turno'
+  const tieneVehiculo = !!doc8?.id_activacion
 
   async function handleGuardarNotas() {
     if (!doc8 || notasSinCambios || isSubmitting) return
@@ -119,9 +121,7 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
     const res = await anotar({ id_parte: idParte, notas: localNotas })
     if (!res) return
     setFeedback(
-      res.online
-        ? 'Anotación guardada.'
-        : 'Anotación encolada offline. Se guardará al reconectar.',
+      res.online ? 'Anotación guardada.' : 'Anotación encolada offline. Se guardará al reconectar.'
     )
   }
 
@@ -153,7 +153,6 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       {/* ── Card 1: Encabezado del parte ─────────────────── */}
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
@@ -172,10 +171,10 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-            <DataCell label="ID parte"  value={`#${idParteCorto}`} />
+            <DataCell label="ID parte" value={`#${idParteCorto}`} />
             <DataCell label="Trabajador" value={doc8.id_nombre || '—'} />
-            <DataCell label="Inicio"    value={fmtDateTime(doc8.timestamp_inicio)} />
-            <DataCell label="Fin"       value={fmtDateTime(doc8.timestamp_fin)} />
+            <DataCell label="Inicio" value={fmtDateTime(doc8.timestamp_inicio)} />
+            <DataCell label="Fin" value={fmtDateTime(doc8.timestamp_fin)} />
           </dl>
         </CardContent>
       </Card>
@@ -194,11 +193,14 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-              <DataCell label="Pilot"          value={doc8.pilot ?? '—'} />
-              <DataCell label="Carry"          value={doc8.carry ?? '—'} />
-              <DataCell label="Tipo servicio"  value={formatTipoServicio(doc8.tipo_servicio)} />
-              <DataCell label="Km inicio"      value={doc8.km_inicio != null ? String(doc8.km_inicio) : '—'} />
-              <DataCell label="Km fin"         value={doc8.km_fin    != null ? String(doc8.km_fin)    : '—'} />
+              <DataCell label="Pilot" value={doc8.pilot ?? '—'} />
+              <DataCell label="Carry" value={doc8.carry ?? '—'} />
+              <DataCell label="Tipo servicio" value={formatTipoServicio(doc8.tipo_servicio)} />
+              <DataCell
+                label="Km inicio"
+                value={doc8.km_inicio != null ? String(doc8.km_inicio) : '—'}
+              />
+              <DataCell label="Km fin" value={doc8.km_fin != null ? String(doc8.km_fin) : '—'} />
             </dl>
           </CardContent>
         </Card>
@@ -245,9 +247,15 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs font-bold uppercase tracking-wide">Nombre</TableHead>
-                  <TableHead className="text-xs font-bold uppercase tracking-wide">Función</TableHead>
-                  <TableHead className="text-right text-xs font-bold uppercase tracking-wide">Check-in</TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-wide">
+                    Nombre
+                  </TableHead>
+                  <TableHead className="text-xs font-bold uppercase tracking-wide">
+                    Función
+                  </TableHead>
+                  <TableHead className="text-right text-xs font-bold uppercase tracking-wide">
+                    Check-in
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -256,7 +264,9 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
                     <TableCell>
                       <div className="flex flex-col leading-tight">
                         <span className="font-bold">{p.nombre_real}</span>
-                        <span className="text-xs font-light text-muted-foreground">{p.id_nombre}</span>
+                        <span className="text-xs font-light text-muted-foreground">
+                          {p.id_nombre}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -291,7 +301,8 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
           {!checklistCerrado && (
             <CardContent>
               <p className="text-sm font-light text-muted-foreground">
-                La revisión 360° de inicio de turno no está completada. Ve a Operativa → Doc-Checklist360 para completarla.
+                La revisión 360° de inicio de turno no está completada. Ve a Operativa →
+                Doc-Checklist360 para completarla.
               </p>
             </CardContent>
           )}
@@ -327,19 +338,31 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs font-bold uppercase tracking-wide">Ítem</TableHead>
-                    <TableHead className="text-xs font-bold uppercase tracking-wide">Categoría</TableHead>
-                    <TableHead className="text-right text-xs font-bold uppercase tracking-wide">Cant.</TableHead>
-                    <TableHead className="text-right text-xs font-bold uppercase tracking-wide">Hora</TableHead>
+                    <TableHead className="text-xs font-bold uppercase tracking-wide">
+                      Ítem
+                    </TableHead>
+                    <TableHead className="text-xs font-bold uppercase tracking-wide">
+                      Categoría
+                    </TableHead>
+                    <TableHead className="text-right text-xs font-bold uppercase tracking-wide">
+                      Cant.
+                    </TableHead>
+                    <TableHead className="text-right text-xs font-bold uppercase tracking-wide">
+                      Hora
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {gastos.map((g) => (
                     <TableRow key={g.id_deduccion}>
                       <TableCell className="font-bold">{g.nombre_item}</TableCell>
-                      <TableCell className="text-sm font-light text-muted-foreground">{g.categoria}</TableCell>
+                      <TableCell className="text-sm font-light text-muted-foreground">
+                        {g.categoria}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <Badge variant="secondary" aria-label={`Cantidad ${g.cantidad}`}>{g.cantidad}</Badge>
+                        <Badge variant="secondary" aria-label={`Cantidad ${g.cantidad}`}>
+                          {g.cantidad}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right text-xs font-light text-muted-foreground">
                         {fmtTime(g.created_at)}
@@ -377,12 +400,8 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
           />
 
           <div role="alert" aria-live="polite" className="min-h-4 text-sm">
-            {anotarError && (
-              <span className="text-destructive">{anotarError}</span>
-            )}
-            {!anotarError && feedback && (
-              <span className="text-muted-foreground">{feedback}</span>
-            )}
+            {anotarError && <span className="text-destructive">{anotarError}</span>}
+            {!anotarError && feedback && <span className="text-muted-foreground">{feedback}</span>}
           </div>
 
           {parteAbierto && (
@@ -398,7 +417,6 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
           )}
         </CardContent>
       </Card>
-
     </div>
   )
 }
@@ -408,9 +426,7 @@ function Doc8Content({ idParte }: Doc8ContentProps) {
 function DataCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
+      <dt className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="font-bold">{value}</dd>
     </div>
   )

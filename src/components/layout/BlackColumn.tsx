@@ -1,4 +1,11 @@
-import { type LucideIcon, ArrowLeft, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import {
+  type LucideIcon,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useBlackColumn } from '@/contexts/BlackColumnContext'
 import { findNode, type NavLeaf, type NavNode } from '@/components/layout/black-column-nav'
@@ -45,7 +52,7 @@ export function BlackColumn() {
         'flex h-full shrink-0 flex-col overflow-hidden bg-u24-black',
         'transition-[width] duration-200 ease-out',
         '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-        s.expanded ? 'w-[var(--col-w-expanded)]' : 'w-[var(--col-w)]',
+        s.expanded ? 'w-[var(--col-w-expanded)]' : 'w-[var(--col-w)]'
       )}
     >
       {/* ── Botones fijos arriba: solo Check-in ───────────────────── */}
@@ -60,18 +67,14 @@ export function BlackColumn() {
             active={s.selectedLeafId === leaf.id}
             onClick={() => {
               if (leaf.id === 'checkin') s.goCheckin()
-              else                       s.selectLeaf(leaf.id)
+              else s.selectLeaf(leaf.id)
             }}
           />
         ))}
       </div>
 
       {/* ── Separador entre fijos y drill content ─────────────────── */}
-      <div
-        role="separator"
-        aria-hidden="true"
-        className="mx-3 my-2 h-px shrink-0 bg-zinc-800"
-      />
+      <div role="separator" aria-hidden="true" className="mx-3 my-2 h-px shrink-0 bg-zinc-800" />
 
       {/* ── Breadcrumb completo de ancestros ──────────────────────── */}
       {ancestorNodes.length > 0 && (
@@ -85,7 +88,9 @@ export function BlackColumn() {
                 hint="Volver a este nivel"
                 expanded={s.expanded}
                 active={true}
-                trailing={<ChevronLeft aria-hidden="true" className="size-4 shrink-0 text-u24-yellow/70" />}
+                trailing={
+                  <ChevronLeft aria-hidden="true" className="size-4 shrink-0 text-u24-yellow/70" />
+                }
                 onClick={() => s.jumpToLevel(i)}
               />
             ))}
@@ -110,7 +115,7 @@ export function BlackColumn() {
             onActivate={(n) => {
               if (n.kind === 'leaf') {
                 if ((n as NavLeaf).opensModal) s.openModal(n.id)
-                else                            s.selectLeaf(n.id)
+                else s.selectLeaf(n.id)
               } else {
                 s.navigateInto(n.id)
               }
@@ -127,11 +132,7 @@ export function BlackColumn() {
        *  (que es el ancla visual permanente del fondo).
        * ─────────────────────────────────────────────────────────── */}
       <div className="mt-auto flex shrink-0 flex-col gap-1 px-1 pb-2 pt-1">
-        <div
-          role="separator"
-          aria-hidden="true"
-          className="mx-2 mb-1 h-px bg-zinc-800"
-        />
+        <div role="separator" aria-hidden="true" className="mx-2 mb-1 h-px bg-zinc-800" />
         {/* Atrás (penúltimo, contextual) */}
         {s.canGoBack && (
           <NavRow
@@ -170,10 +171,10 @@ interface NavTreeItemProps {
 }
 
 function NavTreeItem({ node, expanded, isSelected, isPathActive, onActivate }: NavTreeItemProps) {
-  const isLeaf      = node.kind === 'leaf'
+  const isLeaf = node.kind === 'leaf'
   const isContainer = !isLeaf
-  const isInPath    = isPathActive(node.id)
-  const active      = isLeaf ? isSelected(node.id) : isInPath
+  const isInPath = isPathActive(node.id)
+  const active = isLeaf ? isSelected(node.id) : isInPath
 
   return (
     <NavRow
@@ -182,7 +183,11 @@ function NavTreeItem({ node, expanded, isSelected, isPathActive, onActivate }: N
       hint={isLeaf ? (node as NavLeaf).hint : undefined}
       expanded={expanded}
       active={active}
-      trailing={isContainer ? <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-zinc-500" /> : null}
+      trailing={
+        isContainer ? (
+          <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-zinc-500" />
+        ) : null
+      }
       onClick={() => onActivate(node)}
     />
   )
@@ -212,35 +217,35 @@ function NavRow({ icon: Icon, label, hint, expanded, active, trailing, onClick }
           aria-label={label}
           aria-current={active ? 'page' : undefined}
           className={cn(
-            'group relative flex h-11 w-full shrink-0 items-center rounded-md',
+            'group relative flex h-10 w-full shrink-0 items-center',
             'text-zinc-300 transition-colors',
             'hover:bg-u24-column-hover hover:text-white',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-inset',
-            active && 'bg-u24-column-active text-u24-yellow',
+            active && 'bg-u24-column-active text-u24-yellow'
           )}
         >
-          {/* Rail del icono — siempre 52 px de ancho para alinear con --col-w */}
-          <span className="grid w-[52px] shrink-0 place-items-center">
-            <Icon aria-hidden="true" strokeWidth={2} className="size-6" />
+          {/* Rail del icono — siempre 30 px de ancho para alinear con --col-w */}
+          <span className="grid w-[30px] shrink-0 place-items-center px-1 ">
+            <Icon aria-hidden="true" strokeWidth={2} className="size-5" />
           </span>
 
           {/* Label — visible solo si expanded */}
           {expanded && (
-            <span className="flex-1 truncate text-left font-display text-base font-bold leading-none">
+            <span className="flex-1 truncate text-left place-items-center font-display text-[12px] font-bold leading-none">
               {label}
             </span>
           )}
 
           {/* Trailing (chevron en grupos/grupillos) */}
           {expanded && trailing && (
-            <span className="grid shrink-0 place-items-center px-2">{trailing}</span>
+            <span className="grid shrink-0 place-items-center px-1">{trailing}</span>
           )}
 
-          {/* Indicador activo — barra vertical amarilla 3 px */}
+          {/* Indicador activo — barra vertical amarilla 2.5 px */}
           {active && (
             <span
               aria-hidden="true"
-              className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-sm bg-u24-yellow"
+              className="absolute left-0 top-0.5 bottom-0.5 w-[2.5px] rounded-r-sm bg-u24-yellow"
             />
           )}
         </button>

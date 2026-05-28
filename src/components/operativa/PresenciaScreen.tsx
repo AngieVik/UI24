@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useMiPresencia } from '@/hooks/useMiPresencia'
 import { useCheckinTrabajador } from '@/hooks/useCheckinTrabajador'
 import { formatRol, getInitials } from '@/lib/formatRol'
+import { supabase } from '@/lib/supabase'
 
 const schema = z.object({
   identificador: z.string().min(1, 'Identificador requerido'),
@@ -50,11 +51,26 @@ export function PresenciaScreen() {
 
   async function onSubmitSumar(values: Schema) {
     setActionError(null)
-    const res = await checkin({
-      id_nombre: values.identificador.trim(),
-      password:  values.password,
-    })
+    const id_nombre = values.identificador.trim()
+
+    // 1. Verificar credenciales y registrar presencia
+    const res = await checkin({ id_nombre, password: values.password })
     if (!res) return
+
+    // 2. Abrir turno para el trabajador adicional (silencioso, no actualiza
+    //    useTurnoStore porque este trabajador no es el ejecutor del terminal)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).rpc('rpc_abrir_turno', {
+        p_mutation_uuid: crypto.randomUUID(),
+        p_id_nombre:     id_nombre,
+      })
+      // Ignorar ERR_TURNO_001 (ya tiene turno abierto — edge case offline/retry)
+    } catch {
+      // No bloquear el flujo si la apertura falla; el turno se intentará
+      // de nuevo en la próxima sesión.
+    }
+
     form.reset()
   }
 
