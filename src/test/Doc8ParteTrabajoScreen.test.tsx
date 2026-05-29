@@ -5,14 +5,36 @@ import { renderWithShell } from '@/test/test-utils'
 
 // ── Mocks de stores ───────────────────────────────────────────
 
-let idParteMock    = 'abc12345-0000-0000-0000-000000000001'
-let checklistMock  = false
+let idParteMock      = 'abc12345-0000-0000-0000-000000000001'
+let turnoActivoMock  = true
+let checklistMock    = false
+let idActivacionMock = 'act00001-0000-0000-0000-000000000001'
+
+vi.mock('@/stores/useTurnoStore', () => {
+  function useTurnoStore<T = unknown>(
+    selector?: (s: { id_parte: string; id_nombre: string; turnoActivo: boolean }) => T,
+  ): T | { id_parte: string; id_nombre: string; turnoActivo: boolean } {
+    const s = { id_parte: idParteMock, id_nombre: 'jperez', turnoActivo: turnoActivoMock }
+    return selector ? selector(s) : s
+  }
+  return { useTurnoStore }
+})
 
 vi.mock('@/stores/useActivacionStore', () => {
   function useActivacionStore<T = unknown>(
-    selector?: (s: { id_parte: string; checklistCerrado: boolean }) => T,
-  ): T | { id_parte: string; checklistCerrado: boolean } {
-    const s = { id_parte: idParteMock, checklistCerrado: checklistMock }
+    selector?: (s: {
+      id_activacion: string
+      id_checklist: string
+      matricula: string
+      checklistCerrado: boolean
+    }) => T,
+  ): T | { id_activacion: string; id_checklist: string; matricula: string; checklistCerrado: boolean } {
+    const s = {
+      id_activacion:    idActivacionMock,
+      id_checklist:     '',
+      matricula:        '',
+      checklistCerrado: checklistMock,
+    }
     return selector ? selector(s) : s
   }
   return { useActivacionStore }
@@ -86,8 +108,10 @@ const GASTOS = [
 const anotarMock = vi.fn()
 
 beforeEach(() => {
-  idParteMock   = 'abc12345-0000-0000-0000-000000000001'
-  checklistMock = false
+  idParteMock      = 'abc12345-0000-0000-0000-000000000001'
+  turnoActivoMock  = true
+  checklistMock    = false
+  idActivacionMock = 'act00001-0000-0000-0000-000000000001'
 
   useDoc8Mock.mockReset()
   useDoc6Mock.mockReset()
@@ -108,7 +132,7 @@ describe('Doc8ParteTrabajoScreen — gate', () => {
     idParteMock = ''
     renderWithShell(<Doc8ParteTrabajoScreen />)
     expect(screen.getByText(/no hay turno activo/i)).toBeInTheDocument()
-    expect(screen.getByText(/inicia un turno/i)).toBeInTheDocument()
+    expect(screen.getByText(/haz check-in/i)).toBeInTheDocument()
   })
 
   it('gate tiene el título correcto', () => {

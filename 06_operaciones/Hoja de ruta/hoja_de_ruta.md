@@ -1,4 +1,8 @@
-# Hoja de Ruta de Desarrollo — Proyecto U24
+# ~~Hoja de Ruta de Desarrollo — Proyecto U24~~ [OBSOLETO]
+
+> **AVISO 2026-05-29 — DOCUMENTO OBSOLETO**
+> Este archivo ha sido consolidado en `reconstructed_roadmap.md` (SOT único).
+> No editar este archivo. Toda la información de estado y planificación vive en `reconstructed_roadmap.md`.
 
 **Versión:** 2.1 (auditada post-Sprint 14)
 **Fecha:** 2026-05-21

@@ -1,4 +1,8 @@
-# Checklist de Despliegue a Producción — U24
+# ~~Checklist de Despliegue a Producción — U24~~ [OBSOLETO]
+
+> **AVISO 2026-05-29 — DOCUMENTO OBSOLETO**
+> Este archivo ha sido consolidado en `reconstructed_roadmap.md` §5 (SOT único).
+> No editar este archivo. El checklist de despliegue actualizado vive en `reconstructed_roadmap.md`.
 
 > Ejecutar en orden estricto. Cada paso debe completarse antes de continuar.
 

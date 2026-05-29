@@ -5,7 +5,6 @@ import { renderWithShell } from '@/test/test-utils'
 
 // ── Mocks de stores ───────────────────────────────────────────
 
-let idParteMock    = 'abc12345-0000-0000-0000-000000000001'
 let idChecklistMock = 'chk00001-0000-0000-0000-000000000001'
 let matriculaMock  = '1234-XX'
 const marcarChecklistCerradoMock = vi.fn()
@@ -13,14 +12,12 @@ const marcarChecklistCerradoMock = vi.fn()
 vi.mock('@/stores/useActivacionStore', () => {
   function useActivacionStore<T = unknown>(
     selector?: (s: {
-      id_parte: string
       id_checklist: string
       matricula: string
       marcarChecklistCerrado: () => void
     }) => T,
   ): T | object {
     const s = {
-      id_parte:               idParteMock,
       id_checklist:           idChecklistMock,
       matricula:              matriculaMock,
       marcarChecklistCerrado: marcarChecklistCerradoMock,
@@ -89,7 +86,6 @@ const CHECKLIST_CERRADO: ReturnType<typeof useChecklist360Activo>['data'] = {
 const cerrarMock = vi.fn()
 
 beforeEach(() => {
-  idParteMock     = 'abc12345-0000-0000-0000-000000000001'
   idChecklistMock = 'chk00001-0000-0000-0000-000000000001'
   matriculaMock   = '1234-XX'
   vehiculoTipoMock = { tipo: 'A2' }
@@ -108,20 +104,20 @@ beforeEach(() => {
 // ── Gate ──────────────────────────────────────────────────────
 
 describe('Checklist360Screen — gate', () => {
-  it('muestra gate si no hay id_parte', () => {
-    idParteMock = ''
-    renderWithShell(<Checklist360Screen />)
-    expect(screen.getByText(/no hay turno activo/i)).toBeInTheDocument()
-  })
-
   it('muestra gate si no hay id_checklist', () => {
     idChecklistMock = ''
     renderWithShell(<Checklist360Screen />)
-    expect(screen.getByText(/no hay turno activo/i)).toBeInTheDocument()
+    expect(screen.getByText(/no hay vehículo activado/i)).toBeInTheDocument()
+  })
+
+  it('muestra gate si no hay matrícula', () => {
+    matriculaMock = ''
+    renderWithShell(<Checklist360Screen />)
+    expect(screen.getByText(/no hay vehículo activado/i)).toBeInTheDocument()
   })
 
   it('gate muestra título correcto', () => {
-    idParteMock = ''
+    idChecklistMock = ''
     renderWithShell(<Checklist360Screen />)
     expect(screen.getByText(/checklist 360° — revisión del vehículo/i)).toBeInTheDocument()
   })

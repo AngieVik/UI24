@@ -198,16 +198,17 @@ describe('BlackColumn — RBAC visual', () => {
 })
 
 describe('BlackColumn — selección de hoja', () => {
-  it('al seleccionar una hoja, autocontrae (expanded=false)', async () => {
+  it('al seleccionar una hoja, queda activa y expanded no cambia (usuario controla)', async () => {
     const user = userEvent.setup()
     renderWithShell(<BlackColumn />)
-    await user.click(screen.getByRole('button', { name: 'Operativa' }))
-    // Ya está expandido
-    expect(screen.getByRole('button', { name: 'Contraer panel' })).toBeInTheDocument()
 
-    // Pulsar una hoja directa del grupo
+    // navigateInto y selectLeaf NO tocan expanded — el panel sigue colapsado
+    await user.click(screen.getByRole('button', { name: 'Operativa' }))
+    expect(screen.getByRole('button', { name: 'Expandir panel' })).toBeInTheDocument()
+
+    // Pulsar la hoja — selectLeaf no cambia expanded
     await user.click(screen.getByRole('button', { name: 'Vehículos' }))
-    // Autocontrae
+    expect(screen.getByRole('button', { name: 'Vehículos', current: 'page' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Expandir panel' })).toBeInTheDocument()
   })
 })

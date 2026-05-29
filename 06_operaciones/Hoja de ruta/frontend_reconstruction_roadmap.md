@@ -1,4 +1,8 @@
-# Hoja de ruta — Reconstrucción del frontend U24
+# ~~Hoja de ruta — Reconstrucción del frontend U24~~ [OBSOLETO]
+
+> **AVISO 2026-05-29 — DOCUMENTO OBSOLETO**
+> Este archivo ha sido consolidado en `reconstructed_roadmap.md` (SOT único).
+> No editar este archivo. Toda la información de estado y planificación vive en `reconstructed_roadmap.md`.
 
 > **Documento operativo de la reconstrucción del frontend** iniciada el
 > 2026-05-22 tras la auditoría_2 post-checklist de despliegue. Trabaja en
@@ -699,7 +703,7 @@ Lista viva. Se cierra cuando la fase responsable la resuelve.
 | ~~D-14~~ | ~~BD — CRÍTICO~~ | ~~Migraciones pendientes de Fase D~~ ✅ resuelto 2026-05-28. Todos los scripts (`000003_schema_corrections`, `000004_turno_shift`) aplicados manualmente en producción y validados. `000003` eliminado del repo local por conflicto de función v1 con v2. Enums, turno, RPCs operativos en Supabase. |
 | D-15 | BD | `ServiciosScreen` (`rrhh_servicios`) usa tabla `servicios_planificados` y RPCs `rpc_planificar_servicio` / `rpc_cancelar_servicio` que **no existen en el schema actual**. Crear migración con tabla + RPCs antes de usar la pantalla en runtime. | Fase F |
 | D-16 | BD | `RepositorioScreen` (`rrhh_repositorio`) usa tabla `repositorio_documentos` que **no existe en el schema actual**. Crear migración con la tabla (id, nombre, categoria, descripcion, url, version, fecha_alta, activo) antes de usar la pantalla en runtime. | Fase F |
-| D-17 | UX **[Fase E — PRIORITARIO]** | Los leafIds con `opensModal: true` en `black-column-nav.ts` (`log_bandeja`, `flota_bandeja`, `coord_bandeja`, `rrhh_bandeja`, `drp_res`) actualmente renderizan como pantalla completa en `HomeArea`. El componente `BandejaModal` está listo pero no está integrado como overlay flotante. Implementar: detectar `opensModal` en `HomeArea`, conservar la pantalla anterior visible debajo, y abrir el `BandejaModal` / `ResumenDrpScreen` sobre ella. Debe resolverse antes de escribir los E2E de Playwright. | Fase E |
+| ~~D-17~~ | ~~UX~~ | ~~BandejaModal como overlay flotante~~ ✅ resuelto 2026-05-28. El overlay estaba implementado en `App.tsx` (ModalArea + openModal en BlackColumn). Limpieza: eliminados 4 archivos dead code (`BandejaLogisticaScreen`, `BandejaFlotaScreen`, `BandejaCoordScreen`, `BandejaRRHHScreen`). 8 tests nuevos en `useBlackColumnState.test.ts` cubren `openModal`/`closeModal`/`modalLeafId`. |
 
 ---
 
@@ -719,4 +723,4 @@ Directiva estricta: No tocar la BD ni hacer despliegues de migraciones sin mi pe
 
 - **2026-05-22 — v1.0** (Claude): documento creado tras cierre de Fase A.
 - **2026-05-27 — v2.0** (Claude): Fase D cerrada. 49 rutas cableadas en `App.tsx`. Screens creados: D.1 (11) · D.2 (6) · D.3 (2) · D.4 (8) · D.5 (9) · D.6 (7) · D.7 (8) · D.8 (2) · D.9 (1 — `BandejaModal`). Deudas D-14..D-17 registradas. Arquitectura turno/vehículo separada: `id_activacion` nullable en `doc8_partes_trabajo`, `rpc_abrir_turno` / `rpc_cerrar_turno` nuevas (migración D-14 pendiente de aplicar al Supabase real).
-- **2026-05-28 — v2.1** (Claude): Fase E iniciada. BD estabilizada (D-14 cerrada). Limpieza: `20260527000003_schema_corrections.sql` eliminado (conflicto v1 con v2). D-01 cerrada: bypass dev eliminado de `LoginScreen.tsx`. Sentry configurado prod-only (guard `PROD` en `sentry.ts` + DSN quitado de `.env.local`). Plugin `bundleSizeGuard` en `vite.config.ts` + paso de informe en CI. D-17 pendiente (BandejaModal overlay).
+- **2026-05-28 — v2.1** (Claude): Fase E iniciada. BD estabilizada (D-14 cerrada). Limpieza: `20260527000003_schema_corrections.sql` eliminado (conflicto v1 con v2). D-01 cerrada: bypass dev eliminado de `LoginScreen.tsx`. Sentry configurado prod-only (guard `PROD` en `sentry.ts` + DSN quitado de `.env.local`). Plugin `bundleSizeGuard` en `vite.config.ts` + paso de informe en CI. D-17 cerrada: 4 BandejaXxxScreen dead code eliminados, 8 tests modal añadidos.

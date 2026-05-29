@@ -1,9 +1,9 @@
-# Soy AngieVik, trabajo en U24. Lee los siguientes archivos en este orden estricto para tener el contexto de la Fase D que acabamos de terminar
+# Soy AngieVik, trabajo en U24. Lee los siguientes archivos en este orden estricto para tener el contexto de la Fase E en curso
 
 1. `.claude\CLAUDE.md` (v2.2, fuente de verdad técnica, este archivo).
 2. `05_interfaz_y_desarrollo/diseño_chupiwachi.md` (fuente de verdad visual).
 3. `05_interfaz_y_desarrollo/mapeo_visual_ui.md` (mapeado técnico de la app).
-4. `06_operaciones/Hoja de ruta/frontend_reconstruction_roadmap.md` (roadmap actual)
+4. `06_operaciones/Hoja de ruta/reconstructed_roadmap.md` (SOT único del roadmap — consolidado 2026-05-29)
 
 ## REGLAS ARQUITECTÓNICAS Y DE NEGOCIO - PROYECTO U24 (VERSIÓN 2.2)
 

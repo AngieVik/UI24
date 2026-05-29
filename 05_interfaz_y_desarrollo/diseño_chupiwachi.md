@@ -116,3 +116,4 @@ Estado global persistente, inyectado bajo el header en el Main. No bloquea flujo
 | 2026-05-28 | E | Sentry configurado solo para producción: guard `if (!import.meta.env.PROD) return` en `sentry.ts`; `VITE_SENTRY_DSN` eliminado de `.env.local`. |
 | 2026-05-28 | E | Plugin `bundleSizeGuard` añadido a `vite.config.ts`: rompe el build si JS total > 3 MB o entry chunk > 800 KB. Paso de informe añadido a `ci-quality.yml`. |
 | 2026-05-28 | E | Migración `20260527000003_schema_corrections.sql` eliminada del repo local (conflicto `rpc_actualizar_vehiculo` v1 vs v2; contenido único ya aplicado en producción). |
+| 2026-05-28 | E | D-17 cerrada: 4 `BandejaXxxScreen` (logística, flota, coord, RRHH) eliminados como dead code; overlay ya operativo vía `ModalArea` + `BandejaModal` en `App.tsx`. 8 tests modal añadidos a `useBlackColumnState.test.ts`. |

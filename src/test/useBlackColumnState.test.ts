@@ -165,6 +165,63 @@ describe('useBlackColumnState — goHome / goCheckin', () => {
   })
 })
 
+describe('useBlackColumnState — openModal / closeModal (D-17)', () => {
+  it('estado inicial sin modal abierto', () => {
+    const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
+    expect(result.current.modalLeafId).toBeNull()
+  })
+
+  it('openModal establece modalLeafId sin tocar selectedLeafId', () => {
+    const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
+    act(() => result.current.selectLeaf('log_inv_locations'))
+    act(() => result.current.openModal('log_bandeja'))
+    expect(result.current.modalLeafId).toBe('log_bandeja')
+    // La pantalla anterior permanece activa debajo del modal
+    expect(result.current.selectedLeafId).toBe('log_inv_locations')
+  })
+
+  it('closeModal vuelve modalLeafId a null preservando selectedLeafId', () => {
+    const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
+    act(() => result.current.selectLeaf('log_inv_locations'))
+    act(() => result.current.openModal('log_bandeja'))
+    act(() => result.current.closeModal())
+    expect(result.current.modalLeafId).toBeNull()
+    expect(result.current.selectedLeafId).toBe('log_inv_locations')
+  })
+
+  it('openModal funciona con cada leafId opensModal del árbol', () => {
+    const ids = ['log_bandeja', 'flota_bandeja', 'coord_bandeja', 'rrhh_bandeja', 'drp_res']
+    for (const id of ids) {
+      const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
+      act(() => result.current.openModal(id))
+      expect(result.current.modalLeafId).toBe(id)
+    }
+  })
+
+  it('goHome cierra el modal activo', () => {
+    const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
+    act(() => result.current.openModal('log_bandeja'))
+    act(() => result.current.goHome())
+    expect(result.current.modalLeafId).toBeNull()
+    expect(result.current.selectedLeafId).toBe('home')
+  })
+
+  it('goCheckin cierra el modal activo', () => {
+    const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
+    act(() => result.current.openModal('coord_bandeja'))
+    act(() => result.current.goCheckin())
+    expect(result.current.modalLeafId).toBeNull()
+    expect(result.current.selectedLeafId).toBe('checkin')
+  })
+
+  it('abrir un segundo modal reemplaza el anterior sin closeModal intermedio', () => {
+    const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
+    act(() => result.current.openModal('log_bandeja'))
+    act(() => result.current.openModal('drp_res'))
+    expect(result.current.modalLeafId).toBe('drp_res')
+  })
+})
+
 describe('useBlackColumnState — visibleChildren', () => {
   it('en raíz devuelve grupos top-level visibles', () => {
     const { result } = renderHook(() => useBlackColumnState({ rol: 'gerencia' }))
