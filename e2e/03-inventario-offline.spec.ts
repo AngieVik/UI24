@@ -45,15 +45,16 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
   test('Doc-6 carga aunque la red esté cortada (datos en caché)', async ({ page, context }) => {
     await bootstrapApp(page)
 
-    // Cortar red y navegar a Doc-6
-    await context.setOffline(true)
-
+    // Cargar Doc-6 con red activa para que el chunk lazy quede en memoria.
+    // setOffline ANTES de la navegación bloquea la carga del chunk JS → test roto.
     await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
-
-    // CardTitle es <div> — usar getByText
     await expect(page.getByText('Doc-6 — Gasto de material').first()).toBeVisible({
       timeout: 8_000,
     })
+
+    // Ahora cortar red: el chunk ya está cargado, la pantalla debe seguir visible.
+    await context.setOffline(true)
+    await expect(page.getByText('Doc-6 — Gasto de material').first()).toBeVisible()
 
     await context.setOffline(false)
   })
