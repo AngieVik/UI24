@@ -58,7 +58,7 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
     await context.setOffline(false)
   })
 
-  test('ciclo offline → mutación encolada → online → verificación', async ({ page, context }) => {
+  test('ciclo offline → mutación encolada → online → verificación', async ({ page, context: _context }) => {
     await bootstrapApp(page)
 
     // Bloquear las llamadas RPC (simula red cortada sin cortar del todo la carga de assets)

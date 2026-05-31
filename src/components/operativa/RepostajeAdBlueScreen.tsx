@@ -41,6 +41,7 @@ export function RepostajeAdBlueScreen() {
   })
 
   const form = useForm<Schema>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(schema) as any, // z.coerce.number() → resolver input mismatch
     defaultValues: {},
     mode: 'onBlur',
