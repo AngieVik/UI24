@@ -50,8 +50,8 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
 
     await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
 
-    // El screen debe renderizar (aunque el fetch no llegue a Supabase)
-    await expect(page.getByRole('heading', { name: /gasto de material|doc.?6/i })).toBeVisible({
+    // CardTitle es <div> — usar getByText
+    await expect(page.getByText('Doc-6 — Gasto de material').first()).toBeVisible({
       timeout: 8_000,
     })
 
@@ -72,7 +72,8 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
 
     await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
 
-    await expect(page.getByRole('heading', { name: /gasto de material|doc.?6/i })).toBeVisible({
+    // CardTitle es <div> — usar getByText
+    await expect(page.getByText('Doc-6 — Gasto de material').first()).toBeVisible({
       timeout: 8_000,
     })
 

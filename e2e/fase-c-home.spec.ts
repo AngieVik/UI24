@@ -13,7 +13,7 @@ import { test, expect, type Route } from '@playwright/test'
  *   "Test E2E 'home con datos' pasa en Playwright"
  */
 
-const SUPABASE_HOST = 'ygljtbpfpfdbuxvibbom.supabase.co'
+const SUPABASE_HOST = process.env.E2E_SUPABASE_HOST || 'ygljtbpfpfdbuxvibbom.supabase.co'
 const TERMINAL_ID = 'e2e-terminal-fixture'
 const MATRICULA = '9999-E2E'
 const ID_DRP = 'e2e-drp-aaaa-bbbb-cccc-dddddddddddd'

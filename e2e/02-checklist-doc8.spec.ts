@@ -43,9 +43,8 @@ test.describe('AppShell — navegación a pantallas operativas', () => {
 
     await navegarDrill(page, 'Operativa', 'Vehículos')
 
-    await expect(page.getByRole('heading', { name: /vehículos|vehículo/i })).toBeVisible({
-      timeout: 8_000,
-    })
+    // CardTitle es <div>, no <h*>: usar getByText en lugar de getByRole('heading')
+    await expect(page.getByText('Selector de flota')).toBeVisible({ timeout: 8_000 })
   })
 
   test('navegar a Doc-6 Gasto de material', async ({ page }) => {
@@ -53,7 +52,8 @@ test.describe('AppShell — navegación a pantallas operativas', () => {
 
     await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
 
-    await expect(page.getByRole('heading', { name: /gasto de material|doc.?6/i })).toBeVisible({
+    // CardTitle es <div> — usar getByText (el em-dash distingue del label del nav)
+    await expect(page.getByText('Doc-6 — Gasto de material').first()).toBeVisible({
       timeout: 8_000,
     })
   })
