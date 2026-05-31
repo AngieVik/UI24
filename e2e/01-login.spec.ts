@@ -1,64 +1,125 @@
 import { test, expect } from '@playwright/test'
-import { CREDS, loginNormal, waitForVehiclePicker } from './helpers'
 
 /**
- * Flujo 1 — Login normal + galleta + fingerprint
- * Cubre: acceso normal online, fingerprint SHA-256, galleta terminal.
+ * Flujo 1 — AutorizarTerminalScreen (estado_0a)
  *
- * SKIPPED (D-05): referencias a UI vieja borrada en Fase A.
- * Se reescribirá en Fase E junto con el resto de E2E.
+ * Testea la pantalla que aparece cuando el terminal no tiene sesión.
+ * No se inyecta IDB ni sessionStorage → App muestra AutorizarTerminalScreen.
+ * No se necesita Supabase real: solo probamos el renderizado del formulario.
  */
-test.describe.skip('Login — Flujo normal', () => {
-  test('muestra la pantalla de login al arrancar', async ({ page }) => {
+test.describe('Autorizar terminal — estado_0a', () => {
+  test.beforeEach(async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('tab', { name: /acceso normal/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /emergencia/i })).toBeVisible()
   })
 
-  test('login con credenciales correctas lleva al selector de vehículo', async ({ page }) => {
-    await loginNormal(page, CREDS.user.email, CREDS.user.password)
-    await waitForVehiclePicker(page)
+  test('muestra el heading "Autorizar terminal"', async ({ page }) => {
+    await expect(
+      page.getByRole('heading', { name: /autorizar terminal/i })
+    ).toBeVisible({ timeout: 8_000 })
   })
 
-  test('login con credenciales incorrectas muestra error', async ({ page }) => {
-    await loginNormal(page, CREDS.user.email, 'wrongpassword')
-    await expect(page.getByRole('alert')).toBeVisible({ timeout: 8_000 })
+  test('muestra el logo de U24', async ({ page }) => {
+    await expect(
+      page.getByRole('img', { name: /u24 servicios sanitarios/i })
+    ).toBeVisible({ timeout: 8_000 })
   })
 
-  test('bloqueo tras 3 intentos fallidos', async ({ page }) => {
-    await page.goto('/')
-    for (let i = 0; i < 3; i++) {
-      await page.getByLabel(/correo/i).fill(CREDS.user.email)
-      await page.getByLabel(/contraseña/i).fill('wrong')
-      await page.getByRole('button', { name: /entrar/i }).click()
-      await expect(page.getByRole('alert')).toBeVisible({ timeout: 5_000 })
-    }
-    // El botón debe estar deshabilitado o el contador de bloqueo visible
-    const blocked =
-      (await page.getByRole('button', { name: /entrar/i }).isDisabled()) ||
-      (await page.getByText(/bloqueado|reintentos/i).isVisible())
-    expect(blocked).toBeTruthy()
+  test('el formulario tiene los campos identificador y contraseña', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByLabel(/identificador/i)).toBeVisible()
+    await expect(page.getByLabel(/contraseña/i)).toBeVisible()
   })
 
-  test('logout limpia la sesión', async ({ page }) => {
-    await loginNormal(page, CREDS.user.email, CREDS.user.password)
-    await waitForVehiclePicker(page)
-    // Buscar botón de logout en el header o estado de espera
-    const logoutBtn = page.getByRole('button', { name: /salir|cerrar sesión|logout/i })
-    if (await logoutBtn.isVisible()) {
-      await logoutBtn.click()
-      await expect(page.getByRole('tab', { name: /acceso normal/i })).toBeVisible({ timeout: 5_000 })
-    }
+  test('el botón de envío existe y está habilitado', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({ timeout: 8_000 })
+    await expect(
+      page.getByRole('button', { name: /autorizar|entrar/i })
+    ).toBeVisible()
+  })
+
+  test('muestra banner "Sin conexión" cuando la red está cortada', async ({ page, context }) => {
+    // Simular offline antes de cargar
+    await context.setOffline(true)
+    await page.reload()
+    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(/sin conexión/i)).toBeVisible()
+    await context.setOffline(false)
+  })
+
+  test('muestra error de validación si se envía sin datos', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({ timeout: 8_000 })
+    await page.getByRole('button', { name: /autorizar|entrar/i }).click()
+    // Validación de formulario debe mostrar mensaje de error
+    await expect(
+      page.getByText(/requerido|mínimo|obligatorio/i).first()
+    ).toBeVisible({ timeout: 4_000 })
   })
 })
 
-test.describe.skip('Login — Flujo emergencia', () => {
-  test('muestra el formulario de emergencia al seleccionar la pestaña', async ({ page }) => {
+/**
+ * Flujo 1b — CheckinInicialScreen (estado_0b)
+ *
+ * El terminal tiene sesión (IDB inyectado) pero no hay presencias.
+ * Supabase mock devuelve presencias vacías → CheckinInicialScreen.
+ */
+test.describe('Check-in inicial — estado_0b', () => {
+  const SUPABASE_HOST = process.env.E2E_SUPABASE_HOST || 'ygljtbpfpfdbuxvibbom.supabase.co'
+  const TERMINAL_ID   = 'e2e-terminal-fixture'
+
+  test.beforeEach(async ({ page }) => {
+    // Mock: presencias vacías → fuerza CheckinInicialScreen
+    await page.route(`**/${SUPABASE_HOST}/rest/v1/**`, async (route) => {
+      await route.fulfill({
+        status:      200,
+        contentType: 'application/json',
+        body:        '[]',
+      })
+    })
+
+    // Inyectar sesión del terminal pero sin presencias
+    await page.addInitScript(
+      ({ terminalId }) => {
+        sessionStorage.setItem('u24-auth', JSON.stringify({
+          state: {
+            session: {
+              access_token:  'e2e-bypass-token',
+              refresh_token: 'e2e-refresh-token',
+              user: {
+                id: '00000000-0000-0000-0000-000000000e2e',
+                app_metadata:  { rol: 'tes', id_nombre: 'tes_demo' },
+                user_metadata: { rol: 'tes', id_nombre: 'tes_demo' },
+              },
+            },
+            ejecutorId: 'tes_demo',
+            rol:        'tes',
+          },
+          version: 0,
+        }))
+        const req = indexedDB.open('keyval-store', 1)
+        req.onupgradeneeded = () => req.result.createObjectStore('keyval')
+        req.onsuccess = () => {
+          const db = req.result
+          const tx = db.transaction('keyval', 'readwrite')
+          tx.objectStore('keyval').put(
+            { state: { id_terminal: terminalId, tipoGalleta: 'temporal', fingerprint: terminalId }, version: 0 },
+            'u24-terminal'
+          )
+        }
+      },
+      { terminalId: TERMINAL_ID }
+    )
+
     await page.goto('/')
-    await page.getByRole('tab', { name: /emergencia/i }).click()
-    // Debe haber un campo de PIN/token de emergencia
+  })
+
+  test('muestra el formulario de check-in', async ({ page }) => {
+    // Con presencias vacías debe aparecer la pantalla de check-in
     await expect(
-      page.getByLabel(/pin|token|emergencia/i).first()
+      page.getByLabel(/identificador/i)
+    ).toBeVisible({ timeout: 10_000 })
+    // El texto de check-in debe ser visible
+    await expect(
+      page.getByText(/check.in|iniciar|entrar/i).first()
     ).toBeVisible()
   })
 })

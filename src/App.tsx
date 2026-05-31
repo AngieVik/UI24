@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useTerminalStore } from '@/stores/useTerminalStore'
 
-// ── Auth / Layout ──────────────────────────────────────────────────────────
+// ── Auth / Layout — estáticos (critical path) ──────────────────────────────
 import { AutorizarTerminalScreen } from '@/components/auth/AutorizarTerminalScreen'
 import { CheckinInicialScreen } from '@/components/auth/CheckinInicialScreen'
 import { AppShell } from '@/components/layout/AppShell'
@@ -15,69 +15,80 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import type { BandejaCanal } from '@/components/layout/BandejaModal'
 
-// ── D.1 Operativa ─────────────────────────────────────────────────────────
-import { PresenciaScreen } from '@/components/operativa/PresenciaScreen'
-import { VehiculosScreen } from '@/components/operativa/VehiculosScreen'
-import { Doc6GastoMaterialScreen } from '@/components/operativa/Doc6GastoMaterialScreen'
-import { Doc10EnvioMaterialScreen } from '@/components/operativa/Doc10EnvioMaterialScreen'
-import { Doc8ParteTrabajoScreen } from '@/components/operativa/Doc8ParteTrabajoScreen'
-import { Checklist360Screen } from '@/components/operativa/Checklist360Screen'
-import { Doc2InformeAsistencialScreen } from '@/components/operativa/Doc2InformeAsistencialScreen'
-import { Doc11AvisoUrgenteScreen } from '@/components/operativa/Doc11AvisoUrgenteScreen'
-import { RepostajeCombustibleScreen } from '@/components/operativa/RepostajeCombustibleScreen'
-import { RepostajeAdBlueScreen } from '@/components/operativa/RepostajeAdBlueScreen'
-import { Doc7InformeAveriaScreen } from '@/components/operativa/Doc7InformeAveriaScreen'
+// ── D.1 Operativa — lazy ───────────────────────────────────────────────────
+const PresenciaScreen          = lazy(() => import('@/components/operativa/PresenciaScreen').then(m => ({ default: m.PresenciaScreen })))
+const VehiculosScreen          = lazy(() => import('@/components/operativa/VehiculosScreen').then(m => ({ default: m.VehiculosScreen })))
+const Doc6GastoMaterialScreen  = lazy(() => import('@/components/operativa/Doc6GastoMaterialScreen').then(m => ({ default: m.Doc6GastoMaterialScreen })))
+const Doc10EnvioMaterialScreen = lazy(() => import('@/components/operativa/Doc10EnvioMaterialScreen').then(m => ({ default: m.Doc10EnvioMaterialScreen })))
+const Doc8ParteTrabajoScreen   = lazy(() => import('@/components/operativa/Doc8ParteTrabajoScreen').then(m => ({ default: m.Doc8ParteTrabajoScreen })))
+const Checklist360Screen       = lazy(() => import('@/components/operativa/Checklist360Screen').then(m => ({ default: m.Checklist360Screen })))
+const Doc2InformeAsistencialScreen = lazy(() => import('@/components/operativa/Doc2InformeAsistencialScreen').then(m => ({ default: m.Doc2InformeAsistencialScreen })))
+const Doc11AvisoUrgenteScreen  = lazy(() => import('@/components/operativa/Doc11AvisoUrgenteScreen').then(m => ({ default: m.Doc11AvisoUrgenteScreen })))
+const RepostajeCombustibleScreen = lazy(() => import('@/components/operativa/RepostajeCombustibleScreen').then(m => ({ default: m.RepostajeCombustibleScreen })))
+const RepostajeAdBlueScreen    = lazy(() => import('@/components/operativa/RepostajeAdBlueScreen').then(m => ({ default: m.RepostajeAdBlueScreen })))
+const Doc7InformeAveriaScreen  = lazy(() => import('@/components/operativa/Doc7InformeAveriaScreen').then(m => ({ default: m.Doc7InformeAveriaScreen })))
 
-// ── D.2 DRP ────────────────────────────────────────────────────────────────
-import { VisorDrpScreen } from '@/components/drp/VisorDrpScreen'
-import { CrearDrpScreen } from '@/components/drp/CrearDrpScreen'
-import { EstadosDrpScreen } from '@/components/drp/EstadosDrpScreen'
-import { OperativaDrpScreen } from '@/components/drp/OperativaDrpScreen'
-import { LogisticaDrpScreen } from '@/components/drp/LogisticaDrpScreen'
-import { ResumenDrpScreen } from '@/components/drp/ResumenDrpScreen'
+// ── D.2 DRP — lazy ────────────────────────────────────────────────────────
+const VisorDrpScreen    = lazy(() => import('@/components/drp/VisorDrpScreen').then(m => ({ default: m.VisorDrpScreen })))
+const CrearDrpScreen    = lazy(() => import('@/components/drp/CrearDrpScreen').then(m => ({ default: m.CrearDrpScreen })))
+const EstadosDrpScreen  = lazy(() => import('@/components/drp/EstadosDrpScreen').then(m => ({ default: m.EstadosDrpScreen })))
+const OperativaDrpScreen = lazy(() => import('@/components/drp/OperativaDrpScreen').then(m => ({ default: m.OperativaDrpScreen })))
+const LogisticaDrpScreen = lazy(() => import('@/components/drp/LogisticaDrpScreen').then(m => ({ default: m.LogisticaDrpScreen })))
+const ResumenDrpScreen  = lazy(() => import('@/components/drp/ResumenDrpScreen').then(m => ({ default: m.ResumenDrpScreen })))
 
-// ── D.3 Módulos especiales ─────────────────────────────────────────────────
-import { ModuloPsaScreen } from '@/components/especiales/ModuloPsaScreen'
-import { ModuloFiliacionScreen } from '@/components/especiales/ModuloFiliacionScreen'
+// ── D.3 Módulos especiales — lazy ─────────────────────────────────────────
+const ModuloPsaScreen       = lazy(() => import('@/components/especiales/ModuloPsaScreen').then(m => ({ default: m.ModuloPsaScreen })))
+const ModuloFiliacionScreen = lazy(() => import('@/components/especiales/ModuloFiliacionScreen').then(m => ({ default: m.ModuloFiliacionScreen })))
 
-// ── D.4 Logística ──────────────────────────────────────────────────────────
-import { InventarioMaestroScreen } from '@/components/logistica/InventarioMaestroScreen'
-import { CatalogoItemsScreen } from '@/components/logistica/CatalogoItemsScreen'
-import { DescuadresScreen } from '@/components/logistica/DescuadresScreen'
-import { StockScreen } from '@/components/logistica/StockScreen'
-import { MovimientosScreen } from '@/components/logistica/MovimientosScreen'
-import { Doc9EntradaAlmacenScreen } from '@/components/logistica/Doc9EntradaAlmacenScreen'
+// ── D.4 Logística — lazy ──────────────────────────────────────────────────
+const InventarioMaestroScreen = lazy(() => import('@/components/logistica/InventarioMaestroScreen').then(m => ({ default: m.InventarioMaestroScreen })))
+const CatalogoItemsScreen     = lazy(() => import('@/components/logistica/CatalogoItemsScreen').then(m => ({ default: m.CatalogoItemsScreen })))
+const DescuadresScreen        = lazy(() => import('@/components/logistica/DescuadresScreen').then(m => ({ default: m.DescuadresScreen })))
+const StockScreen             = lazy(() => import('@/components/logistica/StockScreen').then(m => ({ default: m.StockScreen })))
+const MovimientosScreen       = lazy(() => import('@/components/logistica/MovimientosScreen').then(m => ({ default: m.MovimientosScreen })))
+const Doc9EntradaAlmacenScreen = lazy(() => import('@/components/logistica/Doc9EntradaAlmacenScreen').then(m => ({ default: m.Doc9EntradaAlmacenScreen })))
 
-// ── D.5 Flota ──────────────────────────────────────────────────────────────
-import { IncidenciasScreen } from '@/components/flota/IncidenciasScreen'
-import { VisorMantenimientoScreen } from '@/components/flota/VisorMantenimientoScreen'
-import { MantenimientoFlotaScreen } from '@/components/flota/MantenimientoFlotaScreen'
-import { VehiculosMetadataScreen } from '@/components/flota/VehiculosMetadataScreen'
+// ── D.5 Flota — lazy ──────────────────────────────────────────────────────
+const IncidenciasScreen        = lazy(() => import('@/components/flota/IncidenciasScreen').then(m => ({ default: m.IncidenciasScreen })))
+const VisorMantenimientoScreen = lazy(() => import('@/components/flota/VisorMantenimientoScreen').then(m => ({ default: m.VisorMantenimientoScreen })))
+const MantenimientoFlotaScreen = lazy(() => import('@/components/flota/MantenimientoFlotaScreen').then(m => ({ default: m.MantenimientoFlotaScreen })))
+const VehiculosMetadataScreen  = lazy(() => import('@/components/flota/VehiculosMetadataScreen').then(m => ({ default: m.VehiculosMetadataScreen })))
 
-// ── D.6 Coordinación ───────────────────────────────────────────────────────
-import { ModuloEmergenciasScreen } from '@/components/coordinacion/ModuloEmergenciasScreen'
-import { DispositivosValidadosScreen } from '@/components/coordinacion/DispositivosValidadosScreen'
-import { VisorSeguimientoScreen } from '@/components/coordinacion/VisorSeguimientoScreen'
-import { RbacScreen } from '@/components/coordinacion/RbacScreen'
-import { ForzarCheckoutScreen } from '@/components/coordinacion/ForzarCheckoutScreen'
-import { CambioPasswordScreen } from '@/components/coordinacion/CambioPasswordScreen'
+// ── D.6 Coordinación — lazy ───────────────────────────────────────────────
+const ModuloEmergenciasScreen    = lazy(() => import('@/components/coordinacion/ModuloEmergenciasScreen').then(m => ({ default: m.ModuloEmergenciasScreen })))
+const DispositivosValidadosScreen = lazy(() => import('@/components/coordinacion/DispositivosValidadosScreen').then(m => ({ default: m.DispositivosValidadosScreen })))
+const VisorSeguimientoScreen     = lazy(() => import('@/components/coordinacion/VisorSeguimientoScreen').then(m => ({ default: m.VisorSeguimientoScreen })))
+const RbacScreen                 = lazy(() => import('@/components/coordinacion/RbacScreen').then(m => ({ default: m.RbacScreen })))
+const ForzarCheckoutScreen       = lazy(() => import('@/components/coordinacion/ForzarCheckoutScreen').then(m => ({ default: m.ForzarCheckoutScreen })))
+const CambioPasswordScreen       = lazy(() => import('@/components/coordinacion/CambioPasswordScreen').then(m => ({ default: m.CambioPasswordScreen })))
 
-// ── D.7 RRHH ───────────────────────────────────────────────────────────────
-import { FichasEmpleadosScreen } from '@/components/rrhh/FichasEmpleadosScreen'
-import { GestionBajasScreen } from '@/components/rrhh/GestionBajasScreen'
-import { CuadrantesScreen } from '@/components/rrhh/CuadrantesScreen'
-import { Doc12VacacionesScreen } from '@/components/rrhh/Doc12VacacionesScreen'
-import { ComunicacionScreen } from '@/components/rrhh/ComunicacionScreen'
-import { ServiciosScreen } from '@/components/rrhh/ServiciosScreen'
-import { RepositorioScreen } from '@/components/rrhh/RepositorioScreen'
+// ── D.7 RRHH — lazy ───────────────────────────────────────────────────────
+const FichasEmpleadosScreen  = lazy(() => import('@/components/rrhh/FichasEmpleadosScreen').then(m => ({ default: m.FichasEmpleadosScreen })))
+const GestionBajasScreen     = lazy(() => import('@/components/rrhh/GestionBajasScreen').then(m => ({ default: m.GestionBajasScreen })))
+const CuadrantesScreen       = lazy(() => import('@/components/rrhh/CuadrantesScreen').then(m => ({ default: m.CuadrantesScreen })))
+const Doc12VacacionesScreen  = lazy(() => import('@/components/rrhh/Doc12VacacionesScreen').then(m => ({ default: m.Doc12VacacionesScreen })))
+const ComunicacionScreen     = lazy(() => import('@/components/rrhh/ComunicacionScreen').then(m => ({ default: m.ComunicacionScreen })))
+const ServiciosScreen        = lazy(() => import('@/components/rrhh/ServiciosScreen').then(m => ({ default: m.ServiciosScreen })))
+const RepositorioScreen      = lazy(() => import('@/components/rrhh/RepositorioScreen').then(m => ({ default: m.RepositorioScreen })))
 
-// ── Modal overlays (opensModal=true) ──────────────────────────────────────
-import { BandejaModal, type BandejaCanal } from '@/components/layout/BandejaModal'
+// ── Modal overlays — lazy ─────────────────────────────────────────────────
+const BandejaModal = lazy(() => import('@/components/layout/BandejaModal').then(m => ({ default: m.BandejaModal })))
 
-// ── D.8 Tablón + Buzón ─────────────────────────────────────────────────────
-import { TablonCentralScreen } from '@/components/tablonBuzon/TablonCentralScreen'
-import { BuzonInternoScreen } from '@/components/tablonBuzon/BuzonInternoScreen'
+// ── D.8 Tablón + Buzón — lazy ─────────────────────────────────────────────
+const TablonCentralScreen = lazy(() => import('@/components/tablonBuzon/TablonCentralScreen').then(m => ({ default: m.TablonCentralScreen })))
+const BuzonInternoScreen  = lazy(() => import('@/components/tablonBuzon/BuzonInternoScreen').then(m => ({ default: m.BuzonInternoScreen })))
+
+function ScreenFallback() {
+  return (
+    <div className="flex flex-col gap-3 p-6">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-3/4" />
+    </div>
+  )
+}
 
 /**
  * Punto de entrada — TRES estados.
@@ -146,8 +157,12 @@ function RouterPresencias() {
   return (
     <AppShell ticker="Tablón · BlackColumn drill-down activo · pulsa los grupos para entrar, pulsa el padre activo o el botón de atrás para volver.">
       <>
-        <HomeArea />
-        <ModalArea />
+        <Suspense fallback={<ScreenFallback />}>
+          <HomeArea />
+        </Suspense>
+        <Suspense fallback={null}>
+          <ModalArea />
+        </Suspense>
       </>
     </AppShell>
   )

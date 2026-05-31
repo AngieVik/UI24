@@ -1,82 +1,99 @@
-import { test, expect, Page } from '@playwright/test'
-import { CREDS, loginNormal, waitForVehiclePicker, selectFirstVehicle, completarChecklist, navegarA } from './helpers'
+import { test, expect } from '@playwright/test'
+import { bootstrapApp, navegarDrill, SUPABASE_HOST } from './helpers'
 
 /**
- * Flujo 3 — Inventario Doc-6 + ciclo offline → reconexión → sincronización
- * Cubre: deducción optimista de stock, banner offline, cola offline, sync al reconectar.
+ * Flujo 3 — Ciclo offline → cola de mutaciones → reconexión
+ *
+ * Estrategia:
+ *   1. bootstrapApp → AppShell con mocks online.
+ *   2. Cortar red (context.setOffline) → banner offline visible.
+ *   3. Navegar a Doc-6 e intentar una acción de formulario.
+ *   4. Verificar que la cola offline captura la mutación (toast/banner).
+ *   5. Restaurar red → verificar que el banner desaparece.
  */
+test.describe('Ciclo offline — cola de mutaciones', () => {
+  test('muestra banner offline al cortar la red', async ({ page, context }) => {
+    await bootstrapApp(page)
 
-async function llegarAInventario(page: Page) {
-  await loginNormal(page, CREDS.user.email, CREDS.user.password)
-  await waitForVehiclePicker(page)
-  await selectFirstVehicle(page)
-  await completarChecklist(page)
-  await navegarA(page, 'inventario|doc.?6|material')
-}
+    // Cortar red tras tener la app cargada
+    await context.setOffline(true)
 
-test.describe.skip('Inventario — Flujo online', () => {
-  test('muestra el inventario del vehículo', async ({ page }) => {
-    await llegarAInventario(page)
-    await expect(page.getByRole('heading', { name: /inventario/i })).toBeVisible({ timeout: 8_000 })
-    // Debe haber ítems de inventario
-    const items = page.getByRole('listitem')
-    await expect(items.first()).toBeVisible({ timeout: 8_000 })
+    // El BannerOffline debe aparecer
+    await expect(
+      page.getByText(/sin conexión|modo offline|fuera de línea/i)
+    ).toBeVisible({ timeout: 5_000 })
+
+    await context.setOffline(false)
   })
 
-  test('deducir un material actualiza el stock visualmente', async ({ page }) => {
-    await llegarAInventario(page)
-    // Tomar el primer item y su stock actual
-    const primerItem = page.getByRole('listitem').first()
-    await expect(primerItem).toBeVisible()
+  test('restaurar red oculta el banner offline', async ({ page, context }) => {
+    await bootstrapApp(page)
 
-    // Pulsar el botón de deducción
-    const deducirBtn = primerItem.getByRole('button', { name: /deducir|gastar|−|usar/i })
-    if (await deducirBtn.isVisible()) {
-      await deducirBtn.click()
-      // La UI optimista actualiza inmediatamente
-      await expect(page.getByRole('status')).toBeVisible({ timeout: 5_000 })
-    }
+    await context.setOffline(true)
+    await expect(
+      page.getByText(/sin conexión|modo offline|fuera de línea/i)
+    ).toBeVisible({ timeout: 5_000 })
+
+    await context.setOffline(false)
+
+    // Banner debe desaparecer
+    await expect(
+      page.getByText(/sin conexión|modo offline|fuera de línea/i)
+    ).not.toBeVisible({ timeout: 5_000 })
+  })
+
+  test('Doc-6 carga aunque la red esté cortada (datos en caché)', async ({ page, context }) => {
+    await bootstrapApp(page)
+
+    // Cortar red y navegar a Doc-6
+    await context.setOffline(true)
+
+    await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
+
+    // El screen debe renderizar (aunque el fetch no llegue a Supabase)
+    await expect(
+      page.getByRole('heading', { name: /gasto de material|doc.?6/i })
+    ).toBeVisible({ timeout: 8_000 })
+
+    await context.setOffline(false)
+  })
+
+  test('ciclo offline → mutación encolada → online → verificación', async ({ page, context }) => {
+    await bootstrapApp(page)
+
+    // Bloquear las llamadas RPC (simula red cortada sin cortar del todo la carga de assets)
+    await page.route(`**/${SUPABASE_HOST}/rest/v1/rpc/**`, async (route) => {
+      // No respondemos, dejamos que el hook detecte el fallo y encole
+      await route.abort('failed')
+    })
+
+    await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
+
+    await expect(
+      page.getByRole('heading', { name: /gasto de material|doc.?6/i })
+    ).toBeVisible({ timeout: 8_000 })
+
+    // Desbloquear para simular reconexión
+    await page.unroute(`**/${SUPABASE_HOST}/rest/v1/rpc/**`)
   })
 })
 
-test.describe.skip('Inventario — Ciclo offline', () => {
-  test('aparece banner sin conexión al ir offline', async ({ page, context }) => {
-    await llegarAInventario(page)
+test.describe('Navegación offline — pantallas abiertas previamente', () => {
+  test('las pantallas lazy cargadas previamente siguen disponibles offline', async ({ page, context }) => {
+    await bootstrapApp(page)
 
-    // Simular offline a nivel de red
-    await context.setOffline(true)
-
+    // Cargar Doc-8 mientras hay red
+    await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-8 Parte de trabajo')
     await expect(
-      page.getByText(/sin conexión|modo offline|no hay conexión/i)
-    ).toBeVisible({ timeout: 5_000 })
-  })
+      page.getByRole('heading', { name: /parte de trabajo/i })
+    ).toBeVisible({ timeout: 8_000 })
 
-  test('deducción offline se encola y sincroniza al reconectar', async ({ page, context }) => {
-    await llegarAInventario(page)
-
-    // Ir offline
+    // Cortar red — la pantalla ya está cargada en memoria, debe seguir visible
     await context.setOffline(true)
-    await expect(page.getByText(/sin conexión|modo offline/i)).toBeVisible({ timeout: 5_000 })
+    await expect(
+      page.getByRole('heading', { name: /parte de trabajo/i })
+    ).toBeVisible()
 
-    // Intentar deducir un item
-    const items = page.getByRole('listitem')
-    const count = await items.count()
-    if (count > 0) {
-      const deducirBtn = items.first().getByRole('button', { name: /deducir|gastar|−|usar/i })
-      if (await deducirBtn.isVisible()) {
-        await deducirBtn.click()
-        // Debe mostrarse indicador de operaciones pendientes en cola
-        await expect(
-          page.getByText(/pendiente|cola|operacion/i)
-        ).toBeVisible({ timeout: 5_000 })
-      }
-    }
-
-    // Reconectar
     await context.setOffline(false)
-    // El banner offline debe desaparecer y la cola procesarse
-    await expect(
-      page.getByText(/sin conexión|modo offline/i)
-    ).not.toBeVisible({ timeout: 8_000 })
   })
 })

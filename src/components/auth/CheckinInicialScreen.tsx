@@ -2,12 +2,11 @@ import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, FlaskConical, LogIn, WifiOff } from 'lucide-react'
+import { Eye, EyeOff, LogIn, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
 import { useCheckinTrabajador } from '@/hooks/useCheckinTrabajador'
 import { useAbrirTurno } from '@/hooks/useAbrirTurno'
 import { useGlobalStore } from '@/stores/useGlobalStore'
@@ -155,36 +154,6 @@ export function CheckinInicialScreen() {
                 {isBusy ? 'Verificando…' : 'Hacer check-in'}
               </Button>
             </form>
-
-            {/* ── Bypass de desarrollo — eliminar al cerrar Fase E (D-01) ── */}
-            {import.meta.env.DEV && (
-              <>
-                <div className="flex items-center gap-2 pt-1">
-                  <Separator className="flex-1" />
-                  <span className="font-body text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Solo desarrollo
-                  </span>
-                  <Separator className="flex-1" />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-dashed"
-                  onClick={async () => {
-                    const res = await checkin({ id_nombre: 'admin', password: '12345678' })
-                    if (res) await abrir({ id_nombre: 'admin' })
-                  }}
-                  disabled={isBusy || !isOnline}
-                >
-                  <FlaskConical aria-hidden="true" className="size-4" />
-                  Acceso dev (admin/12345678)
-                </Button>
-                <p className="font-body text-[11px] font-light text-muted-foreground">
-                  Atajo de desarrollo: check-in directo con{' '}
-                  <code className="font-medium text-foreground">admin</code>.
-                </p>
-              </>
-            )}
           </CardContent>
         </Card>
 

@@ -107,10 +107,14 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react':   ['react', 'react-dom'],
+          'vendor-query':   ['@tanstack/react-query'],
           'vendor-sentry':  ['@sentry/react'],
           'vendor-supabase':['@supabase/supabase-js'],
           'vendor-zustand': ['zustand'],
           'vendor-idb':     ['idb-keyval'],
+          'vendor-radix':   ['radix-ui'],
+          'vendor-form':    ['react-hook-form', '@hookform/resolvers', 'zod'],
+          'vendor-icons':   ['lucide-react'],
         },
       },
     },

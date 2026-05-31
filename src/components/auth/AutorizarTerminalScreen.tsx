@@ -2,12 +2,11 @@ import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, FlaskConical, ShieldCheck, WifiOff } from 'lucide-react'
+import { Eye, EyeOff, ShieldCheck, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
 import { useAutorizarTerminal } from '@/hooks/useAutorizarTerminal'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import logoUrl from '@/assets/logo.svg'
@@ -146,34 +145,6 @@ export function AutorizarTerminalScreen() {
                 {isSubmitting ? 'Autorizando…' : 'Autorizar este terminal'}
               </Button>
             </form>
-
-            {/* ── Bypass de desarrollo — eliminar al cerrar Fase E (D-01) ── */}
-            {import.meta.env.DEV && (
-              <>
-                <div className="flex items-center gap-2 pt-1">
-                  <Separator className="flex-1" />
-                  <span className="font-body text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Solo desarrollo
-                  </span>
-                  <Separator className="flex-1" />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-dashed"
-                  onClick={() => autorizar({ id_nombre_gerencia: 'admin', password: '12345678' })}
-                  disabled={isSubmitting || !isOnline}
-                >
-                  <FlaskConical aria-hidden="true" className="size-4" />
-                  Acceso dev (admin/12345678)
-                </Button>
-                <p className="font-body text-[11px] font-light text-muted-foreground">
-                  Atajo de desarrollo: autoriza el terminal con la cuenta{' '}
-                  <code className="font-medium text-foreground">admin</code>.
-                  Solo visible en dev.
-                </p>
-              </>
-            )}
           </CardContent>
         </Card>
 

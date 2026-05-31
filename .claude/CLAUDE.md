@@ -7,10 +7,10 @@
 
 ## Estado actual (actualizado por Claude)
 
-- **Fase:** [ ]
-- **Último punto completado:** [ ]
-- **En progreso:** [ ]
-- **Bloqueadores:** [ / ]
+- **Fase:** E — Validación y reapertura del checklist de despliegue
+- **Último punto completado:** E.5 cerrada 2026-05-31. Lighthouse 88/100 perf, 100/100 a11y. 4 tests jest-axe sin violaciones. 274/274 tests Vitest ✅.
+- **En progreso:** E.4 CI Playwright — specs listos, falta runner en GitHub Actions.
+- **Bloqueadores:** Ninguno. Único pendiente para cerrar Fase E: CI Playwright verde.
 
 ## REGLAS ARQUITECTÓNICAS POLITICA DE TRABAJO - PROYECTO U24 (VERSIÓN 2.2)
 

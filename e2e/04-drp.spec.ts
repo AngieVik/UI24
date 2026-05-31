@@ -1,79 +1,102 @@
-import { test, expect, Page } from '@playwright/test'
-import { CREDS, loginNormal, waitForVehiclePicker, selectFirstVehicle, completarChecklist, navegarA } from './helpers'
+import { test, expect } from '@playwright/test'
+import { bootstrapApp, navegarDrill } from './helpers'
 
 /**
- * Flujo 4 — DRP: crear → iniciar → finalizar
- * Cubre: panel DRP para coordinación/gerencia, máquina de estados, restricción de roles.
+ * Flujo 4 — DRP: acceso por rol + navegación al panel
+ *
+ * El panel DRP es visible para todos los roles (TODOS en black-column-nav),
+ * pero las acciones de creación/estados son exclusivas de coordinacion/gerencia.
+ *
+ * Estrategia: bootstrapApp con distintos roles y verificar visibilidad del nav.
  */
+test.describe('DRP — visibilidad por rol', () => {
+  test('rol "gerencia" ve el grupo DRP en la navegación', async ({ page }) => {
+    await bootstrapApp(page, { rol: 'gerencia', idNombre: 'admin' })
 
-async function llegarAlDrpPanel(page: Page) {
-  await loginNormal(page, CREDS.gerencia.email, CREDS.gerencia.password)
-  await waitForVehiclePicker(page)
-  await selectFirstVehicle(page)
-  await completarChecklist(page)
-  await navegarA(page, 'drp|emergencia')
-}
-
-test.describe.skip('Panel DRP — Solo coordinación/gerencia', () => {
-  test('un sanitario de base no ve el panel DRP', async ({ page }) => {
-    await loginNormal(page, CREDS.user.email, CREDS.user.password)
-    await waitForVehiclePicker(page)
-    await selectFirstVehicle(page)
-    await completarChecklist(page)
-
-    // El menú DRP no debe estar visible para roles sin permiso
-    const drpNav = page.getByRole('navigation').getByText(/drp|emergencia masiva/i)
-    // O no existe o está oculto
-    const visible = await drpNav.isVisible().catch(() => false)
-    if (visible) {
-      // Si está visible, al navegar debe mostrar "Sin acceso" o redirigir
-      await drpNav.click()
-      await expect(
-        page.getByText(/sin acceso|no autorizado|permiso/i)
-      ).toBeVisible({ timeout: 5_000 })
-    }
+    const nav = page.getByRole('navigation', { name: 'Navegación principal' })
+    await expect(nav.getByRole('button', { name: /^DRP$/i })).toBeVisible()
   })
 
-  test('gerencia puede ver el panel DRP con la lista de DRPs', async ({ page }) => {
-    await llegarAlDrpPanel(page)
+  test('rol "tes" ve el grupo DRP en la navegación', async ({ page }) => {
+    await bootstrapApp(page, { rol: 'tes', idNombre: 'tes_demo' })
+
+    const nav = page.getByRole('navigation', { name: 'Navegación principal' })
+    await expect(nav.getByRole('button', { name: /^DRP$/i })).toBeVisible()
+  })
+
+  test('navegar a Visor DRP carga la pantalla', async ({ page }) => {
+    await bootstrapApp(page, { rol: 'gerencia', idNombre: 'admin' })
+
+    await navegarDrill(page, 'DRP', 'Visor DRP')
+
     await expect(
-      page.getByRole('heading', { name: /panel drp|emergencia/i })
+      page.getByRole('heading', { name: /visor.*drp|drp.*visor/i })
     ).toBeVisible({ timeout: 8_000 })
   })
 
-  test('crear un nuevo DRP y transicionar a En_preparacion', async ({ page }) => {
-    await llegarAlDrpPanel(page)
+  test('navegar a Operativa DRP carga la pantalla', async ({ page }) => {
+    await bootstrapApp(page, { rol: 'tes', idNombre: 'tes_demo' })
 
-    const crearBtn = page.getByRole('button', { name: /crear drp|nuevo drp/i })
-    if (await crearBtn.isVisible({ timeout: 5_000 })) {
-      await crearBtn.click()
+    await navegarDrill(page, 'DRP', 'Operativa DRP')
 
-      // Rellenar el formulario de creación
-      const descripcionInput = page.getByLabel(/descripción|nombre|denominación/i)
-      if (await descripcionInput.isVisible()) {
-        await descripcionInput.fill('E2E Test DRP — eliminar tras prueba')
-      }
-
-      const confirmarBtn = page.getByRole('button', { name: /crear|confirmar|guardar/i })
-      await confirmarBtn.click()
-
-      // Debe aparecer el nuevo DRP en estado En_espera
-      await expect(
-        page.getByText(/en_espera|esperando/i).first()
-      ).toBeVisible({ timeout: 8_000 })
-    }
+    await expect(
+      page.getByRole('heading', { name: /operativa.*drp|drp.*operativa/i })
+    ).toBeVisible({ timeout: 8_000 })
   })
 })
 
-test.describe.skip('Visor GPS', () => {
-  test('el visor GPS carga sin errores para gerencia', async ({ page }) => {
-    await llegarAlDrpPanel(page)
-    // Navegar al visor GPS
-    const visorBtn = page.getByRole('button', { name: /visor gps|seguimiento/i })
-    if (await visorBtn.isVisible()) {
-      await visorBtn.click()
-      // Debe mostrar algo (mapa o lista de posiciones)
-      await expect(page.getByRole('main')).toBeVisible()
-    }
+test.describe('DRP — acciones exclusivas de coordinacion/gerencia', () => {
+  test('rol "gerencia" ve "Crear DRP" en el nav', async ({ page }) => {
+    await bootstrapApp(page, { rol: 'gerencia', idNombre: 'admin' })
+
+    await page.getByRole('navigation', { name: 'Navegación principal' })
+      .getByRole('button', { name: /^DRP$/i })
+      .click()
+    await page.waitForTimeout(300)
+
+    await expect(
+      page.getByRole('navigation', { name: 'Navegación principal' })
+        .getByRole('button', { name: /crear drp/i })
+    ).toBeVisible()
+  })
+
+  test('rol "tes" NO ve "Crear DRP" en el nav', async ({ page }) => {
+    await bootstrapApp(page, { rol: 'tes', idNombre: 'tes_demo' })
+
+    await page.getByRole('navigation', { name: 'Navegación principal' })
+      .getByRole('button', { name: /^DRP$/i })
+      .click()
+    await page.waitForTimeout(300)
+
+    await expect(
+      page.getByRole('navigation', { name: 'Navegación principal' })
+        .getByRole('button', { name: /crear drp/i })
+    ).not.toBeVisible()
+  })
+
+  test('rol "gerencia" ve "Estados DRP"', async ({ page }) => {
+    await bootstrapApp(page, { rol: 'gerencia', idNombre: 'admin' })
+
+    await page.getByRole('navigation', { name: 'Navegación principal' })
+      .getByRole('button', { name: /^DRP$/i })
+      .click()
+    await page.waitForTimeout(300)
+
+    await expect(
+      page.getByRole('navigation', { name: 'Navegación principal' })
+        .getByRole('button', { name: /estados drp/i })
+    ).toBeVisible()
+  })
+})
+
+test.describe('DRP — panel con DRP activo', () => {
+  test('home muestra el panel VisualInfoDRP cuando hay un DRP activo', async ({ page }) => {
+    // conDrp: true inyecta datos de DRP en los mocks
+    await bootstrapApp(page, { rol: 'gerencia', idNombre: 'admin', conDrp: true })
+
+    // El panel DRP debe aparecer en el home
+    await expect(
+      page.getByText(/en curso/i).first()
+    ).toBeVisible({ timeout: 8_000 })
   })
 })
