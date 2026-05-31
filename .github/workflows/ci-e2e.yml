@@ -11,9 +11,9 @@ concurrency:
 
 jobs:
   e2e:
-    name: Playwright E2E (preview · Chromium)
+    name: Playwright E2E (preview · chromium-android)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       # ── 1. Checkout + Node ──────────────────────────────────────────────────
@@ -64,8 +64,11 @@ jobs:
           echo "Preview listo en http://localhost:4173"
 
       # ── 5. Tests E2E ────────────────────────────────────────────────────────
-      - name: Ejecutar tests Playwright (chromium-android + chromium-desktop)
-        run: npx playwright test
+      # chromium-android = Galaxy Tab S4 (dispositivo objetivo principal).
+      # chromium-desktop se reserva para ejecución manual con --project=chromium-desktop.
+      # Con workers:1 y fullyParallel:false, 35 specs ≈ 9-10 min < timeout 25 min.
+      - name: Ejecutar tests Playwright (chromium-android)
+        run: npx playwright test --project=chromium-android
         env:
           E2E_BASE_URL: http://localhost:4173
           CI: true
