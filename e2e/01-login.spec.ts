@@ -29,7 +29,9 @@ test.describe('Autorizar terminal — estado_0a', () => {
       timeout: 8_000,
     })
     await expect(page.getByLabel(/identificador/i)).toBeVisible()
-    await expect(page.getByLabel(/contraseña/i)).toBeVisible()
+    // getByRole evita la ambigüedad: getByLabel(/contraseña/) casa con el input Y
+    // con el botón "Mostrar contraseña" (strict mode viola con 2 elementos).
+    await expect(page.getByRole('textbox', { name: /contraseña/i })).toBeVisible()
   })
 
   test('el botón de envío existe y está habilitado', async ({ page }) => {
@@ -40,12 +42,14 @@ test.describe('Autorizar terminal — estado_0a', () => {
   })
 
   test('muestra banner "Sin conexión" cuando la red está cortada', async ({ page, context }) => {
-    // Simular offline antes de cargar
-    await context.setOffline(true)
-    await page.reload()
+    // La página ya está cargada desde beforeEach.
+    // setOffline ANTES de reload bloquearía localhost → reload falla.
+    // Estrategia: verificar que la pantalla está cargada, luego simular offline.
     await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
       timeout: 8_000,
     })
+    await context.setOffline(true)
+    // El event 'offline' dispara el handler en App.tsx → isOnline=false → banner visible.
     await expect(page.getByText(/sin conexión/i)).toBeVisible()
     await context.setOffline(false)
   })

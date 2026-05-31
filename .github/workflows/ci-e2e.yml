@@ -71,6 +71,9 @@ jobs:
         run: npx playwright test --project=chromium-android
         env:
           E2E_BASE_URL: http://localhost:4173
+          # El build usa VITE_SUPABASE_URL=https://placeholder.supabase.co.
+          # Los mocks de page.route() deben interceptar ese mismo host.
+          E2E_SUPABASE_HOST: placeholder.supabase.co
           CI: true
 
       # ── 6. Artefactos ───────────────────────────────────────────────────────
