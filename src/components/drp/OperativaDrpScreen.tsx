@@ -14,8 +14,16 @@ export function OperativaDrpScreen() {
   const isOnline = useGlobalStore((s) => s.isOnline)
   const ejecutorId = useAuthStore((s) => s.ejecutorId)
   const {
-    drps, drpActivo, dotaciones, personal, loading, error,
-    cargarDrps, cargarDetalle, agregarDotacion, agregarPersonal,
+    drps,
+    drpActivo,
+    dotaciones,
+    personal,
+    loading,
+    error,
+    cargarDrps,
+    cargarDetalle,
+    agregarDotacion,
+    agregarPersonal,
   } = useDrp()
 
   const [matriculaInput, setMatriculaInput] = useState('')
@@ -27,14 +35,17 @@ export function OperativaDrpScreen() {
   const [actingPers, setActingPers] = useState(false)
 
   // Seleccionar el DRP activo/en preparación
-  const drpSeleccionado = drpActivo ?? drps.find((d) => d.estado === 'En_curso' || d.estado === 'En_preparacion') ?? null
+  const drpSeleccionado =
+    drpActivo ?? drps.find((d) => d.estado === 'En_curso' || d.estado === 'En_preparacion') ?? null
 
   if (!isOnline) {
     return (
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-6 py-16 text-center">
         <WifiOff className="size-10 text-muted-foreground/60" aria-hidden="true" />
         <h2 className="font-display text-lg font-bold">Sin conexión</h2>
-        <p className="font-body text-sm text-muted-foreground">La operativa DRP requiere conexión en tiempo real.</p>
+        <p className="font-body text-sm text-muted-foreground">
+          La operativa DRP requiere conexión en tiempo real.
+        </p>
       </div>
     )
   }
@@ -64,26 +75,42 @@ export function OperativaDrpScreen() {
     }
     setNombreError('')
     setActingPers(true)
-    const ok = await agregarPersonal(drpSeleccionado.id_drp, nombreInput.trim(), zonaInput.trim() || undefined)
-    if (ok) { setNombreInput(''); setZonaInput('') }
+    const ok = await agregarPersonal(
+      drpSeleccionado.id_drp,
+      nombreInput.trim(),
+      zonaInput.trim() || undefined
+    )
+    if (ok) {
+      setNombreInput('')
+      setZonaInput('')
+    }
     setActingPers(false)
   }
 
   return (
     <div className="mx-auto flex w-full max-w-screen-lg flex-col gap-3 p-3">
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Activity aria-hidden="true" className="size-5 text-muted-foreground" />
           <h2 className="font-display text-lg font-bold">Operativa DRP</h2>
         </div>
-        <Button size="sm" variant="outline" onClick={cargarDrps} disabled={loading} aria-label="Recargar">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={cargarDrps}
+          disabled={loading}
+          aria-label="Recargar"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Selector de DRP */}
       {loading ? (
@@ -91,7 +118,9 @@ export function OperativaDrpScreen() {
       ) : drps.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">No hay DRPs activos. Créalo desde «Crear DRP».</p>
+            <p className="text-sm text-muted-foreground">
+              No hay DRPs activos. Créalo desde «Crear DRP».
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -100,22 +129,21 @@ export function OperativaDrpScreen() {
             <CardTitle className="font-display text-sm">Seleccionar DRP</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            {drps.filter((d) => d.estado === 'En_curso' || d.estado === 'En_preparacion').map((d) => (
-              <Button
-                key={d.id_drp}
-                size="sm"
-                variant={drpSeleccionado?.id_drp === d.id_drp ? 'default' : 'outline'}
-                onClick={() => handleVerDetalle(d.id_drp)}
-              >
-                #{d.id_drp.slice(0, 8).toUpperCase()}
-                <Badge
-                  variant={d.estado === 'En_curso' ? 'ok' : 'warn'}
-                  className="ml-1"
+            {drps
+              .filter((d) => d.estado === 'En_curso' || d.estado === 'En_preparacion')
+              .map((d) => (
+                <Button
+                  key={d.id_drp}
+                  size="sm"
+                  variant={drpSeleccionado?.id_drp === d.id_drp ? 'default' : 'outline'}
+                  onClick={() => handleVerDetalle(d.id_drp)}
                 >
-                  {d.estado}
-                </Badge>
-              </Button>
-            ))}
+                  #{d.id_drp.slice(0, 8).toUpperCase()}
+                  <Badge variant={d.estado === 'En_curso' ? 'ok' : 'warn'} className="ml-1">
+                    {d.estado}
+                  </Badge>
+                </Button>
+              ))}
           </CardContent>
         </Card>
       )}
@@ -135,7 +163,9 @@ export function OperativaDrpScreen() {
               {dotaciones.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {dotaciones.map((d) => (
-                    <Badge key={d.matricula} variant="outline">{d.matricula}</Badge>
+                    <Badge key={d.matricula} variant="outline">
+                      {d.matricula}
+                    </Badge>
                   ))}
                 </div>
               )}
@@ -180,7 +210,8 @@ export function OperativaDrpScreen() {
                 <div className="flex flex-wrap gap-2">
                   {personal.map((p) => (
                     <Badge key={p.id_nombre} variant="secondary">
-                      {p.id_nombre}{p.zona_asignada ? ` — ${p.zona_asignada}` : ''}
+                      {p.id_nombre}
+                      {p.zona_asignada ? ` — ${p.zona_asignada}` : ''}
                     </Badge>
                   ))}
                 </div>

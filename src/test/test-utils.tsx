@@ -16,10 +16,7 @@ function ShellWrapper({ children }: { children: ReactNode }) {
   )
 }
 
-export function renderWithShell(
-  ui: ReactElement,
-  options?: Omit<RenderOptions, 'wrapper'>,
-) {
+export function renderWithShell(ui: ReactElement, options?: Omit<RenderOptions, 'wrapper'>) {
   return render(ui, { wrapper: ShellWrapper, ...options })
 }
 

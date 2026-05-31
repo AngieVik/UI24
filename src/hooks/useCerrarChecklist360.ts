@@ -5,11 +5,11 @@ import type { ItemRespuesta } from '@/components/operativa/Checklist360Screen'
 
 interface CerrarVars {
   id_checklist: string
-  respuestas:   Record<string, ItemRespuesta>
+  respuestas: Record<string, ItemRespuesta>
 }
 
 interface CerrarResult {
-  online:       boolean
+  online: boolean
   id_checklist: string
 }
 
@@ -21,14 +21,14 @@ interface CerrarResult {
  */
 export function useCerrarChecklist360() {
   const marcarChecklistCerrado = useActivacionStore((s) => s.marcarChecklistCerrado)
-  const [error, setError]       = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const mut = useOfflineMutation<{
-    p_id_checklist:    string
+    p_id_checklist: string
     p_items_revisados: Record<string, ItemRespuesta>
   }>({
-    rpcName:    'rpc_cerrar_checklist',
+    rpcName: 'rpc_cerrar_checklist',
     invalidates: [['checklist360_activo']],
   })
 
@@ -37,14 +37,14 @@ export function useCerrarChecklist360() {
     setIsSubmitting(true)
     try {
       const res = await mut.mutateAsync({
-        p_id_checklist:    vars.id_checklist,
+        p_id_checklist: vars.id_checklist,
         p_items_revisados: vars.respuestas,
       })
 
       marcarChecklistCerrado()
 
       return {
-        online:       !res.queued,
+        online: !res.queued,
         id_checklist: vars.id_checklist,
       }
     } catch (err) {

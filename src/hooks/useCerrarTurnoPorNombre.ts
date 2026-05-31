@@ -4,7 +4,7 @@ import { resolveRpcError } from '@/lib/resolveRpcError'
 
 interface CerrarPorNombreResult {
   id_parte: string | null
-  noop:     boolean
+  noop: boolean
 }
 
 /**
@@ -16,13 +16,13 @@ interface CerrarPorNombreResult {
  * Usado por useMiPresencia al hacer check-out de cualquier trabajador.
  */
 export function useCerrarTurnoPorNombre() {
-  const [error, setError]           = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function cerrarPorNombre(params: {
     id_nombre: string
-    km_fin?:   number | null
-    notas?:    string | null
+    km_fin?: number | null
+    notas?: string | null
   }): Promise<CerrarPorNombreResult | null> {
     setError(null)
     setIsSubmitting(true)
@@ -31,13 +31,12 @@ export function useCerrarTurnoPorNombre() {
 
       // rpc_cerrar_turno_por_nombre not yet in generated types → cast
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error: rpcErr } = await (supabase as any)
-        .rpc('rpc_cerrar_turno_por_nombre', {
-          p_mutation_uuid: mutationUuid,
-          p_id_nombre:     params.id_nombre,
-          p_km_fin:        params.km_fin  ?? null,
-          p_notas:         params.notas   ?? null,
-        })
+      const { data, error: rpcErr } = await (supabase as any).rpc('rpc_cerrar_turno_por_nombre', {
+        p_mutation_uuid: mutationUuid,
+        p_id_nombre: params.id_nombre,
+        p_km_fin: params.km_fin ?? null,
+        p_notas: params.notas ?? null,
+      })
 
       if (rpcErr) throw rpcErr
       return data as unknown as CerrarPorNombreResult

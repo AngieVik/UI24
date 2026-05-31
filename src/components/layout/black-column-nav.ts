@@ -18,16 +18,67 @@
  */
 
 import {
-  Activity, AlertCircle, AlertTriangle, Ambulance, ArrowLeftRight,
-  ArrowRightLeft, BadgeCheck, Bell, Boxes, BriefcaseMedical, Car,
-  ChartBar, ChartNoAxesColumn, ClipboardCheck, ClipboardEdit,
-  ClipboardList, Clock, Cog, Cookie, Disc, Disc3, Droplet, Droplets,
-  Eye, FileBadge, FileText, Filter, FolderOpen, Fuel, Gauge,
-  HeartPulse, History, Inbox, KeyRound, LogIn, type LucideIcon,
-  LogOut, Map, MapPin, Megaphone, MessageSquareWarning, Newspaper,
-  Package, PackageCheck, Palmtree, Pin, Puzzle, RadioTower, Settings2,
-  ShieldCheck, Sliders, SquareCheck, Table, Tag, Tags, ToggleLeft,
-  Truck, UserCircle, Users, Warehouse, Wrench,
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  Ambulance,
+  ArrowLeftRight,
+  ArrowRightLeft,
+  BadgeCheck,
+  Bell,
+  Boxes,
+  BriefcaseMedical,
+  Car,
+  ChartBar,
+  ChartNoAxesColumn,
+  ClipboardCheck,
+  ClipboardEdit,
+  ClipboardList,
+  Clock,
+  Cog,
+  Cookie,
+  Disc,
+  Disc3,
+  Droplet,
+  Droplets,
+  Eye,
+  FileBadge,
+  FileText,
+  Filter,
+  FolderOpen,
+  Fuel,
+  Gauge,
+  HeartPulse,
+  History,
+  Inbox,
+  KeyRound,
+  LogIn,
+  type LucideIcon,
+  LogOut,
+  Map,
+  MapPin,
+  Megaphone,
+  MessageSquareWarning,
+  Newspaper,
+  Package,
+  PackageCheck,
+  Palmtree,
+  Pin,
+  Puzzle,
+  RadioTower,
+  Settings2,
+  ShieldCheck,
+  Sliders,
+  SquareCheck,
+  Table,
+  Tag,
+  Tags,
+  ToggleLeft,
+  Truck,
+  UserCircle,
+  Users,
+  Warehouse,
+  Wrench,
 } from 'lucide-react'
 
 import type { Rol } from '@/lib/auth-roles'
@@ -71,39 +122,41 @@ export type NavNode = NavLeaf | NavGrupillo | NavGroup
  * ───────────────────────────────────────────────────────────────────────── */
 
 const TODOS: readonly Rol[] = [
-  'tes', 'due', 'medico',
-  'flota', 'responsable_flota',
+  'tes',
+  'due',
+  'medico',
+  'flota',
+  'responsable_flota',
   'coordinacion',
-  'logistica', 'responsable_logistica',
+  'logistica',
+  'responsable_logistica',
   'personal_externo',
-  'gerencia', 'rrhh',
+  'gerencia',
+  'rrhh',
   'invitado',
 ] as const
 
 const PERSONAL_SANITARIO: readonly Rol[] = ['tes', 'due', 'medico'] as const
 
-const FLOTA_ALL:     readonly Rol[] = ['flota', 'responsable_flota', 'gerencia'] as const
-const FLOTA_RESP:    readonly Rol[] = ['responsable_flota', 'gerencia'] as const
+const FLOTA_ALL: readonly Rol[] = ['flota', 'responsable_flota', 'gerencia'] as const
+const FLOTA_RESP: readonly Rol[] = ['responsable_flota', 'gerencia'] as const
 
-const LOG_ALL:       readonly Rol[] = ['logistica', 'responsable_logistica', 'gerencia'] as const
-const LOG_RESP:      readonly Rol[] = ['responsable_logistica', 'gerencia'] as const
+const LOG_ALL: readonly Rol[] = ['logistica', 'responsable_logistica', 'gerencia'] as const
+const LOG_RESP: readonly Rol[] = ['responsable_logistica', 'gerencia'] as const
 
-const COORD_ALL:     readonly Rol[] = ['coordinacion', 'gerencia'] as const
-const RRHH_ALL:      readonly Rol[] = ['rrhh', 'gerencia'] as const
+const COORD_ALL: readonly Rol[] = ['coordinacion', 'gerencia'] as const
+const RRHH_ALL: readonly Rol[] = ['rrhh', 'gerencia'] as const
 const GERENCIA_ONLY: readonly Rol[] = ['gerencia'] as const
 
 const OPERATIVOS_TURNO: readonly Rol[] = [
   ...PERSONAL_SANITARIO,
-  'flota', 'responsable_flota',
+  'flota',
+  'responsable_flota',
   'coordinacion',
   'gerencia',
 ] as const
 
-const ASISTENCIALES: readonly Rol[] = [
-  ...PERSONAL_SANITARIO,
-  'coordinacion',
-  'gerencia',
-] as const
+const ASISTENCIALES: readonly Rol[] = [...PERSONAL_SANITARIO, 'coordinacion', 'gerencia'] as const
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  Hojas fijas (Home, Check-in) — siempre arriba del BlackColumn.
@@ -148,10 +201,34 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: ClipboardList,
         rolesPermitidos: OPERATIVOS_TURNO,
         children: [
-          { kind: 'leaf', id: 'doc10_op', label: 'Doc-10 Envío de material',   icon: FileText,      rolesPermitidos: OPERATIVOS_TURNO },
-          { kind: 'leaf', id: 'doc6',     label: 'Doc-6 Gasto de material',    icon: Package,       rolesPermitidos: OPERATIVOS_TURNO },
-          { kind: 'leaf', id: 'doc8',     label: 'Doc-8 Parte de trabajo',     icon: ClipboardList, rolesPermitidos: OPERATIVOS_TURNO },
-          { kind: 'leaf', id: 'chk360',   label: 'Doc-Checklist360',           icon: SquareCheck,   rolesPermitidos: OPERATIVOS_TURNO },
+          {
+            kind: 'leaf',
+            id: 'doc10_op',
+            label: 'Doc-10 Envío de material',
+            icon: FileText,
+            rolesPermitidos: OPERATIVOS_TURNO,
+          },
+          {
+            kind: 'leaf',
+            id: 'doc6',
+            label: 'Doc-6 Gasto de material',
+            icon: Package,
+            rolesPermitidos: OPERATIVOS_TURNO,
+          },
+          {
+            kind: 'leaf',
+            id: 'doc8',
+            label: 'Doc-8 Parte de trabajo',
+            icon: ClipboardList,
+            rolesPermitidos: OPERATIVOS_TURNO,
+          },
+          {
+            kind: 'leaf',
+            id: 'chk360',
+            label: 'Doc-Checklist360',
+            icon: SquareCheck,
+            rolesPermitidos: OPERATIVOS_TURNO,
+          },
         ],
       },
       {
@@ -161,8 +238,20 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: HeartPulse,
         rolesPermitidos: ASISTENCIALES,
         children: [
-          { kind: 'leaf', id: 'doc2',  label: 'Doc-2 Informe asistencial', icon: HeartPulse,    rolesPermitidos: ASISTENCIALES },
-          { kind: 'leaf', id: 'doc11', label: 'Doc-11 Aviso urgente',      icon: AlertTriangle, rolesPermitidos: ASISTENCIALES },
+          {
+            kind: 'leaf',
+            id: 'doc2',
+            label: 'Doc-2 Informe asistencial',
+            icon: HeartPulse,
+            rolesPermitidos: ASISTENCIALES,
+          },
+          {
+            kind: 'leaf',
+            id: 'doc11',
+            label: 'Doc-11 Aviso urgente',
+            icon: AlertTriangle,
+            rolesPermitidos: ASISTENCIALES,
+          },
         ],
       },
       {
@@ -172,9 +261,27 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Wrench,
         rolesPermitidos: OPERATIVOS_TURNO,
         children: [
-          { kind: 'leaf', id: 'fuel',    label: 'Repostar combustible',  icon: Fuel,    rolesPermitidos: OPERATIVOS_TURNO },
-          { kind: 'leaf', id: 'adblue',  label: 'Repostar AdBlue',       icon: Droplet, rolesPermitidos: OPERATIVOS_TURNO },
-          { kind: 'leaf', id: 'doc7_op', label: 'Doc-7 Informe de avería', icon: Cog,   rolesPermitidos: OPERATIVOS_TURNO },
+          {
+            kind: 'leaf',
+            id: 'fuel',
+            label: 'Repostar combustible',
+            icon: Fuel,
+            rolesPermitidos: OPERATIVOS_TURNO,
+          },
+          {
+            kind: 'leaf',
+            id: 'adblue',
+            label: 'Repostar AdBlue',
+            icon: Droplet,
+            rolesPermitidos: OPERATIVOS_TURNO,
+          },
+          {
+            kind: 'leaf',
+            id: 'doc7_op',
+            label: 'Doc-7 Informe de avería',
+            icon: Cog,
+            rolesPermitidos: OPERATIVOS_TURNO,
+          },
         ],
       },
     ],
@@ -188,12 +295,43 @@ export const NAV_TREE: readonly NavNode[] = [
     icon: MapPin,
     rolesPermitidos: [...OPERATIVOS_TURNO, 'logistica', 'responsable_logistica'],
     children: [
-      { kind: 'leaf', id: 'drp_op',  label: 'Operativa DRP', icon: Activity,         rolesPermitidos: TODOS },
-      { kind: 'leaf', id: 'drp_vis', label: 'Visor DRP',     icon: Eye,              rolesPermitidos: TODOS },
-      { kind: 'leaf', id: 'drp_res', label: 'Resumen DRP',   icon: ChartBar,         rolesPermitidos: COORD_ALL, opensModal: true },
-      { kind: 'leaf', id: 'drp_log', label: 'Logística DRP', icon: Package,          rolesPermitidos: [...LOG_ALL, ...COORD_ALL] },
-      { kind: 'leaf', id: 'drp_new', label: 'Crear DRP',     icon: ChartNoAxesColumn,rolesPermitidos: COORD_ALL },
-      { kind: 'leaf', id: 'drp_est', label: 'Estados DRP',   icon: ToggleLeft,       rolesPermitidos: COORD_ALL },
+      {
+        kind: 'leaf',
+        id: 'drp_op',
+        label: 'Operativa DRP',
+        icon: Activity,
+        rolesPermitidos: TODOS,
+      },
+      { kind: 'leaf', id: 'drp_vis', label: 'Visor DRP', icon: Eye, rolesPermitidos: TODOS },
+      {
+        kind: 'leaf',
+        id: 'drp_res',
+        label: 'Resumen DRP',
+        icon: ChartBar,
+        rolesPermitidos: COORD_ALL,
+        opensModal: true,
+      },
+      {
+        kind: 'leaf',
+        id: 'drp_log',
+        label: 'Logística DRP',
+        icon: Package,
+        rolesPermitidos: [...LOG_ALL, ...COORD_ALL],
+      },
+      {
+        kind: 'leaf',
+        id: 'drp_new',
+        label: 'Crear DRP',
+        icon: ChartNoAxesColumn,
+        rolesPermitidos: COORD_ALL,
+      },
+      {
+        kind: 'leaf',
+        id: 'drp_est',
+        label: 'Estados DRP',
+        icon: ToggleLeft,
+        rolesPermitidos: COORD_ALL,
+      },
     ],
   },
 
@@ -205,8 +343,20 @@ export const NAV_TREE: readonly NavNode[] = [
     icon: Puzzle,
     rolesPermitidos: [...LOG_ALL, ...COORD_ALL],
     children: [
-      { kind: 'leaf', id: 'mod_psa',       label: 'PSA',       icon: BriefcaseMedical, rolesPermitidos: [...LOG_ALL, ...COORD_ALL] },
-      { kind: 'leaf', id: 'mod_filiacion', label: 'Filiación', icon: ClipboardEdit,    rolesPermitidos: [...LOG_ALL, ...COORD_ALL] },
+      {
+        kind: 'leaf',
+        id: 'mod_psa',
+        label: 'PSA',
+        icon: BriefcaseMedical,
+        rolesPermitidos: [...LOG_ALL, ...COORD_ALL],
+      },
+      {
+        kind: 'leaf',
+        id: 'mod_filiacion',
+        label: 'Filiación',
+        icon: ClipboardEdit,
+        rolesPermitidos: [...LOG_ALL, ...COORD_ALL],
+      },
     ],
   },
 
@@ -225,11 +375,41 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Boxes,
         rolesPermitidos: LOG_ALL,
         children: [
-          { kind: 'leaf', id: 'log_inv_auditoria',  label: 'Auditoría de inventarios',     icon: ClipboardCheck, rolesPermitidos: LOG_RESP },
-          { kind: 'leaf', id: 'log_inv_locations',  label: 'Inventarios y almacén (Locations)', icon: Warehouse, rolesPermitidos: LOG_ALL },
-          { kind: 'leaf', id: 'log_inv_dinamicos',  label: 'Inventarios dinámicos',        icon: Boxes,          rolesPermitidos: LOG_ALL },
-          { kind: 'leaf', id: 'log_inv_catalogo',   label: 'Catálogo de ítems',            icon: Tags,           rolesPermitidos: LOG_RESP },
-          { kind: 'leaf', id: 'log_descuadres',     label: 'Descuadres y ajuste manual',   icon: AlertCircle,    rolesPermitidos: LOG_RESP },
+          {
+            kind: 'leaf',
+            id: 'log_inv_auditoria',
+            label: 'Auditoría de inventarios',
+            icon: ClipboardCheck,
+            rolesPermitidos: LOG_RESP,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_inv_locations',
+            label: 'Inventarios y almacén (Locations)',
+            icon: Warehouse,
+            rolesPermitidos: LOG_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_inv_dinamicos',
+            label: 'Inventarios dinámicos',
+            icon: Boxes,
+            rolesPermitidos: LOG_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_inv_catalogo',
+            label: 'Catálogo de ítems',
+            icon: Tags,
+            rolesPermitidos: LOG_RESP,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_descuadres',
+            label: 'Descuadres y ajuste manual',
+            icon: AlertCircle,
+            rolesPermitidos: LOG_RESP,
+          },
         ],
       },
       {
@@ -239,10 +419,34 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Tag,
         rolesPermitidos: LOG_ALL,
         children: [
-          { kind: 'leaf', id: 'log_stock_historial', label: 'Historial de stock',  icon: Clock,    rolesPermitidos: LOG_ALL },
-          { kind: 'leaf', id: 'log_stock_plantillas',label: 'Plantillas de stock', icon: Tag,      rolesPermitidos: LOG_ALL },
-          { kind: 'leaf', id: 'log_stock_gestion',   label: 'Gestión de plantillas', icon: Settings2, rolesPermitidos: LOG_RESP },
-          { kind: 'leaf', id: 'log_stock_alertas',   label: 'Alertas de stock',    icon: Bell,     rolesPermitidos: LOG_ALL },
+          {
+            kind: 'leaf',
+            id: 'log_stock_historial',
+            label: 'Historial de stock',
+            icon: Clock,
+            rolesPermitidos: LOG_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_stock_plantillas',
+            label: 'Plantillas de stock',
+            icon: Tag,
+            rolesPermitidos: LOG_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_stock_gestion',
+            label: 'Gestión de plantillas',
+            icon: Settings2,
+            rolesPermitidos: LOG_RESP,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_stock_alertas',
+            label: 'Alertas de stock',
+            icon: Bell,
+            rolesPermitidos: LOG_ALL,
+          },
         ],
       },
       {
@@ -252,13 +456,44 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: ArrowRightLeft,
         rolesPermitidos: LOG_ALL,
         children: [
-          { kind: 'leaf', id: 'log_mov_ultimos',  label: 'Últimos movimientos',    icon: Activity,      rolesPermitidos: LOG_ALL },
-          { kind: 'leaf', id: 'log_mov_transito', label: 'Inventario en tránsito', icon: Truck,         rolesPermitidos: LOG_ALL },
-          { kind: 'leaf', id: 'doc9',             label: 'Doc-9 Entrada almacén',  icon: PackageCheck,  rolesPermitidos: LOG_ALL },
-          { kind: 'leaf', id: 'doc10_log',        label: 'Doc-10 Envío de material', icon: ArrowLeftRight, rolesPermitidos: LOG_ALL },
+          {
+            kind: 'leaf',
+            id: 'log_mov_ultimos',
+            label: 'Últimos movimientos',
+            icon: Activity,
+            rolesPermitidos: LOG_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'log_mov_transito',
+            label: 'Inventario en tránsito',
+            icon: Truck,
+            rolesPermitidos: LOG_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'doc9',
+            label: 'Doc-9 Entrada almacén',
+            icon: PackageCheck,
+            rolesPermitidos: LOG_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'doc10_log',
+            label: 'Doc-10 Envío de material',
+            icon: ArrowLeftRight,
+            rolesPermitidos: LOG_ALL,
+          },
         ],
       },
-      { kind: 'leaf', id: 'log_bandeja', label: 'Bandeja logística', icon: Inbox, rolesPermitidos: LOG_ALL, opensModal: true },
+      {
+        kind: 'leaf',
+        id: 'log_bandeja',
+        label: 'Bandeja logística',
+        icon: Inbox,
+        rolesPermitidos: LOG_ALL,
+        opensModal: true,
+      },
     ],
   },
 
@@ -277,9 +512,27 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: AlertCircle,
         rolesPermitidos: FLOTA_ALL,
         children: [
-          { kind: 'leaf', id: 'flota_inc_abiertas', label: 'Incidencias abiertas', icon: AlertCircle, rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'flota_inc_ancladas', label: 'Incidencias ancladas', icon: Pin,         rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'flota_inc_ultimas',  label: 'Últimas incidencias',  icon: Clock,       rolesPermitidos: FLOTA_ALL },
+          {
+            kind: 'leaf',
+            id: 'flota_inc_abiertas',
+            label: 'Incidencias abiertas',
+            icon: AlertCircle,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'flota_inc_ancladas',
+            label: 'Incidencias ancladas',
+            icon: Pin,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'flota_inc_ultimas',
+            label: 'Últimas incidencias',
+            icon: Clock,
+            rolesPermitidos: FLOTA_ALL,
+          },
         ],
       },
       {
@@ -290,10 +543,34 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Gauge,
         rolesPermitidos: FLOTA_ALL,
         children: [
-          { kind: 'leaf', id: 'fvm_tabla',   label: 'Tabla principal',           icon: Table,  rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'fvm_badges',  label: 'Badges de estado',          icon: Tag,    rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'fvm_filtros', label: 'Filtros y orden',           icon: Filter, rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'fvm_detalle', label: 'Vista de detalle',          icon: Eye,    rolesPermitidos: FLOTA_ALL },
+          {
+            kind: 'leaf',
+            id: 'fvm_tabla',
+            label: 'Tabla principal',
+            icon: Table,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'fvm_badges',
+            label: 'Badges de estado',
+            icon: Tag,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'fvm_filtros',
+            label: 'Filtros y orden',
+            icon: Filter,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'fvm_detalle',
+            label: 'Vista de detalle',
+            icon: Eye,
+            rolesPermitidos: FLOTA_ALL,
+          },
         ],
       },
       {
@@ -304,11 +581,41 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Settings2,
         rolesPermitidos: FLOTA_ALL,
         children: [
-          { kind: 'leaf', id: 'flota_mant_aceite', label: 'Aceite',                          icon: Droplets, rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'flota_mant_frenos', label: 'Frenos',                          icon: Disc,     rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'flota_mant_neum',   label: 'Neumáticos',                      icon: Disc3,    rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'flota_mant_umbrales',label:'Configuración de umbrales de alerta', icon: Sliders, rolesPermitidos: FLOTA_RESP },
-          { kind: 'leaf', id: 'flota_mant_doc7',   label: 'Doc-7 Informe de avería',         icon: Cog,      rolesPermitidos: FLOTA_ALL },
+          {
+            kind: 'leaf',
+            id: 'flota_mant_aceite',
+            label: 'Aceite',
+            icon: Droplets,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'flota_mant_frenos',
+            label: 'Frenos',
+            icon: Disc,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'flota_mant_neum',
+            label: 'Neumáticos',
+            icon: Disc3,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'flota_mant_umbrales',
+            label: 'Configuración de umbrales de alerta',
+            icon: Sliders,
+            rolesPermitidos: FLOTA_RESP,
+          },
+          {
+            kind: 'leaf',
+            id: 'flota_mant_doc7',
+            label: 'Doc-7 Informe de avería',
+            icon: Cog,
+            rolesPermitidos: FLOTA_ALL,
+          },
         ],
       },
       {
@@ -318,12 +625,37 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: FileBadge,
         rolesPermitidos: FLOTA_ALL,
         children: [
-          { kind: 'leaf', id: 'fmeta_docs',    label: 'Documentación y dispositivo', icon: FileBadge, rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'fmeta_km',      label: 'Kilometraje general',         icon: Gauge,     rolesPermitidos: FLOTA_ALL },
-          { kind: 'leaf', id: 'fmeta_eventos', label: 'Historial eventos físicos',   icon: History,   rolesPermitidos: FLOTA_ALL },
+          {
+            kind: 'leaf',
+            id: 'fmeta_docs',
+            label: 'Documentación y dispositivo',
+            icon: FileBadge,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'fmeta_km',
+            label: 'Kilometraje general',
+            icon: Gauge,
+            rolesPermitidos: FLOTA_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'fmeta_eventos',
+            label: 'Historial eventos físicos',
+            icon: History,
+            rolesPermitidos: FLOTA_ALL,
+          },
         ],
       },
-      { kind: 'leaf', id: 'flota_bandeja', label: 'Bandeja flota', icon: Inbox, rolesPermitidos: FLOTA_ALL, opensModal: true },
+      {
+        kind: 'leaf',
+        id: 'flota_bandeja',
+        label: 'Bandeja flota',
+        icon: Inbox,
+        rolesPermitidos: FLOTA_ALL,
+        opensModal: true,
+      },
     ],
   },
 
@@ -343,16 +675,65 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Cookie,
         rolesPermitidos: COORD_ALL,
         children: [
-          { kind: 'leaf', id: 'emerg_galleta_pq', label: 'Galleta pequeña', icon: Cookie, rolesPermitidos: COORD_ALL },
-          { kind: 'leaf', id: 'emerg_galleta',    label: 'Galleta',         icon: Cookie, rolesPermitidos: COORD_ALL },
+          {
+            kind: 'leaf',
+            id: 'emerg_galleta_pq',
+            label: 'Galleta pequeña',
+            icon: Cookie,
+            rolesPermitidos: COORD_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'emerg_galleta',
+            label: 'Galleta',
+            icon: Cookie,
+            rolesPermitidos: COORD_ALL,
+          },
         ],
       },
-      { kind: 'leaf', id: 'coord_dispositivos', label: 'Dispositivos validados',      icon: ShieldCheck, rolesPermitidos: COORD_ALL },
-      { kind: 'leaf', id: 'coord_visor',        label: 'Visor seguimiento operativo', icon: Map,         rolesPermitidos: COORD_ALL },
-      { kind: 'leaf', id: 'coord_rbac',         label: 'RBAC',                        icon: Users,       rolesPermitidos: GERENCIA_ONLY },
-      { kind: 'leaf', id: 'coord_force_chk',    label: 'Forzar checkout',             icon: LogOut,      rolesPermitidos: COORD_ALL },
-      { kind: 'leaf', id: 'coord_password',     label: 'Cambio de password',          icon: KeyRound,    rolesPermitidos: COORD_ALL },
-      { kind: 'leaf', id: 'coord_bandeja',      label: 'Bandeja coordinación',        icon: Inbox,       rolesPermitidos: COORD_ALL, opensModal: true },
+      {
+        kind: 'leaf',
+        id: 'coord_dispositivos',
+        label: 'Dispositivos validados',
+        icon: ShieldCheck,
+        rolesPermitidos: COORD_ALL,
+      },
+      {
+        kind: 'leaf',
+        id: 'coord_visor',
+        label: 'Visor seguimiento operativo',
+        icon: Map,
+        rolesPermitidos: COORD_ALL,
+      },
+      {
+        kind: 'leaf',
+        id: 'coord_rbac',
+        label: 'RBAC',
+        icon: Users,
+        rolesPermitidos: GERENCIA_ONLY,
+      },
+      {
+        kind: 'leaf',
+        id: 'coord_force_chk',
+        label: 'Forzar checkout',
+        icon: LogOut,
+        rolesPermitidos: COORD_ALL,
+      },
+      {
+        kind: 'leaf',
+        id: 'coord_password',
+        label: 'Cambio de password',
+        icon: KeyRound,
+        rolesPermitidos: COORD_ALL,
+      },
+      {
+        kind: 'leaf',
+        id: 'coord_bandeja',
+        label: 'Bandeja coordinación',
+        icon: Inbox,
+        rolesPermitidos: COORD_ALL,
+        opensModal: true,
+      },
     ],
   },
 
@@ -371,8 +752,20 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: UserCircle,
         rolesPermitidos: RRHH_ALL,
         children: [
-          { kind: 'leaf', id: 'rrhh_fichas', label: 'Fichas empleados', icon: UserCircle, rolesPermitidos: RRHH_ALL },
-          { kind: 'leaf', id: 'rrhh_bajas',  label: 'Gestión de bajas', icon: BadgeCheck, rolesPermitidos: RRHH_ALL },
+          {
+            kind: 'leaf',
+            id: 'rrhh_fichas',
+            label: 'Fichas empleados',
+            icon: UserCircle,
+            rolesPermitidos: RRHH_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'rrhh_bajas',
+            label: 'Gestión de bajas',
+            icon: BadgeCheck,
+            rolesPermitidos: RRHH_ALL,
+          },
         ],
       },
       {
@@ -382,9 +775,27 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Settings2,
         rolesPermitidos: RRHH_ALL,
         children: [
-          { kind: 'leaf', id: 'rrhh_servicios',  label: 'Planificación de servicios', icon: Settings2, rolesPermitidos: RRHH_ALL },
-          { kind: 'leaf', id: 'rrhh_cuadrantes', label: 'Gestión de cuadrantes',      icon: ClipboardList, rolesPermitidos: RRHH_ALL },
-          { kind: 'leaf', id: 'doc12',           label: 'Doc-12 Vacaciones',          icon: Palmtree,  rolesPermitidos: RRHH_ALL },
+          {
+            kind: 'leaf',
+            id: 'rrhh_servicios',
+            label: 'Planificación de servicios',
+            icon: Settings2,
+            rolesPermitidos: RRHH_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'rrhh_cuadrantes',
+            label: 'Gestión de cuadrantes',
+            icon: ClipboardList,
+            rolesPermitidos: RRHH_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'doc12',
+            label: 'Doc-12 Vacaciones',
+            icon: Palmtree,
+            rolesPermitidos: RRHH_ALL,
+          },
         ],
       },
       {
@@ -394,12 +805,37 @@ export const NAV_TREE: readonly NavNode[] = [
         icon: Megaphone,
         rolesPermitidos: RRHH_ALL,
         children: [
-          { kind: 'leaf', id: 'rrhh_tablon',     label: 'Gestión tablón', icon: Newspaper,  rolesPermitidos: RRHH_ALL },
-          { kind: 'leaf', id: 'rrhh_marquesina', label: 'Marquesina',     icon: RadioTower, rolesPermitidos: RRHH_ALL },
+          {
+            kind: 'leaf',
+            id: 'rrhh_tablon',
+            label: 'Gestión tablón',
+            icon: Newspaper,
+            rolesPermitidos: RRHH_ALL,
+          },
+          {
+            kind: 'leaf',
+            id: 'rrhh_marquesina',
+            label: 'Marquesina',
+            icon: RadioTower,
+            rolesPermitidos: RRHH_ALL,
+          },
         ],
       },
-      { kind: 'leaf', id: 'rrhh_repositorio', label: 'Repositorio documentos', icon: FolderOpen, rolesPermitidos: TODOS },
-      { kind: 'leaf', id: 'rrhh_bandeja',     label: 'Bandeja RRHH',           icon: Inbox,      rolesPermitidos: RRHH_ALL, opensModal: true },
+      {
+        kind: 'leaf',
+        id: 'rrhh_repositorio',
+        label: 'Repositorio documentos',
+        icon: FolderOpen,
+        rolesPermitidos: TODOS,
+      },
+      {
+        kind: 'leaf',
+        id: 'rrhh_bandeja',
+        label: 'Bandeja RRHH',
+        icon: Inbox,
+        rolesPermitidos: RRHH_ALL,
+        opensModal: true,
+      },
     ],
   },
 
@@ -407,7 +843,13 @@ export const NAV_TREE: readonly NavNode[] = [
   { kind: 'leaf', id: 'tablon', label: 'Tablón central', icon: Megaphone, rolesPermitidos: TODOS },
 
   // ── 9. Buzón interno (hoja raíz) ────────────────────────────────────────
-  { kind: 'leaf', id: 'doc13', label: 'Buzón interno', icon: MessageSquareWarning, rolesPermitidos: TODOS },
+  {
+    kind: 'leaf',
+    id: 'doc13',
+    label: 'Buzón interno',
+    icon: MessageSquareWarning,
+    rolesPermitidos: TODOS,
+  },
 ] as const
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -419,10 +861,7 @@ export function rolPuedeVer(node: NavNode | NavLeaf, rol: Rol | null | undefined
   return node.rolesPermitidos.includes(rol)
 }
 
-export function filterByRol(
-  tree: readonly NavNode[],
-  rol: Rol | null | undefined,
-): NavNode[] {
+export function filterByRol(tree: readonly NavNode[], rol: Rol | null | undefined): NavNode[] {
   return tree
     .filter((node) => rolPuedeVer(node, rol))
     .map((node): NavNode | null => {
@@ -447,7 +886,7 @@ export function filterByRol(
 export function findNode(
   id: string,
   tree: readonly NavNode[] = NAV_TREE,
-  fixed: readonly NavLeaf[] = NAV_FIXED_LEAVES,
+  fixed: readonly NavLeaf[] = NAV_FIXED_LEAVES
 ): NavNode | null {
   for (const leaf of fixed) {
     if (leaf.id === id) return leaf
@@ -471,7 +910,7 @@ export function findNode(
 export function getPathTo(
   id: string,
   tree: readonly NavNode[] = NAV_TREE,
-  fixed: readonly NavLeaf[] = NAV_FIXED_LEAVES,
+  fixed: readonly NavLeaf[] = NAV_FIXED_LEAVES
 ): string[] | null {
   for (const leaf of fixed) {
     if (leaf.id === id) return [leaf.id]
@@ -494,7 +933,7 @@ export function getPathTo(
 
 export function getChildrenOf(
   parentId: string | null,
-  tree: readonly NavNode[] = NAV_TREE,
+  tree: readonly NavNode[] = NAV_TREE
 ): readonly NavNode[] {
   if (parentId == null) return tree
   const node = findNode(parentId, tree)

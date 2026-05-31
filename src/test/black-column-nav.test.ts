@@ -61,8 +61,8 @@ describe('filterByRol', () => {
     const filtered = filterByRol(NAV_TREE, 'rrhh')
     const idsRaiz = filtered.map((n) => n.id)
     expect(idsRaiz).toContain('rrhh')
-    expect(idsRaiz).toContain('tablon')   // hoja global
-    expect(idsRaiz).toContain('doc13')    // hoja global
+    expect(idsRaiz).toContain('tablon') // hoja global
+    expect(idsRaiz).toContain('doc13') // hoja global
     expect(idsRaiz).not.toContain('drp')
     expect(idsRaiz).not.toContain('logistica')
     expect(idsRaiz).not.toContain('flota')

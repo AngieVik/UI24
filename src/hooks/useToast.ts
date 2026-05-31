@@ -34,7 +34,7 @@ export const useToast = create<ToastStore>((set) => ({
 
 // Acceso imperativo fuera de componentes (e.g., en el procesamiento de la cola)
 export const toast = {
-  ok:   (msg: string) => useToast.getState().toast(msg, 'ok'),
+  ok: (msg: string) => useToast.getState().toast(msg, 'ok'),
   warn: (msg: string) => useToast.getState().toast(msg, 'warn'),
   crit: (msg: string) => useToast.getState().toast(msg, 'crit'),
   info: (msg: string) => useToast.getState().toast(msg, 'info'),

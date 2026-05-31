@@ -40,10 +40,7 @@ export async function clearOfflineSession(): Promise<void> {
   await del(IDB_KEY)
 }
 
-export async function verifyOfflineLogin(
-  id_nombre: string,
-  password: string,
-): Promise<boolean> {
+export async function verifyOfflineLogin(id_nombre: string, password: string): Promise<boolean> {
   const s = await loadOfflineSession()
   if (!s) return false
   if (s.id_nombre !== id_nombre) return false

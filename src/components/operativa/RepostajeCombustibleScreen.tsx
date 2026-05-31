@@ -20,19 +20,21 @@ import { useActivacionStore } from '@/stores/useActivacionStore'
 import { useOfflineMutation } from '@/hooks/useOfflineMutation'
 
 const schema = z.object({
-  litros:         z.coerce.number().positive('Introduce los litros repostados'),
+  litros: z.coerce.number().positive('Introduce los litros repostados'),
   precio_por_litro: z.coerce.number().positive('Introduce el precio por litro').optional(),
-  proveedor:      z.string().optional(),
-  tipo:           z.enum(['gasoil', 'gasolina_95', 'gasolina_98'] as const, { message: 'Selecciona el tipo' }),
-  km_actual:      z.coerce.number().int().positive('Introduce el km actual').optional(),
-  notas:          z.string().optional(),
+  proveedor: z.string().optional(),
+  tipo: z.enum(['gasoil', 'gasolina_95', 'gasolina_98'] as const, {
+    message: 'Selecciona el tipo',
+  }),
+  km_actual: z.coerce.number().int().positive('Introduce el km actual').optional(),
+  notas: z.string().optional(),
 })
 type Schema = z.infer<typeof schema>
 
 const TIPO_LABELS: Record<string, string> = {
-  gasoil:       'Gasóleo',
-  gasolina_95:  'Gasolina 95',
-  gasolina_98:  'Gasolina 98',
+  gasoil: 'Gasóleo',
+  gasolina_95: 'Gasolina 95',
+  gasolina_98: 'Gasolina 98',
 }
 
 interface RepostajeResult {
@@ -41,22 +43,22 @@ interface RepostajeResult {
 }
 
 export function RepostajeCombustibleScreen() {
-  const matricula   = useActivacionStore((s) => s.matricula)
+  const matricula = useActivacionStore((s) => s.matricula)
   const idActivacion = useActivacionStore((s) => s.id_activacion)
   const [resultado, setResultado] = useState<RepostajeResult | null>(null)
 
   const mut = useOfflineMutation<{
     p_mutation_uuid: string
-    p_matricula:     string
+    p_matricula: string
     p_id_activacion: string
-    p_litros:        number
-    p_tipo:          string
-    p_km_actual:     number | null
-    p_precio:        number | null
-    p_proveedor:     string | null
-    p_notas:         string | null
+    p_litros: number
+    p_tipo: string
+    p_km_actual: number | null
+    p_precio: number | null
+    p_proveedor: string | null
+    p_notas: string | null
   }>({
-    rpcName:    'rpc_registrar_repostaje_combustible',
+    rpcName: 'rpc_registrar_repostaje_combustible',
     invalidates: [['repostajes', matricula]],
   })
 
@@ -75,9 +77,7 @@ export function RepostajeCombustibleScreen() {
         <div className="grid size-12 place-items-center rounded-md bg-muted text-muted-foreground/70">
           <Fuel aria-hidden="true" className="size-6" />
         </div>
-        <h2 className="font-display text-lg font-bold leading-tight">
-          Repostaje de combustible
-        </h2>
+        <h2 className="font-display text-lg font-bold leading-tight">Repostaje de combustible</h2>
         <p className="font-body text-base font-light text-muted-foreground">
           No hay turno activo. Inicia un turno desde Operativa → Vehículos.
         </p>
@@ -100,7 +100,10 @@ export function RepostajeCombustibleScreen() {
             : 'El repostaje se guardará cuando recuperes la conexión.'}
         </p>
         <Button
-          onClick={() => { setResultado(null); form.reset({ tipo: 'gasoil' }) }}
+          onClick={() => {
+            setResultado(null)
+            form.reset({ tipo: 'gasoil' })
+          }}
           variant="outline"
           size="sm"
         >
@@ -113,16 +116,19 @@ export function RepostajeCombustibleScreen() {
   async function onSubmit(values: Schema) {
     const res = await mut.mutateAsync({
       p_mutation_uuid: crypto.randomUUID(),
-      p_matricula:     matricula,
+      p_matricula: matricula,
       p_id_activacion: idActivacion,
-      p_litros:        values.litros,
-      p_tipo:          values.tipo,
-      p_km_actual:     values.km_actual ?? null,
-      p_precio:        values.precio_por_litro ?? null,
-      p_proveedor:     values.proveedor?.trim() || null,
-      p_notas:         values.notas?.trim() || null,
+      p_litros: values.litros,
+      p_tipo: values.tipo,
+      p_km_actual: values.km_actual ?? null,
+      p_precio: values.precio_por_litro ?? null,
+      p_proveedor: values.proveedor?.trim() || null,
+      p_notas: values.notas?.trim() || null,
     })
-    setResultado({ online: !res.queued, id_repostaje: (res.data as { id_repostaje?: string })?.id_repostaje })
+    setResultado({
+      online: !res.queued,
+      id_repostaje: (res.data as { id_repostaje?: string })?.id_repostaje,
+    })
   }
 
   return (
@@ -160,7 +166,9 @@ export function RepostajeCombustibleScreen() {
                     </SelectTrigger>
                     <SelectContent>
                       {Object.entries(TIPO_LABELS).map(([v, l]) => (
-                        <SelectItem key={v} value={v}>{l}</SelectItem>
+                        <SelectItem key={v} value={v}>
+                          {l}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -196,7 +204,10 @@ export function RepostajeCombustibleScreen() {
               name="precio_por_litro"
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="rp-precio">Precio/litro (€) <span className="font-light text-muted-foreground">— opcional</span></FieldLabel>
+                  <FieldLabel htmlFor="rp-precio">
+                    Precio/litro (€){' '}
+                    <span className="font-light text-muted-foreground">— opcional</span>
+                  </FieldLabel>
                   <Input
                     {...field}
                     id="rp-precio"
@@ -205,7 +216,9 @@ export function RepostajeCombustibleScreen() {
                     min="0"
                     placeholder="Ej. 1.459"
                     value={field.value ?? ''}
-                    onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                    onChange={(e) =>
+                      field.onChange(e.target.value === '' ? undefined : Number(e.target.value))
+                    }
                     aria-invalid={fieldState.invalid}
                   />
                   {fieldState.error && <FieldError errors={[fieldState.error]} />}
@@ -219,7 +232,9 @@ export function RepostajeCombustibleScreen() {
               name="km_actual"
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="rp-km">Km actual <span className="font-light text-muted-foreground">— opcional</span></FieldLabel>
+                  <FieldLabel htmlFor="rp-km">
+                    Km actual <span className="font-light text-muted-foreground">— opcional</span>
+                  </FieldLabel>
                   <Input
                     {...field}
                     id="rp-km"
@@ -227,7 +242,9 @@ export function RepostajeCombustibleScreen() {
                     min="0"
                     placeholder="Ej. 123456"
                     value={field.value ?? ''}
-                    onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                    onChange={(e) =>
+                      field.onChange(e.target.value === '' ? undefined : Number(e.target.value))
+                    }
                     aria-invalid={fieldState.invalid}
                   />
                   {fieldState.error && <FieldError errors={[fieldState.error]} />}
@@ -241,7 +258,10 @@ export function RepostajeCombustibleScreen() {
               name="proveedor"
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="rp-prov">Proveedor / Gasolinera <span className="font-light text-muted-foreground">— opcional</span></FieldLabel>
+                  <FieldLabel htmlFor="rp-prov">
+                    Proveedor / Gasolinera{' '}
+                    <span className="font-light text-muted-foreground">— opcional</span>
+                  </FieldLabel>
                   <Input
                     {...field}
                     id="rp-prov"
@@ -259,7 +279,9 @@ export function RepostajeCombustibleScreen() {
               name="notas"
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="rp-notas">Notas <span className="font-light text-muted-foreground">— opcional</span></FieldLabel>
+                  <FieldLabel htmlFor="rp-notas">
+                    Notas <span className="font-light text-muted-foreground">— opcional</span>
+                  </FieldLabel>
                   <Textarea
                     {...field}
                     id="rp-notas"

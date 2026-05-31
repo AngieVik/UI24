@@ -5,8 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 function bundleSizeGuard(): Plugin {
-  const MAX_TOTAL = 3 * 1024 * 1024  // 3 MB
-  const MAX_ENTRY = 800 * 1024        // 800 KB
+  const MAX_TOTAL = 3 * 1024 * 1024 // 3 MB
+  const MAX_ENTRY = 800 * 1024 // 800 KB
 
   return {
     name: 'u24-bundle-size-guard',
@@ -24,13 +24,13 @@ function bundleSizeGuard(): Plugin {
       if (totalBytes > MAX_TOTAL) {
         this.error(
           `Bundle total ${(totalBytes / 1024 / 1024).toFixed(2)} MB supera el límite de 3 MB. ` +
-          'Añade más manualChunks o elimina dependencias.'
+            'Añade más manualChunks o elimina dependencias.'
         )
       }
       if (maxEntryBytes > MAX_ENTRY) {
         this.error(
           `Entry chunk ${(maxEntryBytes / 1024).toFixed(0)} KB supera el límite de 800 KB. ` +
-          'Extrae más código del entry point con manualChunks.'
+            'Extrae más código del entry point con manualChunks.'
         )
       }
     },
@@ -76,17 +76,17 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name:             'U24 — Control operativo',
-        short_name:       'U24',
-        description:      'Terminal operativo de misión crítica para Servicios Sanitarios',
-        theme_color:      '#111111',
+        name: 'U24 — Control operativo',
+        short_name: 'U24',
+        description: 'Terminal operativo de misión crítica para Servicios Sanitarios',
+        theme_color: '#111111',
         background_color: '#111111',
-        display:          'standalone',
-        start_url:        '/',
-        scope:            '/',
-        lang:             'es',
+        display: 'standalone',
+        start_url: '/',
+        scope: '/',
+        lang: 'es',
         icons: [
-          { src: '/icon-72.png',  sizes: '72x72',   type: 'image/png' },
+          { src: '/icon-72.png', sizes: '72x72', type: 'image/png' },
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
@@ -106,15 +106,15 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-react':   ['react', 'react-dom'],
-          'vendor-query':   ['@tanstack/react-query'],
-          'vendor-sentry':  ['@sentry/react'],
-          'vendor-supabase':['@supabase/supabase-js'],
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-sentry': ['@sentry/react'],
+          'vendor-supabase': ['@supabase/supabase-js'],
           'vendor-zustand': ['zustand'],
-          'vendor-idb':     ['idb-keyval'],
-          'vendor-radix':   ['radix-ui'],
-          'vendor-form':    ['react-hook-form', '@hookform/resolvers', 'zod'],
-          'vendor-icons':   ['lucide-react'],
+          'vendor-idb': ['idb-keyval'],
+          'vendor-radix': ['radix-ui'],
+          'vendor-form': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          'vendor-icons': ['lucide-react'],
         },
       },
     },

@@ -29,23 +29,21 @@ interface DeducirResult {
  * Invalida `inventario_vehiculo` para que la lista refresque tras éxito.
  */
 export function useDeducirMaterial() {
-  const matricula    = useActivacionStore((s) => s.matricula)
+  const matricula = useActivacionStore((s) => s.matricula)
   const idActivacion = useActivacionStore((s) => s.id_activacion)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError]       = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const deducirMut = useOfflineMutation<{
-    p_matricula:     string
-    p_id_item:       number
-    p_cantidad:      number
-    p_subgrupo:      string
+    p_matricula: string
+    p_id_item: number
+    p_cantidad: number
+    p_subgrupo: string
     p_id_activacion: string | null
-    p_motivo:        string | null
+    p_motivo: string | null
   }>({
     rpcName: 'rpc_deducir_material',
-    invalidates: [
-      ['inventario_vehiculo', matricula],
-    ],
+    invalidates: [['inventario_vehiculo', matricula]],
   })
 
   async function deducir({ items, motivo }: DeducirArgs): Promise<DeducirResult | null> {
@@ -65,15 +63,15 @@ export function useDeducirMaterial() {
       for (const it of items) {
         try {
           const res = await deducirMut.mutateAsync({
-            p_matricula:     matricula,
-            p_id_item:       it.id_item,
-            p_cantidad:      it.cantidad,
-            p_subgrupo:      it.subgrupo,
+            p_matricula: matricula,
+            p_id_item: it.id_item,
+            p_cantidad: it.cantidad,
+            p_subgrupo: it.subgrupo,
             p_id_activacion: idActivacion || null,
-            p_motivo:        motivo ?? null,
+            p_motivo: motivo ?? null,
           })
           if (res.queued) queued++
-          else            ok++
+          else ok++
         } catch {
           failed++
         }

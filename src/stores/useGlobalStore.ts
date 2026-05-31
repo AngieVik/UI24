@@ -36,6 +36,6 @@ export const useGlobalStore = create<GlobalState>()(
     {
       name: 'u24-global',
       storage: createIdbStorage<GlobalState>(),
-    },
-  ),
+    }
+  )
 )

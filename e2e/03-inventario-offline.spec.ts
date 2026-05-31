@@ -19,9 +19,9 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
     await context.setOffline(true)
 
     // El BannerOffline debe aparecer
-    await expect(
-      page.getByText(/sin conexión|modo offline|fuera de línea/i)
-    ).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText(/sin conexión|modo offline|fuera de línea/i)).toBeVisible({
+      timeout: 5_000,
+    })
 
     await context.setOffline(false)
   })
@@ -30,16 +30,16 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
     await bootstrapApp(page)
 
     await context.setOffline(true)
-    await expect(
-      page.getByText(/sin conexión|modo offline|fuera de línea/i)
-    ).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText(/sin conexión|modo offline|fuera de línea/i)).toBeVisible({
+      timeout: 5_000,
+    })
 
     await context.setOffline(false)
 
     // Banner debe desaparecer
-    await expect(
-      page.getByText(/sin conexión|modo offline|fuera de línea/i)
-    ).not.toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText(/sin conexión|modo offline|fuera de línea/i)).not.toBeVisible({
+      timeout: 5_000,
+    })
   })
 
   test('Doc-6 carga aunque la red esté cortada (datos en caché)', async ({ page, context }) => {
@@ -51,14 +51,17 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
     await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
 
     // El screen debe renderizar (aunque el fetch no llegue a Supabase)
-    await expect(
-      page.getByRole('heading', { name: /gasto de material|doc.?6/i })
-    ).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByRole('heading', { name: /gasto de material|doc.?6/i })).toBeVisible({
+      timeout: 8_000,
+    })
 
     await context.setOffline(false)
   })
 
-  test('ciclo offline → mutación encolada → online → verificación', async ({ page, context: _context }) => {
+  test('ciclo offline → mutación encolada → online → verificación', async ({
+    page,
+    context: _context,
+  }) => {
     await bootstrapApp(page)
 
     // Bloquear las llamadas RPC (simula red cortada sin cortar del todo la carga de assets)
@@ -69,9 +72,9 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
 
     await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-6 Gasto de material')
 
-    await expect(
-      page.getByRole('heading', { name: /gasto de material|doc.?6/i })
-    ).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByRole('heading', { name: /gasto de material|doc.?6/i })).toBeVisible({
+      timeout: 8_000,
+    })
 
     // Desbloquear para simular reconexión
     await page.unroute(`**/${SUPABASE_HOST}/rest/v1/rpc/**`)
@@ -79,20 +82,21 @@ test.describe('Ciclo offline — cola de mutaciones', () => {
 })
 
 test.describe('Navegación offline — pantallas abiertas previamente', () => {
-  test('las pantallas lazy cargadas previamente siguen disponibles offline', async ({ page, context }) => {
+  test('las pantallas lazy cargadas previamente siguen disponibles offline', async ({
+    page,
+    context,
+  }) => {
     await bootstrapApp(page)
 
     // Cargar Doc-8 mientras hay red
     await navegarDrill(page, 'Operativa', 'Operativas rutinarias', 'Doc-8 Parte de trabajo')
-    await expect(
-      page.getByRole('heading', { name: /parte de trabajo/i })
-    ).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByRole('heading', { name: /parte de trabajo/i })).toBeVisible({
+      timeout: 8_000,
+    })
 
     // Cortar red — la pantalla ya está cargada en memoria, debe seguir visible
     await context.setOffline(true)
-    await expect(
-      page.getByRole('heading', { name: /parte de trabajo/i })
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: /parte de trabajo/i })).toBeVisible()
 
     await context.setOffline(false)
   })

@@ -53,13 +53,13 @@ describe('PanelVehiculo', () => {
   it('renderiza matrícula, tipo, pilot, carry y estado con datos completos', () => {
     useVehiculoActivoMock.mockReturnValue({
       data: {
-        matricula:         '1234ABC',
-        tipo:              'SVB',
+        matricula: '1234ABC',
+        tipo: 'SVB',
         condicion_tecnica: 'operativo',
-        estado_operativo:  'activo',
-        pilot:             'pmartin',
-        carry:             'rsoto',
-        tipo_servicio:     'urgente',
+        estado_operativo: 'activo',
+        pilot: 'pmartin',
+        carry: 'rsoto',
+        tipo_servicio: 'urgente',
       },
       isLoading: false,
       isError: false,
@@ -79,13 +79,13 @@ describe('PanelVehiculo', () => {
   it('muestra "—" cuando pilot o carry son null', () => {
     useVehiculoActivoMock.mockReturnValue({
       data: {
-        matricula:         '1234ABC',
-        tipo:              'SVB',
+        matricula: '1234ABC',
+        tipo: 'SVB',
         condicion_tecnica: 'operativo',
-        estado_operativo:  'activo',
-        pilot:             null,
-        carry:             null,
-        tipo_servicio:     null,
+        estado_operativo: 'activo',
+        pilot: null,
+        carry: null,
+        tipo_servicio: null,
       },
       isLoading: false,
       isError: false,
@@ -98,13 +98,13 @@ describe('PanelVehiculo', () => {
   it('badge destructivo cuando condicion_tecnica es avería', () => {
     useVehiculoActivoMock.mockReturnValue({
       data: {
-        matricula:         '1234ABC',
-        tipo:              'SVB',
+        matricula: '1234ABC',
+        tipo: 'SVB',
         condicion_tecnica: 'averiado_grave',
-        estado_operativo:  'fuera_servicio',
-        pilot:             null,
-        carry:             null,
-        tipo_servicio:     null,
+        estado_operativo: 'fuera_servicio',
+        pilot: null,
+        carry: null,
+        tipo_servicio: null,
       },
       isLoading: false,
       isError: false,

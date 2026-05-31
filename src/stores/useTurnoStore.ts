@@ -3,19 +3,19 @@ import { persist } from 'zustand/middleware'
 import { createIdbStorage } from '@/lib/idb'
 
 export interface TurnoData {
-  id_parte:    string
-  id_nombre:   string
+  id_parte: string
+  id_nombre: string
   turnoActivo: boolean
 }
 
 interface TurnoState extends TurnoData {
-  setTurno:   (data: Pick<TurnoData, 'id_parte' | 'id_nombre'>) => void
+  setTurno: (data: Pick<TurnoData, 'id_parte' | 'id_nombre'>) => void
   clearTurno: () => void
 }
 
 const EMPTY: TurnoData = {
-  id_parte:    '',
-  id_nombre:   '',
+  id_parte: '',
+  id_nombre: '',
   turnoActivo: false,
 }
 
@@ -44,8 +44,8 @@ export const useTurnoStore = create<TurnoState>()(
       },
     }),
     {
-      name:    'u24-turno',
+      name: 'u24-turno',
       storage: createIdbStorage<TurnoState>(),
-    },
-  ),
+    }
+  )
 )

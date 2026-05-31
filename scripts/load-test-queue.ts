@@ -32,15 +32,17 @@ const args = Object.fromEntries(
   })
 )
 
-const MUTATIONS    = parseInt(args.mutations    ?? '100', 10)
-const CONCURRENCY  = parseInt(args.concurrency  ?? '1',   10)
-const SUPABASE_URL = process.env.SUPABASE_URL    ?? 'http://localhost:54321'
-const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
-const EMAIL        = process.env.LOAD_TEST_EMAIL   ?? ''
-const PASSWORD     = process.env.LOAD_TEST_PASSWORD ?? ''
+const MUTATIONS = parseInt(args.mutations ?? '100', 10)
+const CONCURRENCY = parseInt(args.concurrency ?? '1', 10)
+const SUPABASE_URL = process.env.SUPABASE_URL ?? 'http://localhost:54321'
+const ANON_KEY = process.env.SUPABASE_ANON_KEY ?? ''
+const EMAIL = process.env.LOAD_TEST_EMAIL ?? ''
+const PASSWORD = process.env.LOAD_TEST_PASSWORD ?? ''
 
 if (!ANON_KEY || !EMAIL || !PASSWORD) {
-  console.error('❌  Faltan variables de entorno: SUPABASE_ANON_KEY, LOAD_TEST_EMAIL, LOAD_TEST_PASSWORD')
+  console.error(
+    '❌  Faltan variables de entorno: SUPABASE_ANON_KEY, LOAD_TEST_EMAIL, LOAD_TEST_PASSWORD'
+  )
   process.exit(1)
 }
 
@@ -169,7 +171,9 @@ async function main() {
     // Progress cada 10% del total
     if ((i + CONCURRENCY) % Math.ceil(MUTATIONS / 10) === 0 || i + CONCURRENCY >= MUTATIONS) {
       const pct = Math.min(100, Math.round(((i + CONCURRENCY) / MUTATIONS) * 100))
-      process.stdout.write(`\r   Progreso: ${pct}% (${Math.min(i + CONCURRENCY, MUTATIONS)}/${MUTATIONS})`)
+      process.stdout.write(
+        `\r   Progreso: ${pct}% (${Math.min(i + CONCURRENCY, MUTATIONS)}/${MUTATIONS})`
+      )
     }
   }
   const elapsed_ms = Date.now() - start
@@ -197,8 +201,8 @@ async function main() {
   const durations = results.map((r) => r.duration_ms)
   const summary: LoadTestSummary = {
     total_mutations: results.length,
-    succeeded:       results.filter((r) => r.success).length,
-    failed:          results.filter((r) => !r.success).length,
+    succeeded: results.filter((r) => r.success).length,
+    failed: results.filter((r) => !r.success).length,
     duplicates_detected: results.filter((r) => r.duplicate_detected).length,
     elapsed_ms,
     avg_ms_per_mutation: Math.round(durations.reduce((a, b) => a + b, 0) / durations.length),
@@ -218,9 +222,12 @@ async function main() {
 
   if (summary.failed > 0) {
     console.log('\n❌  Errores:')
-    results.filter((r) => !r.success && !r.duplicate_detected).slice(0, 5).forEach((r) => {
-      console.log(`   ${r.mutation_uuid.slice(0, 8)} — ${r.error}`)
-    })
+    results
+      .filter((r) => !r.success && !r.duplicate_detected)
+      .slice(0, 5)
+      .forEach((r) => {
+        console.log(`   ${r.mutation_uuid.slice(0, 8)} — ${r.error}`)
+      })
   }
 
   // Criterios de aceptación (SLA)
@@ -229,8 +236,12 @@ async function main() {
   const failRate = summary.failed / summary.total_mutations
 
   console.log('\n🎯  SLA check:')
-  console.log(`   P95 < ${SLA_P95_MS}ms:        ${summary.p95_ms < SLA_P95_MS ? '✅' : '❌'} (${summary.p95_ms}ms)`)
-  console.log(`   Fail rate < ${SLA_FAIL_RATE * 100}%:  ${failRate < SLA_FAIL_RATE ? '✅' : '❌'} (${(failRate * 100).toFixed(2)}%)`)
+  console.log(
+    `   P95 < ${SLA_P95_MS}ms:        ${summary.p95_ms < SLA_P95_MS ? '✅' : '❌'} (${summary.p95_ms}ms)`
+  )
+  console.log(
+    `   Fail rate < ${SLA_FAIL_RATE * 100}%:  ${failRate < SLA_FAIL_RATE ? '✅' : '❌'} (${(failRate * 100).toFixed(2)}%)`
+  )
 
   const pass = summary.p95_ms < SLA_P95_MS && failRate < SLA_FAIL_RATE
   console.log(`\n${pass ? '✅  PASS' : '❌  FAIL'} — Cola offline bajo carga\n`)

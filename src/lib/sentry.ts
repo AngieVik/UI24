@@ -7,8 +7,8 @@ export function initSentry() {
 
   Sentry.init({
     dsn,
-    environment:  import.meta.env.MODE,
-    release:      import.meta.env.VITE_APP_VERSION,
+    environment: import.meta.env.MODE,
+    release: import.meta.env.VITE_APP_VERSION,
     tracesSampleRate: import.meta.env.PROD ? 0.2 : 1.0,
     // No enviar PII: deshabilitar breadcrumbs de URL completas
     beforeBreadcrumb(breadcrumb) {

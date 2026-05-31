@@ -35,7 +35,12 @@ export function useVisorGps(idDrp?: string) {
       if (error) throw error
 
       const parsed: VehiculoGps[] = (data ?? []).map((d) => {
-        const v = d.vehiculos as { lat: number | null; lng: number | null; gps_timestamp: string | null; estado_operativo: string } | null
+        const v = d.vehiculos as {
+          lat: number | null
+          lng: number | null
+          gps_timestamp: string | null
+          estado_operativo: string
+        } | null
         return {
           matricula: d.matricula,
           lat: v?.lat ?? null,

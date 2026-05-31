@@ -42,24 +42,24 @@ export function BandejaEntradaPersonal({ personas }: BandejaEntradaPersonalProps
         )}
 
         {!isLoading && isError && (
-          <p className="text-sm text-destructive">
-            No se pudo cargar las bandejas. Reintentando…
-          </p>
+          <p className="text-sm text-destructive">No se pudo cargar las bandejas. Reintentando…</p>
         )}
 
         {!isLoading && !isError && personas.length === 0 && (
-          <p className="text-sm font-light text-muted-foreground">
-            Sin buzones cargados.
-          </p>
+          <p className="text-sm font-light text-muted-foreground">Sin buzones cargados.</p>
         )}
 
         {!isLoading && !isError && personas.length > 0 && (
-          <ul className="flex flex-wrap items-center gap-2" aria-label="Bandejas personales del personal en turno">
+          <ul
+            className="flex flex-wrap items-center gap-2"
+            aria-label="Bandejas personales del personal en turno"
+          >
             {personas.map((p) => {
               const unread = unreadByPersona.get(p.id_nombre) ?? 0
-              const label = unread > 0
-                ? `${p.nombre_real}: ${unread} mensaje${unread === 1 ? '' : 's'} sin leer`
-                : `${p.nombre_real}: sin mensajes nuevos`
+              const label =
+                unread > 0
+                  ? `${p.nombre_real}: ${unread} mensaje${unread === 1 ? '' : 's'} sin leer`
+                  : `${p.nombre_real}: sin mensajes nuevos`
               return (
                 <li key={p.id_nombre}>
                   <Tooltip>

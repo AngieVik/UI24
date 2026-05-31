@@ -28,9 +28,9 @@ export interface QueuedMutation {
   attempts: number
   lastError?: string
   // Soporte para Blobs offline (ADR-002): blob en IDB, subido a Storage antes del RPC
-  blobKey?: string        // UUID clave en blobStorage.ts
+  blobKey?: string // UUID clave en blobStorage.ts
   blobStoragePath?: string // ruta destino en Storage (ej: 'averias/uuid.webp')
-  blobUrlField?: string   // campo del payload donde inyectar la URL resultante
+  blobUrlField?: string // campo del payload donde inyectar la URL resultante
 }
 
 export interface ProcessResult {
@@ -53,7 +53,7 @@ interface OfflineQueueState {
     rpc_name: string,
     payload: Record<string, unknown>,
     mutation_uuid?: string,
-    blobMeta?: BlobMeta,
+    blobMeta?: BlobMeta
   ) => string
   processQueue: () => Promise<ProcessResult>
   retryFailed: () => void
@@ -91,9 +91,7 @@ const useOfflineQueueStore = create<OfflineQueueState>()(
         if (state.isProcessing) return { synced: 0, failed: 0 }
 
         const candidates = state.queue.filter(
-          (m) =>
-            m.status === 'pending' ||
-            (m.status === 'failed' && m.attempts < MAX_ATTEMPTS),
+          (m) => m.status === 'pending' || (m.status === 'failed' && m.attempts < MAX_ATTEMPTS)
         )
         if (candidates.length === 0) return { synced: 0, failed: 0 }
 
@@ -121,13 +119,19 @@ const useOfflineQueueStore = create<OfflineQueueState>()(
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const { data: uploadData, error: uploadError } = await (supabase.storage as any)
                   .from('averias')
-                  .upload(mutation.blobStoragePath, blob, { contentType: 'image/webp', upsert: true })
+                  .upload(mutation.blobStoragePath, blob, {
+                    contentType: 'image/webp',
+                    upsert: true,
+                  })
                 if (!uploadError && uploadData) {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const { data: urlData } = (supabase.storage as any)
                     .from('averias')
                     .getPublicUrl(uploadData.path)
-                  resolvedPayload = { ...mutation.payload, [mutation.blobUrlField]: urlData.publicUrl }
+                  resolvedPayload = {
+                    ...mutation.payload,
+                    [mutation.blobUrlField]: urlData.publicUrl,
+                  }
                   await deleteBlob(mutation.blobKey)
                 }
               }
@@ -136,10 +140,7 @@ const useOfflineQueueStore = create<OfflineQueueState>()(
             // Cast necesario: el payload genérico no coincide con los tipos
             // estáticos de cada RPC individual — la validación ocurre en el servidor
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error } = await (supabase.rpc as any)(
-              mutation.rpc_name,
-              resolvedPayload,
-            )
+            const { error } = await (supabase.rpc as any)(mutation.rpc_name, resolvedPayload)
             if (error) throw error
             done.push(mutation.mutation_uuid)
             synced++
@@ -152,10 +153,9 @@ const useOfflineQueueStore = create<OfflineQueueState>()(
                       ...m,
                       status: 'failed' as MutationStatus,
                       attempts,
-                      lastError:
-                        err instanceof Error ? err.message : String(err),
+                      lastError: err instanceof Error ? err.message : String(err),
                     }
-                  : m,
+                  : m
               ),
             }))
             failed++
@@ -182,7 +182,7 @@ const useOfflineQueueStore = create<OfflineQueueState>()(
                   attempts: 0,
                   lastError: undefined,
                 }
-              : m,
+              : m
           ),
         }))
       },
@@ -206,8 +206,8 @@ const useOfflineQueueStore = create<OfflineQueueState>()(
         // Garantizar isProcessing=false tras hidratar desde IndexedDB
         state?._resetProcessing()
       },
-    },
-  ),
+    }
+  )
 )
 
 // Hook con soporte para selectors — se puede usar como useOfflineQueue(s => s.isProcessing)

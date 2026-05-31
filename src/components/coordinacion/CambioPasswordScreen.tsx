@@ -7,24 +7,32 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { supabase } from '@/lib/supabase'
 import { resolveRpcError } from '@/lib/resolveRpcError'
 import { useQuery } from '@tanstack/react-query'
 
 interface Empleado {
-  id_nombre:  string
+  id_nombre: string
   nombre_real: string
 }
 
-const schema = z.object({
-  id_nombre:    z.string().min(1, 'Selecciona el empleado'),
-  nueva_password: z.string().min(8, 'Mínimo 8 caracteres'),
-  confirmar:    z.string().min(8, 'Confirma la contraseña'),
-}).refine((v) => v.nueva_password === v.confirmar, {
-  message: 'Las contraseñas no coinciden',
-  path: ['confirmar'],
-})
+const schema = z
+  .object({
+    id_nombre: z.string().min(1, 'Selecciona el empleado'),
+    nueva_password: z.string().min(8, 'Mínimo 8 caracteres'),
+    confirmar: z.string().min(8, 'Confirma la contraseña'),
+  })
+  .refine((v) => v.nueva_password === v.confirmar, {
+    message: 'Las contraseñas no coinciden',
+    path: ['confirmar'],
+  })
 type Schema = z.infer<typeof schema>
 
 function useEmpleados() {
@@ -66,7 +74,14 @@ export function CambioPasswordScreen() {
         <p className="font-body text-sm text-muted-foreground">
           La contraseña del empleado se ha actualizado correctamente.
         </p>
-        <Button onClick={() => { setDone(false); form.reset() }} variant="outline" size="sm">
+        <Button
+          onClick={() => {
+            setDone(false)
+            form.reset()
+          }}
+          variant="outline"
+          size="sm"
+        >
           Cambiar otra contraseña
         </Button>
       </div>
@@ -79,8 +94,8 @@ export function CambioPasswordScreen() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: err } = await (supabase as any).rpc('rpc_cambiar_password_empleado', {
-        p_mutation_uuid:  crypto.randomUUID(),
-        p_id_nombre:      values.id_nombre,
+        p_mutation_uuid: crypto.randomUUID(),
+        p_id_nombre: values.id_nombre,
         p_nueva_password: values.nueva_password,
       })
       if (err) throw err
@@ -108,56 +123,71 @@ export function CambioPasswordScreen() {
             aria-label="Formulario de cambio de contraseña"
             noValidate
           >
-            <Controller control={form.control} name="id_nombre" render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor="cp-empleado">Empleado</FieldLabel>
-                <Select value={field.value} onValueChange={field.onChange} disabled={submitting}>
-                  <SelectTrigger id="cp-empleado" aria-label="Empleado">
-                    <SelectValue placeholder="Seleccionar empleado…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(empleados ?? []).map((e) => (
-                      <SelectItem key={e.id_nombre} value={e.id_nombre}>
-                        {e.id_nombre}{e.nombre_real ? ` — ${e.nombre_real}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {fieldState.error && <FieldError errors={[fieldState.error]} />}
-              </Field>
-            )} />
+            <Controller
+              control={form.control}
+              name="id_nombre"
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="cp-empleado">Empleado</FieldLabel>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={submitting}>
+                    <SelectTrigger id="cp-empleado" aria-label="Empleado">
+                      <SelectValue placeholder="Seleccionar empleado…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(empleados ?? []).map((e) => (
+                        <SelectItem key={e.id_nombre} value={e.id_nombre}>
+                          {e.id_nombre}
+                          {e.nombre_real ? ` — ${e.nombre_real}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {fieldState.error && <FieldError errors={[fieldState.error]} />}
+                </Field>
+              )}
+            />
 
-            <Controller control={form.control} name="nueva_password" render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor="cp-nueva">Nueva contraseña</FieldLabel>
-                <Input
-                  {...field}
-                  id="cp-nueva"
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={submitting}
-                  aria-invalid={fieldState.invalid}
-                />
-                {fieldState.error && <FieldError errors={[fieldState.error]} />}
-              </Field>
-            )} />
+            <Controller
+              control={form.control}
+              name="nueva_password"
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="cp-nueva">Nueva contraseña</FieldLabel>
+                  <Input
+                    {...field}
+                    id="cp-nueva"
+                    type="password"
+                    autoComplete="new-password"
+                    disabled={submitting}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.error && <FieldError errors={[fieldState.error]} />}
+                </Field>
+              )}
+            />
 
-            <Controller control={form.control} name="confirmar" render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor="cp-confirmar">Confirmar contraseña</FieldLabel>
-                <Input
-                  {...field}
-                  id="cp-confirmar"
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={submitting}
-                  aria-invalid={fieldState.invalid}
-                />
-                {fieldState.error && <FieldError errors={[fieldState.error]} />}
-              </Field>
-            )} />
+            <Controller
+              control={form.control}
+              name="confirmar"
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="cp-confirmar">Confirmar contraseña</FieldLabel>
+                  <Input
+                    {...field}
+                    id="cp-confirmar"
+                    type="password"
+                    autoComplete="new-password"
+                    disabled={submitting}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.error && <FieldError errors={[fieldState.error]} />}
+                </Field>
+              )}
+            />
 
-            <div role="alert" aria-live="polite" className="min-h-5 text-sm text-destructive">{error}</div>
+            <div role="alert" aria-live="polite" className="min-h-5 text-sm text-destructive">
+              {error}
+            </div>
 
             <Button type="submit" className="w-full" disabled={submitting}>
               <KeyRound aria-hidden="true" className="size-4" />

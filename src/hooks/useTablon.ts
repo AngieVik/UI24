@@ -25,7 +25,9 @@ export function useTablon() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error: err } = await (supabase as any)
         .from('tablon_anuncios')
-        .select('id_anuncio, seccion, titulo, contenido, estado, id_nombre_autor, timestamp_publicacion')
+        .select(
+          'id_anuncio, seccion, titulo, contenido, estado, id_nombre_autor, timestamp_publicacion'
+        )
         .eq('estado', 'activo')
         .order('timestamp_publicacion', { ascending: false })
       if (err) throw err
@@ -37,7 +39,9 @@ export function useTablon() {
     }
   }, [])
 
-  useEffect(() => { cargarTablon() }, [cargarTablon])
+  useEffect(() => {
+    cargarTablon()
+  }, [cargarTablon])
 
   const porSeccion = (seccion: AnuncioItem['seccion']) =>
     anuncios.filter((a) => a.seccion === seccion)

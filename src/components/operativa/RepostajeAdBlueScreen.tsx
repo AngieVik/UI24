@@ -13,9 +13,9 @@ import { useActivacionStore } from '@/stores/useActivacionStore'
 import { useOfflineMutation } from '@/hooks/useOfflineMutation'
 
 const schema = z.object({
-  litros:    z.coerce.number().positive('Introduce los litros repostados'),
+  litros: z.coerce.number().positive('Introduce los litros repostados'),
   km_actual: z.coerce.number().int().positive('Introduce el km actual').optional(),
-  notas:     z.string().optional(),
+  notas: z.string().optional(),
 })
 type Schema = z.infer<typeof schema>
 
@@ -24,19 +24,19 @@ interface RepostajeResult {
 }
 
 export function RepostajeAdBlueScreen() {
-  const matricula    = useActivacionStore((s) => s.matricula)
+  const matricula = useActivacionStore((s) => s.matricula)
   const idActivacion = useActivacionStore((s) => s.id_activacion)
   const [resultado, setResultado] = useState<RepostajeResult | null>(null)
 
   const mut = useOfflineMutation<{
     p_mutation_uuid: string
-    p_matricula:     string
+    p_matricula: string
     p_id_activacion: string
-    p_litros:        number
-    p_km_actual:     number | null
-    p_notas:         string | null
+    p_litros: number
+    p_km_actual: number | null
+    p_notas: string | null
   }>({
-    rpcName:    'rpc_registrar_repostaje_adblue',
+    rpcName: 'rpc_registrar_repostaje_adblue',
     invalidates: [['repostajes', matricula]],
   })
 
@@ -54,9 +54,7 @@ export function RepostajeAdBlueScreen() {
         <div className="grid size-12 place-items-center rounded-md bg-muted text-muted-foreground/70">
           <Droplet aria-hidden="true" className="size-6" />
         </div>
-        <h2 className="font-display text-lg font-bold leading-tight">
-          Repostaje AdBlue
-        </h2>
+        <h2 className="font-display text-lg font-bold leading-tight">Repostaje AdBlue</h2>
         <p className="font-body text-base font-light text-muted-foreground">
           No hay turno activo. Inicia un turno desde Operativa → Vehículos.
         </p>
@@ -79,7 +77,10 @@ export function RepostajeAdBlueScreen() {
             : 'El repostaje se guardará cuando recuperes la conexión.'}
         </p>
         <Button
-          onClick={() => { setResultado(null); form.reset() }}
+          onClick={() => {
+            setResultado(null)
+            form.reset()
+          }}
           variant="outline"
           size="sm"
         >
@@ -92,11 +93,11 @@ export function RepostajeAdBlueScreen() {
   async function onSubmit(values: Schema) {
     const res = await mut.mutateAsync({
       p_mutation_uuid: crypto.randomUUID(),
-      p_matricula:     matricula,
+      p_matricula: matricula,
       p_id_activacion: idActivacion,
-      p_litros:        values.litros,
-      p_km_actual:     values.km_actual ?? null,
-      p_notas:         values.notas?.trim() || null,
+      p_litros: values.litros,
+      p_km_actual: values.km_actual ?? null,
+      p_notas: values.notas?.trim() || null,
     })
     setResultado({ online: !res.queued })
   }
@@ -147,7 +148,9 @@ export function RepostajeAdBlueScreen() {
               name="km_actual"
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="ab-km">Km actual <span className="font-light text-muted-foreground">— opcional</span></FieldLabel>
+                  <FieldLabel htmlFor="ab-km">
+                    Km actual <span className="font-light text-muted-foreground">— opcional</span>
+                  </FieldLabel>
                   <Input
                     {...field}
                     id="ab-km"
@@ -155,7 +158,9 @@ export function RepostajeAdBlueScreen() {
                     min="0"
                     placeholder="Ej. 123456"
                     value={field.value ?? ''}
-                    onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                    onChange={(e) =>
+                      field.onChange(e.target.value === '' ? undefined : Number(e.target.value))
+                    }
                     aria-invalid={fieldState.invalid}
                   />
                   {fieldState.error && <FieldError errors={[fieldState.error]} />}
@@ -168,7 +173,9 @@ export function RepostajeAdBlueScreen() {
               name="notas"
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="ab-notas">Notas <span className="font-light text-muted-foreground">— opcional</span></FieldLabel>
+                  <FieldLabel htmlFor="ab-notas">
+                    Notas <span className="font-light text-muted-foreground">— opcional</span>
+                  </FieldLabel>
                   <Textarea
                     {...field}
                     id="ab-notas"

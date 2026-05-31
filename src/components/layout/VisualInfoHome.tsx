@@ -29,13 +29,13 @@ interface VisualInfoHomeProps {
 export function VisualInfoHome({ onGoCheckin }: VisualInfoHomeProps) {
   const ejecutorId = useAuthStore((s) => s.ejecutorId)
   const idTerminal = useTerminalStore((s) => s.id_terminal)
-  const personal   = usePersonalEnTurno()
-  const vehiculo   = useVehiculoActivo()
-  const drp        = useDrpActivo()
+  const personal = usePersonalEnTurno()
+  const vehiculo = useVehiculoActivo()
+  const drp = useDrpActivo()
 
   const hasPersonal = personal.data.length > 0
   const hasVehiculo = vehiculo.data !== null
-  const hasDrp      = drp.data !== null
+  const hasDrp = drp.data !== null
 
   // Mientras carga la primera vez, no decidimos el empty state — esperamos.
   const stillLoading = personal.isLoading || vehiculo.isLoading || drp.isLoading
@@ -52,8 +52,8 @@ export function VisualInfoHome({ onGoCheckin }: VisualInfoHomeProps) {
             Terminal sin turno activo
           </h2>
           <p className="font-body text-base font-light text-muted-foreground">
-            No hay personal en turno ni vehículo asignado.
-            Pulsa <strong>Check-in</strong> para iniciar.
+            No hay personal en turno ni vehículo asignado. Pulsa <strong>Check-in</strong> para
+            iniciar.
           </p>
         </div>
         <Button onClick={onGoCheckin}>
@@ -61,10 +61,12 @@ export function VisualInfoHome({ onGoCheckin }: VisualInfoHomeProps) {
           Ir a Check-in
         </Button>
         <p className="font-body text-xs font-light text-muted-foreground">
-          Sesión activa: <span className="font-medium text-foreground">{ejecutorId ?? 'desconocida'}</span>
+          Sesión activa:{' '}
+          <span className="font-medium text-foreground">{ejecutorId ?? 'desconocida'}</span>
           {idTerminal && (
             <>
-              {' · '}terminal <span className="font-medium text-foreground">{idTerminal.slice(0, 8)}</span>
+              {' · '}terminal{' '}
+              <span className="font-medium text-foreground">{idTerminal.slice(0, 8)}</span>
             </>
           )}
         </p>
@@ -76,7 +78,7 @@ export function VisualInfoHome({ onGoCheckin }: VisualInfoHomeProps) {
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
       {(hasPersonal || personal.isLoading) && <PanelPersonal />}
       {(hasVehiculo || vehiculo.isLoading) && <PanelVehiculo />}
-      {(hasDrp      || drp.isLoading)      && <VisualInfoDRP />}
+      {(hasDrp || drp.isLoading) && <VisualInfoDRP />}
       {hasPersonal && <BandejaEntradaPersonal personas={personal.data} />}
     </div>
   )

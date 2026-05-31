@@ -2,20 +2,20 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 export interface Doc6Item {
-  id_deduccion:       string
-  id_item:            number
-  nombre_item:        string
-  categoria:          string
-  cantidad:           number
+  id_deduccion: string
+  id_item: number
+  nombre_item: string
+  categoria: string
+  cantidad: number
   id_nombre_operador: string
-  created_at:         string
+  created_at: string
 }
 
 interface UseDoc6DelTurnoResult {
-  data:      Doc6Item[]
+  data: Doc6Item[]
   isLoading: boolean
-  isError:   boolean
-  error:     Error | null
+  isError: boolean
+  error: Error | null
 }
 
 /**
@@ -28,21 +28,23 @@ interface UseDoc6DelTurnoResult {
 export function useDoc6DelTurno(idActivacion: string | null): UseDoc6DelTurnoResult {
   const query = useQuery({
     queryKey: ['doc6_del_turno', idActivacion] as const,
-    enabled:  !!idActivacion,
+    enabled: !!idActivacion,
     staleTime: 30_000,
     queryFn: async (): Promise<Doc6Item[]> => {
       if (!idActivacion) return []
 
       const { data, error } = await supabase
         .from('doc6_deducciones')
-        .select(`
+        .select(
+          `
           id_deduccion,
           id_item,
           cantidad,
           id_nombre_operador,
           created_at,
           catalogo_items!inner(nombre, categoria)
-        `)
+        `
+        )
         .eq('id_activacion', idActivacion)
         .order('created_at', { ascending: true })
 
@@ -51,22 +53,22 @@ export function useDoc6DelTurno(idActivacion: string | null): UseDoc6DelTurnoRes
       return (data ?? []).map((row) => {
         const cat = row.catalogo_items as unknown as { nombre: string; categoria: string }
         return {
-          id_deduccion:       row.id_deduccion,
-          id_item:            row.id_item,
-          nombre_item:        cat.nombre,
-          categoria:          cat.categoria,
-          cantidad:           row.cantidad,
+          id_deduccion: row.id_deduccion,
+          id_item: row.id_item,
+          nombre_item: cat.nombre,
+          categoria: cat.categoria,
+          cantidad: row.cantidad,
           id_nombre_operador: row.id_nombre_operador,
-          created_at:         row.created_at,
+          created_at: row.created_at,
         }
       })
     },
   })
 
   return {
-    data:      query.data ?? [],
+    data: query.data ?? [],
     isLoading: query.isLoading,
-    isError:   query.isError,
-    error:     (query.error as Error | null) ?? null,
+    isError: query.isError,
+    error: (query.error as Error | null) ?? null,
   }
 }

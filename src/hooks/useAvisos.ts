@@ -25,7 +25,9 @@ export function useAvisos() {
     try {
       const { data, error: err } = await supabase
         .from('doc11_avisos')
-        .select('id_aviso, tipo_aviso, nivel, id_nombre_emisor, texto, timestamp_publicacion, leido_por')
+        .select(
+          'id_aviso, tipo_aviso, nivel, id_nombre_emisor, texto, timestamp_publicacion, leido_por'
+        )
         .order('timestamp_publicacion', { ascending: false })
         .limit(50)
       if (err) throw err
@@ -37,26 +39,30 @@ export function useAvisos() {
     }
   }, [])
 
-  const marcarLeido = useCallback(async (idAviso: string): Promise<boolean> => {
-    try {
-      const { error: err } = await supabase
-        .rpc('rpc_marcar_aviso_leido', { p_id_aviso: idAviso })
-      if (err) throw err
-      setAvisos((prev) =>
-        prev.map((a) =>
-          a.id_aviso === idAviso && ejecutorId && !a.leido_por.includes(ejecutorId)
-            ? { ...a, leido_por: [...a.leido_por, ejecutorId] }
-            : a,
-        ),
-      )
-      return true
-    } catch (e) {
-      setError(resolveRpcError(e))
-      return false
-    }
-  }, [ejecutorId])
+  const marcarLeido = useCallback(
+    async (idAviso: string): Promise<boolean> => {
+      try {
+        const { error: err } = await supabase.rpc('rpc_marcar_aviso_leido', { p_id_aviso: idAviso })
+        if (err) throw err
+        setAvisos((prev) =>
+          prev.map((a) =>
+            a.id_aviso === idAviso && ejecutorId && !a.leido_por.includes(ejecutorId)
+              ? { ...a, leido_por: [...a.leido_por, ejecutorId] }
+              : a
+          )
+        )
+        return true
+      } catch (e) {
+        setError(resolveRpcError(e))
+        return false
+      }
+    },
+    [ejecutorId]
+  )
 
-  useEffect(() => { cargarAvisos() }, [cargarAvisos])
+  useEffect(() => {
+    cargarAvisos()
+  }, [cargarAvisos])
 
   return { avisos, loading, error, setError, cargarAvisos, marcarLeido }
 }

@@ -40,7 +40,7 @@ export function Header({ ticker, unreadCount = 0, onOpenInbox }: HeaderProps) {
             aria-current={onHomeActive ? 'page' : undefined}
             className={cn(
               'flex shrink-0 items-center rounded-md p-1 bg-transparent',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-u24-black',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-u24-black'
             )}
           >
             <img
@@ -81,7 +81,7 @@ export function Header({ ticker, unreadCount = 0, onOpenInbox }: HeaderProps) {
               className={cn(
                 'relative grid size-10 place-items-center rounded-md text-zinc-300 transition-colors hover:bg-u24-column-hover hover:text-white',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-u24-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-u24-black',
-                unreadCount > 0 && 'text-u24-yellow',
+                unreadCount > 0 && 'text-u24-yellow'
               )}
             >
               <Inbox aria-hidden="true" className="size-5" strokeWidth={2} />

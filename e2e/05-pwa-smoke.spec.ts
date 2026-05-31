@@ -62,9 +62,9 @@ test.describe('PWA — Performance', () => {
   test('la pantalla de autorización carga en menos de 3 segundos', async ({ page }) => {
     const start = Date.now()
     await page.goto('/')
-    await expect(
-      page.getByRole('heading', { name: /autorizar terminal/i })
-    ).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
+      timeout: 5_000,
+    })
     const elapsed = Date.now() - start
     expect(elapsed).toBeLessThan(3_000)
   })
@@ -73,7 +73,7 @@ test.describe('PWA — Performance', () => {
 test.describe('PWA — Headers de seguridad', () => {
   test('la respuesta incluye al menos un header de seguridad', async ({ page }) => {
     const response = await page.goto('/')
-    const headers  = response?.headers() ?? {}
+    const headers = response?.headers() ?? {}
 
     const securityHeaders = [
       'content-security-policy',
@@ -90,7 +90,7 @@ test.describe('PWA — Headers de seguridad', () => {
       // Solo se registra la advertencia para que aparezca en el report
       console.warn(
         '[Seguridad] Ningún header de seguridad HTTP detectado. ' +
-        'Verificar configuración de Vercel (vercel.json headers).'
+          'Verificar configuración de Vercel (vercel.json headers).'
       )
     } else {
       console.log('[Seguridad] Headers presentes:', present)

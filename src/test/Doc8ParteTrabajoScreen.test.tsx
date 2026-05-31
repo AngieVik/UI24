@@ -5,14 +5,14 @@ import { renderWithShell } from '@/test/test-utils'
 
 // ── Mocks de stores ───────────────────────────────────────────
 
-let idParteMock      = 'abc12345-0000-0000-0000-000000000001'
-let turnoActivoMock  = true
-let checklistMock    = false
+let idParteMock = 'abc12345-0000-0000-0000-000000000001'
+let turnoActivoMock = true
+let checklistMock = false
 let idActivacionMock = 'act00001-0000-0000-0000-000000000001'
 
 vi.mock('@/stores/useTurnoStore', () => {
   function useTurnoStore<T = unknown>(
-    selector?: (s: { id_parte: string; id_nombre: string; turnoActivo: boolean }) => T,
+    selector?: (s: { id_parte: string; id_nombre: string; turnoActivo: boolean }) => T
   ): T | { id_parte: string; id_nombre: string; turnoActivo: boolean } {
     const s = { id_parte: idParteMock, id_nombre: 'jperez', turnoActivo: turnoActivoMock }
     return selector ? selector(s) : s
@@ -27,12 +27,19 @@ vi.mock('@/stores/useActivacionStore', () => {
       id_checklist: string
       matricula: string
       checklistCerrado: boolean
-    }) => T,
-  ): T | { id_activacion: string; id_checklist: string; matricula: string; checklistCerrado: boolean } {
+    }) => T
+  ):
+    | T
+    | {
+        id_activacion: string
+        id_checklist: string
+        matricula: string
+        checklistCerrado: boolean
+      } {
     const s = {
-      id_activacion:    idActivacionMock,
-      id_checklist:     '',
-      matricula:        '',
+      id_activacion: idActivacionMock,
+      id_checklist: '',
+      matricula: '',
       checklistCerrado: checklistMock,
     }
     return selector ? selector(s) : s
@@ -42,75 +49,75 @@ vi.mock('@/stores/useActivacionStore', () => {
 
 // ── Mocks de hooks ────────────────────────────────────────────
 
-vi.mock('@/hooks/useDoc8Activo',     () => ({ useDoc8Activo:     vi.fn() }))
-vi.mock('@/hooks/useDoc6DelTurno',   () => ({ useDoc6DelTurno:   vi.fn() }))
-vi.mock('@/hooks/useAnotarParte',    () => ({ useAnotarParte:    vi.fn() }))
-vi.mock('@/hooks/usePersonalEnTurno',() => ({ usePersonalEnTurno: vi.fn() }))
+vi.mock('@/hooks/useDoc8Activo', () => ({ useDoc8Activo: vi.fn() }))
+vi.mock('@/hooks/useDoc6DelTurno', () => ({ useDoc6DelTurno: vi.fn() }))
+vi.mock('@/hooks/useAnotarParte', () => ({ useAnotarParte: vi.fn() }))
+vi.mock('@/hooks/usePersonalEnTurno', () => ({ usePersonalEnTurno: vi.fn() }))
 
 import { Doc8ParteTrabajoScreen } from '@/components/operativa/Doc8ParteTrabajoScreen'
 import { useDoc8Activo, type Doc8Data } from '@/hooks/useDoc8Activo'
-import { useDoc6DelTurno }    from '@/hooks/useDoc6DelTurno'
-import { useAnotarParte }     from '@/hooks/useAnotarParte'
+import { useDoc6DelTurno } from '@/hooks/useDoc6DelTurno'
+import { useAnotarParte } from '@/hooks/useAnotarParte'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 
-const useDoc8Mock      = vi.mocked(useDoc8Activo)
-const useDoc6Mock      = vi.mocked(useDoc6DelTurno)
-const useAnotarMock    = vi.mocked(useAnotarParte)
-const usePersonalMock  = vi.mocked(usePersonalEnTurno)
+const useDoc8Mock = vi.mocked(useDoc8Activo)
+const useDoc6Mock = vi.mocked(useDoc6DelTurno)
+const useAnotarMock = vi.mocked(useAnotarParte)
+const usePersonalMock = vi.mocked(usePersonalEnTurno)
 
 // ── Fixtures ──────────────────────────────────────────────────
 
 const DOC8: Doc8Data = {
-  id_parte:         'abc12345-0000-0000-0000-000000000001',
-  id_activacion:    'act00001-0000-0000-0000-000000000001',
-  id_nombre:        'jperez',
-  km_inicio:        125000,
-  km_fin:           null,
+  id_parte: 'abc12345-0000-0000-0000-000000000001',
+  id_activacion: 'act00001-0000-0000-0000-000000000001',
+  id_nombre: 'jperez',
+  km_inicio: 125000,
+  km_fin: null,
   timestamp_inicio: '2026-05-27T08:00:00Z',
-  timestamp_fin:    null,
-  estado:           'Abierto_En_Turno',
-  notas:            null,
-  matricula:        '1111-AA',
-  pilot:            'jperez',
-  carry:            'mgomez',
-  tipo_servicio:    'guardia_urgencias',
+  timestamp_fin: null,
+  estado: 'Abierto_En_Turno',
+  notas: null,
+  matricula: '1111-AA',
+  pilot: 'jperez',
+  carry: 'mgomez',
+  tipo_servicio: 'guardia_urgencias',
 }
 
 const PERSONAL = [
   {
-    id_nombre:   'jperez',
+    id_nombre: 'jperez',
     nombre_real: 'Juan Pérez',
-    rol:         'tes',
-    telefono:    null,
-    checkin_at:  '2026-05-27T07:55:00Z',
+    rol: 'tes',
+    telefono: null,
+    checkin_at: '2026-05-27T07:55:00Z',
   },
   {
-    id_nombre:   'mgomez',
+    id_nombre: 'mgomez',
     nombre_real: 'María Gómez',
-    rol:         'due',
-    telefono:    null,
-    checkin_at:  '2026-05-27T07:57:00Z',
+    rol: 'due',
+    telefono: null,
+    checkin_at: '2026-05-27T07:57:00Z',
   },
 ]
 
 const GASTOS = [
   {
-    id_deduccion:       'ded00001',
-    id_item:            1,
-    nombre_item:        'Gasa estéril',
-    categoria:          'Curas',
-    cantidad:           2,
+    id_deduccion: 'ded00001',
+    id_item: 1,
+    nombre_item: 'Gasa estéril',
+    categoria: 'Curas',
+    cantidad: 2,
     id_nombre_operador: 'jperez',
-    created_at:         '2026-05-27T09:30:00Z',
+    created_at: '2026-05-27T09:30:00Z',
   },
 ]
 
 const anotarMock = vi.fn()
 
 beforeEach(() => {
-  idParteMock      = 'abc12345-0000-0000-0000-000000000001'
-  turnoActivoMock  = true
-  checklistMock    = false
+  idParteMock = 'abc12345-0000-0000-0000-000000000001'
+  turnoActivoMock = true
+  checklistMock = false
   idActivacionMock = 'act00001-0000-0000-0000-000000000001'
 
   useDoc8Mock.mockReset()
@@ -152,7 +159,12 @@ describe('Doc8ParteTrabajoScreen — loading / error', () => {
   })
 
   it('muestra error si falla la query', () => {
-    useDoc8Mock.mockReturnValue({ data: null, isLoading: false, isError: true, error: new Error('pg error') })
+    useDoc8Mock.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: true,
+      error: new Error('pg error'),
+    })
     renderWithShell(<Doc8ParteTrabajoScreen />)
     expect(screen.getByText(/no se pudo cargar el parte/i)).toBeInTheDocument()
   })
@@ -182,7 +194,9 @@ describe('Doc8ParteTrabajoScreen — encabezado', () => {
   it('muestra badge Cerrado si estado = Enviado_Cerrado', () => {
     useDoc8Mock.mockReturnValue({
       data: { ...DOC8, estado: 'Enviado_Cerrado' },
-      isLoading: false, isError: false, error: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     })
     renderWithShell(<Doc8ParteTrabajoScreen />)
     expect(screen.getByLabelText(/estado: cerrado/i)).toBeInTheDocument()
@@ -207,7 +221,9 @@ describe('Doc8ParteTrabajoScreen — dotación', () => {
   it('muestra — para carry null', () => {
     useDoc8Mock.mockReturnValue({
       data: { ...DOC8, carry: null },
-      isLoading: false, isError: false, error: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     })
     renderWithShell(<Doc8ParteTrabajoScreen />)
     // carry label → —
@@ -255,7 +271,9 @@ describe('Doc8ParteTrabajoScreen — checklist360', () => {
   it('muestra hint de completar cuando el checklist está pendiente', () => {
     checklistMock = false
     renderWithShell(<Doc8ParteTrabajoScreen />)
-    expect(screen.getByText(/revisión 360° de inicio de turno no está completada/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/revisión 360° de inicio de turno no está completada/i)
+    ).toBeInTheDocument()
   })
 })
 
@@ -291,7 +309,9 @@ describe('Doc8ParteTrabajoScreen — anotaciones', () => {
   it('textarea deshabilitada cuando el parte está cerrado', () => {
     useDoc8Mock.mockReturnValue({
       data: { ...DOC8, estado: 'Enviado_Cerrado' },
-      isLoading: false, isError: false, error: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     })
     renderWithShell(<Doc8ParteTrabajoScreen />)
     expect(screen.getByLabelText(/anotaciones del turno/i)).toBeDisabled()
@@ -318,10 +338,12 @@ describe('Doc8ParteTrabajoScreen — anotaciones', () => {
     await user.type(screen.getByLabelText(/anotaciones del turno/i), 'nueva anotación')
     await user.click(screen.getByRole('button', { name: /guardar anotación/i }))
 
-    await waitFor(() => expect(anotarMock).toHaveBeenCalledWith({
-      id_parte: idParteMock,
-      notas:    'nueva anotación',
-    }))
+    await waitFor(() =>
+      expect(anotarMock).toHaveBeenCalledWith({
+        id_parte: idParteMock,
+        notas: 'nueva anotación',
+      })
+    )
   })
 
   it('muestra feedback de éxito tras guardar', async () => {
@@ -332,9 +354,7 @@ describe('Doc8ParteTrabajoScreen — anotaciones', () => {
     await user.type(screen.getByLabelText(/anotaciones del turno/i), 'x')
     await user.click(screen.getByRole('button', { name: /guardar anotación/i }))
 
-    await waitFor(() =>
-      expect(screen.getByText(/anotación guardada/i)).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText(/anotación guardada/i)).toBeInTheDocument())
   })
 
   it('muestra feedback offline si la mutación se encoló', async () => {
@@ -345,14 +365,13 @@ describe('Doc8ParteTrabajoScreen — anotaciones', () => {
     await user.type(screen.getByLabelText(/anotaciones del turno/i), 'x')
     await user.click(screen.getByRole('button', { name: /guardar anotación/i }))
 
-    await waitFor(() =>
-      expect(screen.getByText(/encolada offline/i)).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText(/encolada offline/i)).toBeInTheDocument())
   })
 
   it('muestra error si falla la mutación', () => {
     useAnotarMock.mockReturnValue({
-      anotar: anotarMock, isSubmitting: false,
+      anotar: anotarMock,
+      isSubmitting: false,
       error: 'ERR_DOC8_002: El parte ya está cerrado',
     })
     renderWithShell(<Doc8ParteTrabajoScreen />)
@@ -362,7 +381,9 @@ describe('Doc8ParteTrabajoScreen — anotaciones', () => {
   it('no muestra botón guardar cuando el parte está cerrado', () => {
     useDoc8Mock.mockReturnValue({
       data: { ...DOC8, estado: 'Enviado_Cerrado' },
-      isLoading: false, isError: false, error: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     })
     renderWithShell(<Doc8ParteTrabajoScreen />)
     expect(screen.queryByRole('button', { name: /guardar anotación/i })).not.toBeInTheDocument()

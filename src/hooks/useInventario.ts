@@ -29,9 +29,9 @@ export function useInventario() {
     error: null,
   })
 
-  const matricula    = useActivacionStore((s) => s.matricula)
+  const matricula = useActivacionStore((s) => s.matricula)
   const idActivacion = useActivacionStore((s) => s.id_activacion)
-  const isOnline     = useGlobalStore((s) => s.isOnline)
+  const isOnline = useGlobalStore((s) => s.isOnline)
 
   const cargarInventario = useCallback(async () => {
     if (!matricula) return
@@ -50,12 +50,12 @@ export function useInventario() {
       const items: InventarioItem[] = (data ?? []).map((row: Record<string, unknown>) => {
         const cat = row['catalogo_items'] as Record<string, unknown> | null
         return {
-          id_item:       row['id_item']   as number,
-          subgrupo:      row['subgrupo']  as string,
-          stock_real:    row['stock_real'] as number,
-          nombre:        (cat?.['nombre']       ?? '') as string,
-          categoria:     (cat?.['categoria']    ?? '') as string,
-          especificacion:(cat?.['especificacion'] ?? null) as string | null,
+          id_item: row['id_item'] as number,
+          subgrupo: row['subgrupo'] as string,
+          stock_real: row['stock_real'] as number,
+          nombre: (cat?.['nombre'] ?? '') as string,
+          categoria: (cat?.['categoria'] ?? '') as string,
+          especificacion: (cat?.['especificacion'] ?? null) as string | null,
         }
       })
 
@@ -69,7 +69,7 @@ export function useInventario() {
     idItem: number,
     subgrupo: string,
     cantidad: number,
-    motivo?: string,
+    motivo?: string
   ): Promise<boolean> {
     if (!matricula || cantidad <= 0) return false
 
@@ -81,19 +81,19 @@ export function useInventario() {
       items: s.items.map((item) =>
         item.id_item === idItem && item.subgrupo === subgrupo
           ? { ...item, stock_real: Math.max(0, item.stock_real - cantidad) }
-          : item,
+          : item
       ),
     }))
 
     const mutationUuid = crypto.randomUUID()
     const payload = {
-      mutation_uuid:  mutationUuid,
-      p_matricula:    matricula,
-      p_id_item:      idItem,
-      p_cantidad:     cantidad,
-      p_subgrupo:     subgrupo,
+      mutation_uuid: mutationUuid,
+      p_matricula: matricula,
+      p_id_item: idItem,
+      p_cantidad: cantidad,
+      p_subgrupo: subgrupo,
       p_id_activacion: idActivacion || null,
-      p_motivo:       motivo ?? null,
+      p_motivo: motivo ?? null,
     }
 
     try {
@@ -115,7 +115,7 @@ export function useInventario() {
         items: s.items.map((item) =>
           item.id_item === idItem && item.subgrupo === subgrupo
             ? { ...item, stock_real: item.stock_real + cantidad }
-            : item,
+            : item
         ),
       }))
       return false

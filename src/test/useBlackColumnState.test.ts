@@ -98,7 +98,7 @@ describe('useBlackColumnState — goBack', () => {
     act(() => result.current.selectLeaf('doc6'))
     expect(result.current.expanded).toBe(false) // autocontraído
     act(() => result.current.goBack())
-    expect(result.current.expanded).toBe(true)  // re-expandido
+    expect(result.current.expanded).toBe(true) // re-expandido
   })
 })
 

@@ -8,7 +8,9 @@ beforeEach(() => {
 describe('offlineMutationQueue', () => {
   it('enqueue añade mutación con enqueuedAt y attempts=0', () => {
     useOfflineMutationQueue.getState().enqueue({
-      uuid: 'm1', rpcName: 'rpc_checkin', payload: { x: 1, mutation_uuid: 'm1' },
+      uuid: 'm1',
+      rpcName: 'rpc_checkin',
+      payload: { x: 1, mutation_uuid: 'm1' },
       ejecutorId: 'admin',
     })
     const { pending } = useOfflineMutationQueue.getState()
@@ -51,8 +53,8 @@ describe('offlineMutationQueue', () => {
 
   it('clearFailed elimina solo los failed', () => {
     const q = useOfflineMutationQueue.getState()
-    q.enqueue({ uuid: 'ok',   rpcName: 'r', payload: {}, ejecutorId: null })
-    q.enqueue({ uuid: 'bad',  rpcName: 'r', payload: {}, ejecutorId: null })
+    q.enqueue({ uuid: 'ok', rpcName: 'r', payload: {}, ejecutorId: null })
+    q.enqueue({ uuid: 'bad', rpcName: 'r', payload: {}, ejecutorId: null })
     for (let i = 0; i < MAX_ATTEMPTS; i++) q.markAttempt('bad', 'e')
     q.clearFailed()
     expect(useOfflineMutationQueue.getState().pending.map((p) => p.uuid)).toEqual(['ok'])

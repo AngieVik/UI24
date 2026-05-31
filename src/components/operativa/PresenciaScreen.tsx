@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase'
 
 const schema = z.object({
   identificador: z.string().min(1, 'Identificador requerido'),
-  password:      z.string().min(8, 'Mínimo 8 caracteres'),
+  password: z.string().min(8, 'Mínimo 8 caracteres'),
 })
 type Schema = z.infer<typeof schema>
 
@@ -35,8 +35,12 @@ type Schema = z.infer<typeof schema>
  */
 export function PresenciaScreen() {
   const {
-    ejecutorId, personal, isLoading,
-    checkout, isSubmitting, error: presenciaError,
+    ejecutorId,
+    personal,
+    isLoading,
+    checkout,
+    isSubmitting,
+    error: presenciaError,
   } = useMiPresencia()
 
   const { checkin, isSubmitting: isCheckingIn, error: checkinError } = useCheckinTrabajador()
@@ -63,7 +67,7 @@ export function PresenciaScreen() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).rpc('rpc_abrir_turno', {
         p_mutation_uuid: crypto.randomUUID(),
-        p_id_nombre:     id_nombre,
+        p_id_nombre: id_nombre,
       })
       // Ignorar ERR_TURNO_001 (ya tiene turno abierto — edge case offline/retry)
     } catch {
@@ -94,8 +98,8 @@ export function PresenciaScreen() {
         </CardHeader>
         <CardContent>
           <p className="mb-3 text-sm font-light text-muted-foreground">
-            Otro TES, DUE, médico o miembro del equipo introduce sus credenciales.
-            La sesión del terminal NO cambia — solo se añade la presencia del nuevo trabajador.
+            Otro TES, DUE, médico o miembro del equipo introduce sus credenciales. La sesión del
+            terminal NO cambia — solo se añade la presencia del nuevo trabajador.
           </p>
           <form
             onSubmit={form.handleSubmit(onSubmitSumar)}
@@ -144,9 +148,11 @@ export function PresenciaScreen() {
                       tabIndex={-1}
                       className="absolute inset-y-0 right-0 grid w-9 place-items-center text-muted-foreground hover:text-foreground"
                     >
-                      {showPassword
-                        ? <EyeOff aria-hidden="true" className="size-4" />
-                        : <Eye   aria-hidden="true" className="size-4" />}
+                      {showPassword ? (
+                        <EyeOff aria-hidden="true" className="size-4" />
+                      ) : (
+                        <Eye aria-hidden="true" className="size-4" />
+                      )}
                     </button>
                   </div>
                   {fieldState.error && <FieldError errors={[fieldState.error]} />}
@@ -193,7 +199,10 @@ export function PresenciaScreen() {
               {personal.map((p) => {
                 const isSelf = p.id_nombre === ejecutorId
                 return (
-                  <li key={p.id_nombre} className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5">
+                  <li
+                    key={p.id_nombre}
+                    className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5"
+                  >
                     <Avatar className="size-8">
                       <AvatarFallback className="text-[10px] font-bold">
                         {getInitials(p.nombre_real)}
@@ -202,10 +211,13 @@ export function PresenciaScreen() {
                     <div className="flex flex-col leading-tight">
                       <span className="font-bold">{p.nombre_real}</span>
                       <span className="text-xs font-light text-muted-foreground">
-                        {p.id_nombre}{isSelf && ' · Tú'}
+                        {p.id_nombre}
+                        {isSelf && ' · Tú'}
                       </span>
                     </div>
-                    <Badge variant="outline" className="ml-auto">{formatRol(p.rol)}</Badge>
+                    <Badge variant="outline" className="ml-auto">
+                      {formatRol(p.rol)}
+                    </Badge>
                     <Button
                       size="sm"
                       variant="outline"
@@ -226,8 +238,8 @@ export function PresenciaScreen() {
 
       <p className="px-2 text-xs font-light text-muted-foreground">
         <UserCheck aria-hidden="true" className="mr-1 inline size-3" />
-        Si sale la última persona, el terminal vuelve a la pantalla de check-in.
-        La sesión del terminal persiste hasta que coordinación revoque la galleta.
+        Si sale la última persona, el terminal vuelve a la pantalla de check-in. La sesión del
+        terminal persiste hasta que coordinación revoque la galleta.
       </p>
     </div>
   )

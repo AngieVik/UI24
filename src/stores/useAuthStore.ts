@@ -95,7 +95,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           session,
           ejecutorId: extractEjecutorId(session),
-          rol:        extractRol(session),
+          rol: extractRol(session),
         })
       },
 
@@ -110,6 +110,6 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'u24-auth',
       storage: createJSONStorage(() => sessionStorage),
-    },
-  ),
+    }
+  )
 )

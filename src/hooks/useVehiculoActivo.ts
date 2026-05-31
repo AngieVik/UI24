@@ -82,13 +82,13 @@ export function useVehiculoActivo(): UseVehiculoActivoResult {
       if (!vehRes.data) return null
 
       return {
-        matricula:         vehRes.data.matricula,
-        tipo:              vehRes.data.tipo,
+        matricula: vehRes.data.matricula,
+        tipo: vehRes.data.tipo,
         condicion_tecnica: vehRes.data.condicion_tecnica,
-        estado_operativo:  vehRes.data.estado_operativo,
-        pilot:             actRes.data?.pilot ?? null,
-        carry:             actRes.data?.carry ?? null,
-        tipo_servicio:     actRes.data?.tipo_servicio ?? null,
+        estado_operativo: vehRes.data.estado_operativo,
+        pilot: actRes.data?.pilot ?? null,
+        carry: actRes.data?.carry ?? null,
+        tipo_servicio: actRes.data?.tipo_servicio ?? null,
       }
     },
   })

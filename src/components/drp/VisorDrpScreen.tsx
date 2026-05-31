@@ -4,7 +4,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useDrp, type DrpRecord } from '@/hooks/useDrp'
 import { useVisorGps } from '@/hooks/useVisorGps'
@@ -12,19 +19,24 @@ import { useVisorGps } from '@/hooks/useVisorGps'
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-ES', {
-    day: '2-digit', month: '2-digit',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
-const ESTADO_CONFIG: Record<string, { label: string; variant: 'ok' | 'warn' | 'destructive' | 'info' | 'secondary' }> = {
-  En_espera:          { label: 'En espera',   variant: 'secondary' },
-  En_preparacion:     { label: 'Preparación', variant: 'warn' },
-  En_curso:           { label: 'Activo',      variant: 'ok' },
-  Cancelado:          { label: 'Cancelado',   variant: 'destructive' },
-  Finalizado:         { label: 'Finalizado',  variant: 'secondary' },
-  Finalizado_Retenido:{ label: 'Retenido',    variant: 'warn' },
-  Archivado:          { label: 'Archivado',   variant: 'secondary' },
+const ESTADO_CONFIG: Record<
+  string,
+  { label: string; variant: 'ok' | 'warn' | 'destructive' | 'info' | 'secondary' }
+> = {
+  En_espera: { label: 'En espera', variant: 'secondary' },
+  En_preparacion: { label: 'Preparación', variant: 'warn' },
+  En_curso: { label: 'Activo', variant: 'ok' },
+  Cancelado: { label: 'Cancelado', variant: 'destructive' },
+  Finalizado: { label: 'Finalizado', variant: 'secondary' },
+  Finalizado_Retenido: { label: 'Retenido', variant: 'warn' },
+  Archivado: { label: 'Archivado', variant: 'secondary' },
 }
 
 function DrpCard({ drp, onDetalle }: { drp: DrpRecord; onDetalle: (id: string) => void }) {
@@ -36,7 +48,9 @@ function DrpCard({ drp, onDetalle }: { drp: DrpRecord; onDetalle: (id: string) =
       aria-label={`DRP ${drp.id_drp.slice(0, 8)} — ${cfg.label}`}
       className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
       onClick={() => onDetalle(drp.id_drp)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onDetalle(drp.id_drp) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onDetalle(drp.id_drp)
+      }}
     >
       <CardContent className="flex items-center justify-between gap-3 py-3">
         <div className="flex flex-col gap-0.5">
@@ -58,15 +72,12 @@ function DrpCard({ drp, onDetalle }: { drp: DrpRecord; onDetalle: (id: string) =
 
 export function VisorDrpScreen() {
   const isOnline = useGlobalStore((s) => s.isOnline)
-  const {
-    drps, drpActivo, dotaciones, personal,
-    loading, error, cargarDrps, cargarDetalle,
-  } = useDrp()
+  const { drps, drpActivo, dotaciones, personal, loading, error, cargarDrps, cargarDetalle } =
+    useDrp()
   const { vehiculos: gpsVisor } = useVisorGps()
 
-  const drpActivoActual = drps.find(
-    (d) => d.estado === 'En_curso' || d.estado === 'En_preparacion',
-  ) ?? null
+  const drpActivoActual =
+    drps.find((d) => d.estado === 'En_curso' || d.estado === 'En_preparacion') ?? null
 
   function handleDetalle(idDrp: string) {
     cargarDetalle(idDrp)
@@ -86,7 +97,6 @@ export function VisorDrpScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -95,15 +105,21 @@ export function VisorDrpScreen() {
           <Badge variant="secondary">{drps.length}</Badge>
         </div>
         <Button
-          size="sm" variant="outline"
-          onClick={cargarDrps} disabled={loading}
+          size="sm"
+          variant="outline"
+          onClick={cargarDrps}
+          disabled={loading}
           aria-label="Recargar lista DRP"
         >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* GPS visor — unidades activas */}
       {gpsVisor.length > 0 && (
@@ -171,7 +187,9 @@ export function VisorDrpScreen() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {dotaciones.map((d) => (
-                    <Badge key={d.matricula} variant="outline">{d.matricula}</Badge>
+                    <Badge key={d.matricula} variant="outline">
+                      {d.matricula}
+                    </Badge>
                   ))}
                 </div>
               </div>

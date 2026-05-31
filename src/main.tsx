@@ -20,7 +20,11 @@ useAuthStore.subscribe((state) => {
 
 registerOfflineMutationProcessor(queryClient)
 
-registerSW({ onNeedRefresh() { /* vite-plugin-pwa notifica en consola */ } })
+registerSW({
+  onNeedRefresh() {
+    /* vite-plugin-pwa notifica en consola */
+  },
+})
 
 const root = document.getElementById('root')
 if (!root) throw new Error('No se encontró el elemento #root en el DOM')

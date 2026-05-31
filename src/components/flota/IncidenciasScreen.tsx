@@ -28,7 +28,9 @@ function useIncidencias(filtro: 'abiertas' | 'ancladas' | 'ultimas') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from('incidencias_vehiculo')
-        .select('id_incidencia, matricula, tipo, nivel_criticidad, descripcion, estado, id_nombre_responsable, timestamp_registro, timestamp_cierre')
+        .select(
+          'id_incidencia, matricula, tipo, nivel_criticidad, descripcion, estado, id_nombre_responsable, timestamp_registro, timestamp_cierre'
+        )
         .order('timestamp_registro', { ascending: false })
 
       if (filtro === 'abiertas') {
@@ -48,21 +50,26 @@ function useIncidencias(filtro: 'abiertas' | 'ancladas' | 'ultimas') {
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const NIVEL_VARIANT: Record<string, 'destructive' | 'warn' | 'info' | 'secondary'> = {
-  critico:       'destructive',
-  grave:         'warn',
-  leve:          'info',
+  critico: 'destructive',
+  grave: 'warn',
+  leve: 'info',
   mantenimiento: 'secondary',
 }
 
 const ESTADO_VARIANT: Record<string, 'destructive' | 'warn' | 'ok' | 'secondary'> = {
-  Abierta:  'destructive',
-  Anclada:  'warn',
+  Abierta: 'destructive',
+  Anclada: 'warn',
   Resuelta: 'ok',
-  Cerrada:  'secondary',
+  Cerrada: 'secondary',
 }
 
 function IncidenciaCard({ inc }: { inc: Incidencia }) {
@@ -73,12 +80,16 @@ function IncidenciaCard({ inc }: { inc: Incidencia }) {
           <div className="space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold">{inc.matricula}</span>
-              <Badge variant="info" className="text-xs">{inc.tipo}</Badge>
+              <Badge variant="info" className="text-xs">
+                {inc.tipo}
+              </Badge>
               <Badge variant={NIVEL_VARIANT[inc.nivel_criticidad] ?? 'info'} className="text-xs">
                 {inc.nivel_criticidad}
               </Badge>
             </div>
-            <p className="font-body text-sm text-muted-foreground line-clamp-2">{inc.descripcion}</p>
+            <p className="font-body text-sm text-muted-foreground line-clamp-2">
+              {inc.descripcion}
+            </p>
             <div className="text-xs text-muted-foreground">
               {fmtDateTime(inc.timestamp_registro)}
               {inc.id_nombre_responsable && ` · ${inc.id_nombre_responsable}`}
@@ -98,11 +109,14 @@ export function IncidenciasScreen({ vista }: { vista?: 'abiertas' | 'ancladas' |
   const anQ = useIncidencias('ancladas')
   const ulQ = useIncidencias('ultimas')
 
-  function reload() { abQ.refetch(); anQ.refetch(); ulQ.refetch() }
+  function reload() {
+    abQ.refetch()
+    anQ.refetch()
+    ulQ.refetch()
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <AlertCircle aria-hidden="true" className="size-5 text-muted-foreground" />
@@ -122,14 +136,18 @@ export function IncidenciasScreen({ vista }: { vista?: 'abiertas' | 'ancladas' |
             <AlertCircle className="size-3.5 mr-1" />
             Abiertas
             {(abQ.data?.length ?? 0) > 0 && (
-              <Badge variant="destructive" className="ml-1 text-xs">{abQ.data!.length}</Badge>
+              <Badge variant="destructive" className="ml-1 text-xs">
+                {abQ.data!.length}
+              </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="ancladas">
             <Pin className="size-3.5 mr-1" />
             Ancladas
             {(anQ.data?.length ?? 0) > 0 && (
-              <Badge variant="warn" className="ml-1 text-xs">{anQ.data!.length}</Badge>
+              <Badge variant="warn" className="ml-1 text-xs">
+                {anQ.data!.length}
+              </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="ultimas">
@@ -141,7 +159,7 @@ export function IncidenciasScreen({ vista }: { vista?: 'abiertas' | 'ancladas' |
         {[
           { value: 'abiertas', q: abQ },
           { value: 'ancladas', q: anQ },
-          { value: 'ultimas',  q: ulQ },
+          { value: 'ultimas', q: ulQ },
         ].map(({ value, q }) => (
           <TabsContent key={value} value={value} className="mt-3">
             {q.isLoading ? (

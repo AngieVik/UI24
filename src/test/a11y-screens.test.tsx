@@ -11,7 +11,12 @@ beforeAll(() => {
 
 // ─── Mocks globales ───────────────────────────────────────────────────────────
 vi.mock('@/hooks/useLoginFlow', () => ({
-  useLoginFlow: () => ({ isLoading: false, error: null, loginNormal: vi.fn(), loginEmergencia: vi.fn() }),
+  useLoginFlow: () => ({
+    isLoading: false,
+    error: null,
+    loginNormal: vi.fn(),
+    loginEmergencia: vi.fn(),
+  }),
 }))
 vi.mock('@/hooks/useAutorizarTerminal', () => ({
   useAutorizarTerminal: () => ({ autorizar: vi.fn(), isSubmitting: false, error: null }),
@@ -26,7 +31,8 @@ vi.mock('@/stores/useGlobalStore', () => ({
   useGlobalStore: (sel: (s: { isOnline: boolean }) => unknown) => sel({ isOnline: true }),
 }))
 vi.mock('@/stores/useTerminalStore', () => ({
-  useTerminalStore: (sel: (s: { id_terminal: string | null }) => unknown) => sel({ id_terminal: null }),
+  useTerminalStore: (sel: (s: { id_terminal: string | null }) => unknown) =>
+    sel({ id_terminal: null }),
 }))
 // Logo SVG: jsdom no procesa módulos SVG — devolvemos string vacío
 vi.mock('@/assets/logo.svg', () => ({ default: '' }))

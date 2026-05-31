@@ -22,17 +22,20 @@ import { useInformes, type DatosPaciente, type InformeSVB } from '@/hooks/useInf
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-ES', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
 // ── Formulario de informe ─────────────────────────────────────
 
 interface InformeFormProps {
-  datos:       DatosPaciente
-  readOnly:    boolean
-  onChange:    (datos: DatosPaciente) => void
+  datos: DatosPaciente
+  readOnly: boolean
+  onChange: (datos: DatosPaciente) => void
 }
 
 function InformeForm({ datos, readOnly, onChange }: InformeFormProps) {
@@ -40,18 +43,26 @@ function InformeForm({ datos, readOnly, onChange }: InformeFormProps) {
     const value = datos[key]
     return (
       <div className="flex flex-col gap-1">
-        <Label htmlFor={`inf-${key}`} className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        <Label
+          htmlFor={`inf-${key}`}
+          className="text-xs font-bold uppercase tracking-wide text-muted-foreground"
+        >
           {label}
         </Label>
         <Input
           id={`inf-${key}`}
           type={type}
           disabled={readOnly}
-          value={type === 'number' ? (value != null ? String(value) : '') : (value as string ?? '')}
+          value={
+            type === 'number' ? (value != null ? String(value) : '') : ((value as string) ?? '')
+          }
           onChange={(e) => {
-            const v = type === 'number'
-              ? (e.target.value === '' ? undefined : Number(e.target.value))
-              : (e.target.value || undefined)
+            const v =
+              type === 'number'
+                ? e.target.value === ''
+                  ? undefined
+                  : Number(e.target.value)
+                : e.target.value || undefined
             onChange({ ...datos, [key]: v })
           }}
           className="h-8 text-sm"
@@ -105,7 +116,10 @@ function InformeForm({ datos, readOnly, onChange }: InformeFormProps) {
 
       {/* Observaciones */}
       <div className="flex flex-col gap-1">
-        <Label htmlFor="inf-obs" className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        <Label
+          htmlFor="inf-obs"
+          className="text-xs font-bold uppercase tracking-wide text-muted-foreground"
+        >
           Observaciones
         </Label>
         <Textarea
@@ -125,27 +139,26 @@ function InformeForm({ datos, readOnly, onChange }: InformeFormProps) {
 // ── Fila de informe ───────────────────────────────────────────
 
 interface InformeRowProps {
-  informe:      InformeSVB
-  onCerrar:     (id: string, datos: DatosPaciente) => void
+  informe: InformeSVB
+  onCerrar: (id: string, datos: DatosPaciente) => void
   isSubmitting: boolean
 }
 
 function InformeRow({ informe, onCerrar, isSubmitting }: InformeRowProps) {
-  const [open, setOpen]   = useState(false)
+  const [open, setOpen] = useState(false)
   const [datos, setDatos] = useState<DatosPaciente>(informe.datos_paciente)
-  const isCerrado         = informe.estado === 'cerrado'
+  const isCerrado = informe.estado === 'cerrado'
 
   return (
     <Card aria-label={`Informe ${informe.id_doc.slice(0, 8)}`}>
-      <CardHeader
-        className="cursor-pointer select-none pb-2"
-        onClick={() => setOpen((o) => !o)}
-      >
+      <CardHeader className="cursor-pointer select-none pb-2" onClick={() => setOpen((o) => !o)}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            {open
-              ? <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
-              : <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />}
+            {open ? (
+              <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+            )}
             <span className="font-body text-sm font-medium">
               #{informe.id_doc.slice(0, 8).toUpperCase()}
             </span>
@@ -158,9 +171,15 @@ function InformeRow({ informe, onCerrar, isSubmitting }: InformeRowProps) {
             aria-label={isCerrado ? 'cerrado' : 'borrador'}
           >
             {isCerrado ? (
-              <><Lock className="mr-1 size-2.5" aria-hidden="true" />Cerrado</>
+              <>
+                <Lock className="mr-1 size-2.5" aria-hidden="true" />
+                Cerrado
+              </>
             ) : (
-              <><Pencil className="mr-1 size-2.5" aria-hidden="true" />Borrador</>
+              <>
+                <Pencil className="mr-1 size-2.5" aria-hidden="true" />
+                Borrador
+              </>
             )}
           </Badge>
         </div>
@@ -190,14 +209,12 @@ function InformeRow({ informe, onCerrar, isSubmitting }: InformeRowProps) {
 
 export function Doc2InformeAsistencialScreen() {
   const idActivacion = useActivacionStore((s) => s.id_activacion)
-  const {
-    informes, isLoading, isSubmitting, error,
-    cargarInformes, crearInforme, cerrarInforme,
-  } = useInformes()
+  const { informes, isLoading, isSubmitting, error, cargarInformes, crearInforme, cerrarInforme } =
+    useInformes()
 
-  const [newDatos, setNewDatos]  = useState<DatosPaciente>({})
-  const [showNew, setShowNew]    = useState(false)
-  const [feedback, setFeedback]  = useState<string | null>(null)
+  const [newDatos, setNewDatos] = useState<DatosPaciente>({})
+  const [showNew, setShowNew] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   useEffect(() => {
     if (idActivacion) cargarInformes()
@@ -238,7 +255,6 @@ export function Doc2InformeAsistencialScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-lg flex-col gap-3 p-3">
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -273,10 +289,14 @@ export function Doc2InformeAsistencialScreen() {
 
       {/* Error / feedback */}
       {error && (
-        <p role="alert" className="text-sm text-destructive">{error}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
       )}
       {feedback && (
-        <p role="status" className="text-sm text-muted-foreground">{feedback}</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          {feedback}
+        </p>
       )}
 
       {/* Formulario nuevo informe */}
@@ -302,7 +322,10 @@ export function Doc2InformeAsistencialScreen() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => { setShowNew(false); setNewDatos({}) }}
+                onClick={() => {
+                  setShowNew(false)
+                  setNewDatos({})
+                }}
                 disabled={isSubmitting}
               >
                 Cancelar

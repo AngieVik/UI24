@@ -48,13 +48,17 @@ export function useInventarioVehiculo() {
         .order('id_item')
       if (error) throw error
       return (data ?? []).map((row) => {
-        const cat = row.catalogo_items as unknown as { nombre: string; categoria: string; especificacion: string | null } | null
+        const cat = row.catalogo_items as unknown as {
+          nombre: string
+          categoria: string
+          especificacion: string | null
+        } | null
         return {
-          id_item:    row.id_item,
-          subgrupo:   row.subgrupo,
+          id_item: row.id_item,
+          subgrupo: row.subgrupo,
           stock_real: row.stock_real,
-          nombre:     cat?.nombre ?? '—',
-          categoria:  cat?.categoria ?? 'Sin categoría',
+          nombre: cat?.nombre ?? '—',
+          categoria: cat?.categoria ?? 'Sin categoría',
           especificacion: cat?.especificacion ?? null,
         }
       })

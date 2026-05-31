@@ -71,7 +71,7 @@ export function useCheckin() {
         if (error) throw error
         useActivacionStore.getState().setActivacion({
           id_activacion: data.id_activacion,
-          id_checklist:  data.id_checklist,
+          id_checklist: data.id_checklist,
           matricula,
         })
       } else {
@@ -80,7 +80,7 @@ export function useCheckin() {
         // Activación optimista en local — ids temporales hasta sincronizar
         useActivacionStore.getState().setActivacion({
           id_activacion: mutationUuid,
-          id_checklist:  crypto.randomUUID(),
+          id_checklist: crypto.randomUUID(),
           matricula,
         })
       }

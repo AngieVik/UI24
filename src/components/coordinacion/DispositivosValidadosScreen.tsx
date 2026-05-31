@@ -10,7 +10,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { resolveRpcError } from '@/lib/resolveRpcError'
@@ -21,12 +28,21 @@ type GalletaRow = Database['public']['Tables']['galletas_terminales']['Row']
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function useTerminales() {
@@ -58,7 +74,7 @@ export function DispositivosValidadosScreen() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: err } = await (supabase as any).rpc('rpc_revocar_terminal', {
         p_mutation_uuid: crypto.randomUUID(),
-        p_id_galleta:    idGalleta,
+        p_id_galleta: idGalleta,
       })
       if (err) throw err
       await qc.invalidateQueries({ queryKey: ['galletas_terminales'] })
@@ -71,21 +87,28 @@ export function DispositivosValidadosScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <ShieldCheck aria-hidden="true" className="size-5 text-muted-foreground" />
           <h2 className="font-display text-lg font-bold">Dispositivos validados</h2>
-          {query.data && (
-            <Badge variant="secondary">{activos} activos</Badge>
-          )}
+          {query.data && <Badge variant="secondary">{activos} activos</Badge>}
         </div>
-        <Button size="sm" variant="outline" onClick={() => query.refetch()} disabled={query.isLoading} aria-label="Recargar dispositivos">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => query.refetch()}
+          disabled={query.isLoading}
+          aria-label="Recargar dispositivos"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {query.isLoading ? (
         <div className="space-y-2">
@@ -124,7 +147,9 @@ export function DispositivosValidadosScreen() {
                       </TableCell>
                       <TableCell className="text-xs">{t.tipo}</TableCell>
                       <TableCell className="text-xs">{fmtDate(t.created_at)}</TableCell>
-                      <TableCell className="text-xs">{fmtDateTime(t.ultima_activacion_at)}</TableCell>
+                      <TableCell className="text-xs">
+                        {fmtDateTime(t.ultima_activacion_at)}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={activo ? 'ok' : 'secondary'}>
                           {activo ? 'Activa' : 'Revocada'}

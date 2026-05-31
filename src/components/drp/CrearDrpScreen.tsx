@@ -32,14 +32,13 @@ export function CrearDrpScreen() {
         <CheckCircle2 className="size-10 text-green-600" aria-hidden="true" />
         <h2 className="font-display text-lg font-bold">DRP creado</h2>
         <p className="font-body text-sm text-muted-foreground">
-          DRP <code className="font-medium text-foreground">#{idDrpCreado.slice(0, 8).toUpperCase()}</code> creado
-          en estado <strong>Preparación</strong>. Ve a Estados DRP para activarlo.
+          DRP{' '}
+          <code className="font-medium text-foreground">
+            #{idDrpCreado.slice(0, 8).toUpperCase()}
+          </code>{' '}
+          creado en estado <strong>Preparación</strong>. Ve a Estados DRP para activarlo.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIdDrpCreado(null)}
-        >
+        <Button variant="outline" size="sm" onClick={() => setIdDrpCreado(null)}>
           Crear otro DRP
         </Button>
       </div>
@@ -63,8 +62,8 @@ export function CrearDrpScreen() {
         <CardContent className="space-y-4">
           <p className="font-body text-sm text-muted-foreground">
             Se creará un nuevo Dispositivo de Riesgo Previsible en estado{' '}
-            <strong>Preparación</strong>. Una vez creado, ve a{' '}
-            <strong>Estados DRP</strong> para activarlo y añadir dotación y personal.
+            <strong>Preparación</strong>. Una vez creado, ve a <strong>Estados DRP</strong> para
+            activarlo y añadir dotación y personal.
           </p>
 
           <ul className="space-y-1 font-body text-sm text-muted-foreground">
@@ -74,7 +73,9 @@ export function CrearDrpScreen() {
           </ul>
 
           {error && (
-            <p role="alert" className="text-sm text-destructive">{error}</p>
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
           )}
 
           <Button

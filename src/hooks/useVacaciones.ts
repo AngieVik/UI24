@@ -42,62 +42,70 @@ export function useVacaciones() {
     }
   }, [])
 
-  const enviarSolicitud = useCallback(async (params: {
-    periodo_anual: string
-    fecha_inicio: string
-    fecha_fin: string
-    preferencia?: 'opcion_1' | 'opcion_2' | 'opcion_3'
-    observaciones?: string
-  }): Promise<string | null> => {
-    if (!ejecutorId) return null
-    setSubmitting(true)
-    setError(null)
-    try {
-      const { data, error: err } = await supabase.rpc('rpc_enviar_solicitud_vacaciones', {
-        p_mutation_uuid:  crypto.randomUUID(),
-        p_periodo_anual:  params.periodo_anual,
-        p_fecha_inicio:   params.fecha_inicio,
-        p_fecha_fin:      params.fecha_fin,
-        p_preferencia:    params.preferencia ?? 'opcion_1',
-        p_observaciones:  params.observaciones || undefined,
-      })
-      if (err) throw err
-      await cargarSolicitudes()
-      return data as string
-    } catch (e) {
-      setError(resolveRpcError(e))
-      return null
-    } finally {
-      setSubmitting(false)
-    }
-  }, [ejecutorId, cargarSolicitudes])
+  const enviarSolicitud = useCallback(
+    async (params: {
+      periodo_anual: string
+      fecha_inicio: string
+      fecha_fin: string
+      preferencia?: 'opcion_1' | 'opcion_2' | 'opcion_3'
+      observaciones?: string
+    }): Promise<string | null> => {
+      if (!ejecutorId) return null
+      setSubmitting(true)
+      setError(null)
+      try {
+        const { data, error: err } = await supabase.rpc('rpc_enviar_solicitud_vacaciones', {
+          p_mutation_uuid: crypto.randomUUID(),
+          p_periodo_anual: params.periodo_anual,
+          p_fecha_inicio: params.fecha_inicio,
+          p_fecha_fin: params.fecha_fin,
+          p_preferencia: params.preferencia ?? 'opcion_1',
+          p_observaciones: params.observaciones || undefined,
+        })
+        if (err) throw err
+        await cargarSolicitudes()
+        return data as string
+      } catch (e) {
+        setError(resolveRpcError(e))
+        return null
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [ejecutorId, cargarSolicitudes]
+  )
 
-  const resolverSolicitud = useCallback(async (
-    idSolicitud: string,
-    decision: 'Aprobada' | 'Denegada',
-    notas?: string,
-  ): Promise<boolean> => {
-    setSubmitting(true)
-    setError(null)
-    try {
-      const { error: err } = await supabase.rpc('rpc_resolver_solicitud_vacaciones', {
-        p_mutation_uuid:  crypto.randomUUID(),
-        p_id_solicitud:   idSolicitud,
-        p_decision:       decision,
-        p_notas:          notas || undefined,
-      })
-      if (err) throw err
-      await cargarSolicitudes()
-      return true
-    } catch (e) {
-      setError(resolveRpcError(e))
-      return false
-    } finally {
-      setSubmitting(false)
-    }
+  const resolverSolicitud = useCallback(
+    async (
+      idSolicitud: string,
+      decision: 'Aprobada' | 'Denegada',
+      notas?: string
+    ): Promise<boolean> => {
+      setSubmitting(true)
+      setError(null)
+      try {
+        const { error: err } = await supabase.rpc('rpc_resolver_solicitud_vacaciones', {
+          p_mutation_uuid: crypto.randomUUID(),
+          p_id_solicitud: idSolicitud,
+          p_decision: decision,
+          p_notas: notas || undefined,
+        })
+        if (err) throw err
+        await cargarSolicitudes()
+        return true
+      } catch (e) {
+        setError(resolveRpcError(e))
+        return false
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [cargarSolicitudes]
+  )
+
+  useEffect(() => {
+    cargarSolicitudes()
   }, [cargarSolicitudes])
-
-  useEffect(() => { cargarSolicitudes() }, [cargarSolicitudes])
 
   const pendientes = solicitudes.filter((s) => s.estado === 'Pendiente_Aprobacion')
   const propias = solicitudes.filter((s) => s.id_nombre === ejecutorId)

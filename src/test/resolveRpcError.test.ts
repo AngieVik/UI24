@@ -4,9 +4,7 @@ import { resolveRpcError } from '@/lib/resolveRpcError'
 describe('resolveRpcError', () => {
   it('devuelve mensaje español para código conocido', () => {
     const err = new Error('ERR_AUTH_001: auth.uid() no mapea a ninguna ficha')
-    expect(resolveRpcError(err)).toBe(
-      'Sesión no reconocida. Vuelve a iniciar sesión.',
-    )
+    expect(resolveRpcError(err)).toBe('Sesión no reconocida. Vuelve a iniciar sesión.')
   })
 
   it('devuelve mensaje de inventario con código conocido', () => {
@@ -26,25 +24,42 @@ describe('resolveRpcError', () => {
 
   it('acepta strings además de Error', () => {
     expect(resolveRpcError('ERR_KM_001: km retrograde')).toBe(
-      'El kilómetro de cierre no puede ser menor que el de apertura.',
+      'El kilómetro de cierre no puede ser menor que el de apertura.'
     )
   })
 
   it('cubre todos los dominios definidos en error_handling.md', () => {
     const codigos = [
-      'ERR_AUTH_001', 'ERR_AUTH_002', 'ERR_AUTH_003', 'ERR_AUTH_004',
-      'ERR_STEPUP_001', 'ERR_STEPUP_002', 'ERR_STEPUP_003', 'ERR_STEPUP_004', 'ERR_STEPUP_005',
-      'ERR_DESBLOQUEO_001', 'ERR_DESBLOQUEO_002', 'ERR_DESBLOQUEO_003',
-      'ERR_VEHICULO_001', 'ERR_VEHICULO_002', 'ERR_VEHICULO_003', 'ERR_VEHICULO_004', 'ERR_VEHICULO_005',
-      'ERR_INVENTARIO_001', 'ERR_INVENTARIO_002', 'ERR_INVENTARIO_003',
-      'ERR_INVENTARIO_004', 'ERR_INVENTARIO_005', 'ERR_INVENTARIO_006',
+      'ERR_AUTH_001',
+      'ERR_AUTH_002',
+      'ERR_AUTH_003',
+      'ERR_AUTH_004',
+      'ERR_STEPUP_001',
+      'ERR_STEPUP_002',
+      'ERR_STEPUP_003',
+      'ERR_STEPUP_004',
+      'ERR_STEPUP_005',
+      'ERR_DESBLOQUEO_001',
+      'ERR_DESBLOQUEO_002',
+      'ERR_DESBLOQUEO_003',
+      'ERR_VEHICULO_001',
+      'ERR_VEHICULO_002',
+      'ERR_VEHICULO_003',
+      'ERR_VEHICULO_004',
+      'ERR_VEHICULO_005',
+      'ERR_INVENTARIO_001',
+      'ERR_INVENTARIO_002',
+      'ERR_INVENTARIO_003',
+      'ERR_INVENTARIO_004',
+      'ERR_INVENTARIO_005',
+      'ERR_INVENTARIO_006',
       'ERR_CHECKLIST_001',
       'ERR_KM_001',
     ]
     for (const codigo of codigos) {
       const result = resolveRpcError(new Error(`${codigo}: desc`))
       expect(result, `${codigo} debe tener mensaje UI`).not.toBe(
-        'Error inesperado. Contacta con soporte.',
+        'Error inesperado. Contacta con soporte.'
       )
     }
   })

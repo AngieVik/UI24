@@ -5,16 +5,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const fromMock = vi.fn<(table: string) => unknown>()
 const channelMock = vi.fn<(name: string) => unknown>(() => ({
-  on:        vi.fn().mockReturnThis(),
+  on: vi.fn().mockReturnThis(),
   subscribe: vi.fn().mockReturnThis(),
 }))
 const removeChannelMock = vi.fn<(ch: unknown) => unknown>()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    from:          (table: string) => fromMock(table),
-    channel:       (name: string)  => channelMock(name),
-    removeChannel: (ch: unknown)   => removeChannelMock(ch),
+    from: (table: string) => fromMock(table),
+    channel: (name: string) => channelMock(name),
+    removeChannel: (ch: unknown) => removeChannelMock(ch),
   },
 }))
 
@@ -27,13 +27,20 @@ function setMatricula(matricula: string) {
   activacionState = { matricula }
 }
 vi.mock('@/stores/useActivacionStore', () => {
-  function useActivacionStore<T = unknown>(selector?: (s: typeof activacionState) => T): T | typeof activacionState {
+  function useActivacionStore<T = unknown>(
+    selector?: (s: typeof activacionState) => T
+  ): T | typeof activacionState {
     return selector ? selector(activacionState) : activacionState
   }
   return { useActivacionStore }
 })
 
-let personalMock: { data: { id_nombre: string }[]; isLoading: boolean; isError: boolean; error: Error | null } = {
+let personalMock: {
+  data: { id_nombre: string }[]
+  isLoading: boolean
+  isError: boolean
+  error: Error | null
+} = {
   data: [],
   isLoading: false,
   isError: false,
@@ -53,10 +60,10 @@ function wrapper(client: QueryClient) {
 
 function buildSelectWithIn(result: { data: unknown; error: unknown }) {
   // Para el query de personal_a_pie: select → in → is → in (estado)
-  const inEstado  = vi.fn().mockResolvedValue(result)
-  const isSalida  = vi.fn(() => ({ in: inEstado }))
+  const inEstado = vi.fn().mockResolvedValue(result)
+  const isSalida = vi.fn(() => ({ in: inEstado }))
   const inNombres = vi.fn(() => ({ is: isSalida }))
-  const select    = vi.fn(() => ({ in: inNombres }))
+  const select = vi.fn(() => ({ in: inNombres }))
   return { select }
 }
 
@@ -64,8 +71,8 @@ function buildSelectWithEq(result: { data: unknown; error: unknown }) {
   // Para dotaciones_drp: select → eq → is → in (estado)
   const inEstado = vi.fn().mockResolvedValue(result)
   const isSalida = vi.fn(() => ({ in: inEstado }))
-  const eq       = vi.fn(() => ({ is: isSalida }))
-  const select   = vi.fn(() => ({ eq }))
+  const eq = vi.fn(() => ({ is: isSalida }))
+  const select = vi.fn(() => ({ eq }))
   return { select }
 }
 
@@ -96,11 +103,11 @@ describe('useDrpActivo', () => {
             {
               id_drp: 'drp-1',
               drps: {
-                id_drp:                'drp-1',
-                estado:                'En_curso',
-                id_coordinacion:       'coord1',
+                id_drp: 'drp-1',
+                estado: 'En_curso',
+                id_coordinacion: 'coord1',
                 timestamp_preparacion: '2026-05-24T09:00:00Z',
-                timestamp_inicio:      '2026-05-24T10:00:00Z',
+                timestamp_inicio: '2026-05-24T10:00:00Z',
               },
             },
           ],
@@ -134,11 +141,11 @@ describe('useDrpActivo', () => {
             {
               id_drp: 'drp-2',
               drps: {
-                id_drp:                'drp-2',
-                estado:                'En_preparacion',
-                id_coordinacion:       'coord2',
+                id_drp: 'drp-2',
+                estado: 'En_preparacion',
+                id_coordinacion: 'coord2',
                 timestamp_preparacion: '2026-05-24T08:00:00Z',
-                timestamp_inicio:      null,
+                timestamp_inicio: null,
               },
             },
           ],
@@ -166,11 +173,11 @@ describe('useDrpActivo', () => {
     } as typeof personalMock
 
     const drpDuplicado = {
-      id_drp:                'drp-shared',
-      estado:                'En_curso',
-      id_coordinacion:       'coord3',
+      id_drp: 'drp-shared',
+      estado: 'En_curso',
+      id_coordinacion: 'coord3',
       timestamp_preparacion: '2026-05-24T09:00:00Z',
-      timestamp_inicio:      '2026-05-24T10:00:00Z',
+      timestamp_inicio: '2026-05-24T10:00:00Z',
     }
 
     fromMock.mockImplementation((table) => {
@@ -205,11 +212,23 @@ describe('useDrpActivo', () => {
           data: [
             {
               id_drp: 'drp-espera',
-              drps: { id_drp: 'drp-espera', estado: 'En_espera', id_coordinacion: 'c', timestamp_preparacion: '2026-05-24T11:00:00Z', timestamp_inicio: null },
+              drps: {
+                id_drp: 'drp-espera',
+                estado: 'En_espera',
+                id_coordinacion: 'c',
+                timestamp_preparacion: '2026-05-24T11:00:00Z',
+                timestamp_inicio: null,
+              },
             },
             {
               id_drp: 'drp-curso',
-              drps: { id_drp: 'drp-curso', estado: 'En_curso', id_coordinacion: 'c', timestamp_preparacion: '2026-05-24T08:00:00Z', timestamp_inicio: '2026-05-24T09:00:00Z' },
+              drps: {
+                id_drp: 'drp-curso',
+                estado: 'En_curso',
+                id_coordinacion: 'c',
+                timestamp_preparacion: '2026-05-24T08:00:00Z',
+                timestamp_inicio: '2026-05-24T09:00:00Z',
+              },
             },
           ],
           error: null,

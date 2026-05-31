@@ -13,9 +13,9 @@ const removeChannelMock = vi.fn<(ch: unknown) => unknown>()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    from:          (table: string)   => fromMock(table),
-    channel:       (name: string)    => channelMock(name),
-    removeChannel: (ch: unknown)     => removeChannelMock(ch),
+    from: (table: string) => fromMock(table),
+    channel: (name: string) => channelMock(name),
+    removeChannel: (ch: unknown) => removeChannelMock(ch),
   },
 }))
 
@@ -30,7 +30,9 @@ function setTerminal(next: { id_terminal: string | null }) {
   terminalState = next
 }
 vi.mock('@/stores/useTerminalStore', () => {
-  function useTerminalStore<T = unknown>(selector?: (s: typeof terminalState) => T): T | typeof terminalState {
+  function useTerminalStore<T = unknown>(
+    selector?: (s: typeof terminalState) => T
+  ): T | typeof terminalState {
     return selector ? selector(terminalState) : terminalState
   }
   return { useTerminalStore }
@@ -65,11 +67,11 @@ describe('usePersonalEnTurno', () => {
 
     fromMock.mockReturnValue({
       select: vi.fn().mockReturnThis(),
-      eq:     vi.fn().mockReturnThis(),
-      order:  vi.fn().mockResolvedValue({
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({
         data: [
           {
-            id_nombre:  'pmartin',
+            id_nombre: 'pmartin',
             checkin_at: '2026-05-24T07:30:00.000Z',
             fichas_empleados: { nombre_real: 'Pedro Martín', rol: 'tes', telefono: '600111222' },
           },
@@ -84,11 +86,11 @@ describe('usePersonalEnTurno', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.data).toEqual([
       {
-        id_nombre:   'pmartin',
+        id_nombre: 'pmartin',
         nombre_real: 'Pedro Martín',
-        rol:         'tes',
-        telefono:    '600111222',
-        checkin_at:  '2026-05-24T07:30:00.000Z',
+        rol: 'tes',
+        telefono: '600111222',
+        checkin_at: '2026-05-24T07:30:00.000Z',
       },
     ])
     expect(fromMock).toHaveBeenCalledWith('presencias_activas_terminal')
@@ -99,8 +101,8 @@ describe('usePersonalEnTurno', () => {
 
     fromMock.mockReturnValue({
       select: vi.fn().mockReturnThis(),
-      eq:     vi.fn().mockReturnThis(),
-      order:  vi.fn().mockResolvedValue({
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({
         data: null,
         error: new Error('RLS denied'),
       }),

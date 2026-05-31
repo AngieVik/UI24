@@ -3,9 +3,22 @@ import { FileBadge, Gauge, History, RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
@@ -20,8 +33,8 @@ interface VehiculoDoc {
 }
 
 interface KmRow {
-  matricula:  string
-  km_actual:  number
+  matricula: string
+  km_actual: number
   updated_at: string
 }
 
@@ -42,7 +55,9 @@ function useVehiculosDocs() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('vehiculos')
-        .select('matricula, itv_fecha_vencimiento, seguro_fecha_vencimiento, id_terminal_asociado, notas')
+        .select(
+          'matricula, itv_fecha_vencimiento, seguro_fecha_vencimiento, id_terminal_asociado, notas'
+        )
         .order('matricula')
       if (error) throw error
       return (data ?? []) as VehiculoDoc[]
@@ -87,7 +102,11 @@ function useEventosFisicos(matricula: string | null) {
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }
 
 function docVencimientoVariant(fecha: string | null): 'ok' | 'warn' | 'destructive' | 'secondary' {
@@ -103,32 +122,50 @@ export function VehiculosMetadataScreen({ vista }: { vista?: 'docs' | 'km' | 'ev
   const [selMatricula, setSelMatricula] = useState<string | null>(null)
   const { data: vehiculos } = useFlotaCompleta()
   const docsQ = useVehiculosDocs()
-  const kmQ   = useVehiculosKm()
-  const evQ   = useEventosFisicos(selMatricula)
+  const kmQ = useVehiculosKm()
+  const evQ = useEventosFisicos(selMatricula)
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <FileBadge aria-hidden="true" className="size-5 text-muted-foreground" />
           <h2 className="font-display text-lg font-bold">Vehículos metadata</h2>
         </div>
-        <Button size="sm" variant="outline" onClick={() => { docsQ.refetch(); kmQ.refetch() }} aria-label="Recargar metadata">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            docsQ.refetch()
+            kmQ.refetch()
+          }}
+          aria-label="Recargar metadata"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="docs"><FileBadge className="size-3.5 mr-1" />Documentación</TabsTrigger>
-          <TabsTrigger value="km"><Gauge className="size-3.5 mr-1" />Kilometraje</TabsTrigger>
-          <TabsTrigger value="eventos"><History className="size-3.5 mr-1" />Eventos</TabsTrigger>
+          <TabsTrigger value="docs">
+            <FileBadge className="size-3.5 mr-1" />
+            Documentación
+          </TabsTrigger>
+          <TabsTrigger value="km">
+            <Gauge className="size-3.5 mr-1" />
+            Kilometraje
+          </TabsTrigger>
+          <TabsTrigger value="eventos">
+            <History className="size-3.5 mr-1" />
+            Eventos
+          </TabsTrigger>
         </TabsList>
 
         {/* Documentación */}
         <TabsContent value="docs" className="mt-3">
-          {docsQ.isLoading ? <Skeleton className="h-40 w-full" /> : (
+          {docsQ.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
             <Card>
               <CardContent className="p-0">
                 <Table>
@@ -145,12 +182,18 @@ export function VehiculosMetadataScreen({ vista }: { vista?: 'docs' | 'km' | 'ev
                       <TableRow key={v.matricula}>
                         <TableCell className="font-bold">{v.matricula}</TableCell>
                         <TableCell>
-                          <Badge variant={docVencimientoVariant(v.itv_fecha_vencimiento)} className="text-xs">
+                          <Badge
+                            variant={docVencimientoVariant(v.itv_fecha_vencimiento)}
+                            className="text-xs"
+                          >
                             {fmtDate(v.itv_fecha_vencimiento)}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={docVencimientoVariant(v.seguro_fecha_vencimiento)} className="text-xs">
+                          <Badge
+                            variant={docVencimientoVariant(v.seguro_fecha_vencimiento)}
+                            className="text-xs"
+                          >
                             {fmtDate(v.seguro_fecha_vencimiento)}
                           </Badge>
                         </TableCell>
@@ -168,7 +211,9 @@ export function VehiculosMetadataScreen({ vista }: { vista?: 'docs' | 'km' | 'ev
 
         {/* Kilometraje */}
         <TabsContent value="km" className="mt-3">
-          {kmQ.isLoading ? <Skeleton className="h-40 w-full" /> : (
+          {kmQ.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
             <Card>
               <CardContent className="p-0">
                 <Table>
@@ -183,7 +228,9 @@ export function VehiculosMetadataScreen({ vista }: { vista?: 'docs' | 'km' | 'ev
                     {(kmQ.data ?? []).map((r) => (
                       <TableRow key={r.matricula}>
                         <TableCell className="font-bold">{r.matricula}</TableCell>
-                        <TableCell className="font-mono">{r.km_actual.toLocaleString('es-ES')}</TableCell>
+                        <TableCell className="font-mono">
+                          {r.km_actual.toLocaleString('es-ES')}
+                        </TableCell>
                         <TableCell className="text-xs">{fmtDate(r.updated_at)}</TableCell>
                       </TableRow>
                     ))}
@@ -203,17 +250,22 @@ export function VehiculosMetadataScreen({ vista }: { vista?: 'docs' | 'km' | 'ev
               </SelectTrigger>
               <SelectContent>
                 {vehiculos.map((v) => (
-                  <SelectItem key={v.matricula} value={v.matricula}>{v.matricula}</SelectItem>
+                  <SelectItem key={v.matricula} value={v.matricula}>
+                    {v.matricula}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            {selMatricula && (
-              evQ.isLoading ? <Skeleton className="h-40 w-full" /> :
-              (evQ.data?.length ?? 0) === 0 ? (
+            {selMatricula &&
+              (evQ.isLoading ? (
+                <Skeleton className="h-40 w-full" />
+              ) : (evQ.data?.length ?? 0) === 0 ? (
                 <Card>
                   <CardContent className="py-8 text-center">
-                    <p className="text-sm text-muted-foreground">No hay eventos para {selMatricula}.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No hay eventos para {selMatricula}.
+                    </p>
                   </CardContent>
                 </Card>
               ) : (
@@ -230,7 +282,11 @@ export function VehiculosMetadataScreen({ vista }: { vista?: 'docs' | 'km' | 'ev
                       <TableBody>
                         {(evQ.data ?? []).map((e) => (
                           <TableRow key={e.id_evento}>
-                            <TableCell><Badge variant="info" className="text-xs">{e.tipo}</Badge></TableCell>
+                            <TableCell>
+                              <Badge variant="info" className="text-xs">
+                                {e.tipo}
+                              </Badge>
+                            </TableCell>
                             <TableCell className="text-sm">{e.descripcion}</TableCell>
                             <TableCell className="text-xs">{fmtDate(e.timestamp_evento)}</TableCell>
                           </TableRow>
@@ -239,8 +295,7 @@ export function VehiculosMetadataScreen({ vista }: { vista?: 'docs' | 'km' | 'ev
                     </Table>
                   </CardContent>
                 </Card>
-              )
-            )}
+              ))}
           </div>
         </TabsContent>
       </Tabs>

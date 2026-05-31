@@ -8,33 +8,41 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useOfflineMutation } from '@/hooks/useOfflineMutation'
 import { useLocations } from '@/hooks/useLocations'
 
 const schema = z.object({
-  id_item:           z.coerce.number().int().positive('Selecciona o introduce el ítem'),
-  cantidad:          z.coerce.number().int().positive('Introduce la cantidad'),
-  location_destino:  z.string().min(1, 'Selecciona la location de destino'),
-  notas:             z.string().optional(),
+  id_item: z.coerce.number().int().positive('Selecciona o introduce el ítem'),
+  cantidad: z.coerce.number().int().positive('Introduce la cantidad'),
+  location_destino: z.string().min(1, 'Selecciona la location de destino'),
+  notas: z.string().optional(),
 })
 type Schema = z.infer<typeof schema>
 
-interface Result { online: boolean }
+interface Result {
+  online: boolean
+}
 
 export function Doc9EntradaAlmacenScreen() {
   const { data: locations } = useLocations()
   const [resultado, setResultado] = useState<Result | null>(null)
 
   const mut = useOfflineMutation<{
-    p_mutation_uuid:   string
-    p_id_item:         number
-    p_cantidad:        number
+    p_mutation_uuid: string
+    p_id_item: number
+    p_cantidad: number
     p_location_destino: string
-    p_notas:           string | null
+    p_notas: string | null
   }>({
-    rpcName:   'rpc_entrada_almacen',
+    rpcName: 'rpc_entrada_almacen',
     invalidates: [['ultimos_movimientos'], ['stock_historial']],
   })
 
@@ -60,7 +68,14 @@ export function Doc9EntradaAlmacenScreen() {
             ? 'La entrada de material se ha registrado correctamente.'
             : 'La entrada se guardará cuando recuperes la conexión.'}
         </p>
-        <Button onClick={() => { setResultado(null); form.reset({ cantidad: 1 }) }} variant="outline" size="sm">
+        <Button
+          onClick={() => {
+            setResultado(null)
+            form.reset({ cantidad: 1 })
+          }}
+          variant="outline"
+          size="sm"
+        >
           Registrar otra entrada
         </Button>
       </div>
@@ -69,11 +84,11 @@ export function Doc9EntradaAlmacenScreen() {
 
   async function onSubmit(values: Schema) {
     const res = await mut.mutateAsync({
-      p_mutation_uuid:    crypto.randomUUID(),
-      p_id_item:          values.id_item,
-      p_cantidad:         values.cantidad,
+      p_mutation_uuid: crypto.randomUUID(),
+      p_id_item: values.id_item,
+      p_cantidad: values.cantidad,
       p_location_destino: values.location_destino,
-      p_notas:            values.notas?.trim() || null,
+      p_notas: values.notas?.trim() || null,
     })
     setResultado({ online: !res.queued })
   }
@@ -143,17 +158,25 @@ export function Doc9EntradaAlmacenScreen() {
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor="d9-dest">Location destino</FieldLabel>
-                  <Select value={field.value} onValueChange={field.onChange} disabled={mut.isPending}>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={mut.isPending}
+                  >
                     <SelectTrigger id="d9-dest" aria-label="Location destino">
                       <SelectValue placeholder="Seleccionar…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {locations.filter((l) => l.tipo === 'almacen' || l.tipo === 'vehiculo').map((l) => (
-                        <SelectItem key={l.location_id} value={l.location_id}>
-                          {l.nombre}
-                          <Badge variant="info" className="ml-2 text-xs">{l.tipo}</Badge>
-                        </SelectItem>
-                      ))}
+                      {locations
+                        .filter((l) => l.tipo === 'almacen' || l.tipo === 'vehiculo')
+                        .map((l) => (
+                          <SelectItem key={l.location_id} value={l.location_id}>
+                            {l.nombre}
+                            <Badge variant="info" className="ml-2 text-xs">
+                              {l.tipo}
+                            </Badge>
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {fieldState.error && <FieldError errors={[fieldState.error]} />}

@@ -10,7 +10,7 @@ import { useInventarioVehiculo, type InventarioItem } from '@/hooks/useInventari
 import { useDeducirMaterial, type DeduccionItem } from '@/hooks/useDeducirMaterial'
 
 type CarritoEntry = DeduccionItem & {
-  nombre:    string
+  nombre: string
   categoria: string
 }
 
@@ -59,10 +59,10 @@ export function Doc6GastoMaterialScreen() {
       const current = next.get(key)
       const newCantidad = Math.min((current?.cantidad ?? 0) + 1, it.stock_real)
       next.set(key, {
-        id_item:   it.id_item,
-        subgrupo:  it.subgrupo,
-        cantidad:  newCantidad,
-        nombre:    it.nombre,
+        id_item: it.id_item,
+        subgrupo: it.subgrupo,
+        cantidad: newCantidad,
+        nombre: it.nombre,
         categoria: it.categoria,
       })
       return next
@@ -92,12 +92,12 @@ export function Doc6GastoMaterialScreen() {
   async function confirmarGasto() {
     if (carrito.size === 0) return
     const entries = [...carrito.values()].map<DeduccionItem>((e) => ({
-      id_item:  e.id_item,
+      id_item: e.id_item,
       subgrupo: e.subgrupo,
       cantidad: e.cantidad,
     }))
     const result = await deducir({
-      items:  entries,
+      items: entries,
       motivo: motivo.trim() || null,
     })
     if (!result) return
@@ -107,7 +107,7 @@ export function Doc6GastoMaterialScreen() {
       setFeedback(
         result.queued > 0
           ? `${result.ok + result.queued} deducción(es) registradas (${result.queued} encoladas offline).`
-          : `${result.ok} deducción(es) registradas.`,
+          : `${result.ok} deducción(es) registradas.`
       )
     } else {
       setFeedback(`${result.ok} confirmadas, ${result.failed} fallaron.`)
@@ -143,7 +143,10 @@ export function Doc6GastoMaterialScreen() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="relative">
-            <Search aria-hidden="true" className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              aria-hidden="true"
+              className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
             <Input
               placeholder="Buscar por nombre, categoría o especificación…"
               value={query}
@@ -256,7 +259,9 @@ export function Doc6GastoMaterialScreen() {
                   >
                     <Minus aria-hidden="true" className="size-4" />
                   </Button>
-                  <Badge variant="default" aria-label={`Cantidad ${e.cantidad}`}>{e.cantidad}</Badge>
+                  <Badge variant="default" aria-label={`Cantidad ${e.cantidad}`}>
+                    {e.cantidad}
+                  </Badge>
                   <Button
                     size="icon"
                     variant="ghost"

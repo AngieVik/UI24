@@ -82,16 +82,18 @@ export function useFiliacion() {
               pacientes: s.pacientes.map((p) =>
                 p.id_paciente === (payload.new as Paciente).id_paciente
                   ? (payload.new as Paciente)
-                  : p,
+                  : p
               ),
             }))
           }
-        },
+        }
       )
       .subscribe()
 
     channelRef.current = channel
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [state.idSesion, isOnline])
 
   async function abrirSesion(idDrp?: string): Promise<boolean> {
@@ -123,7 +125,7 @@ export function useFiliacion() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.rpc as any)('rpc_admitir_paciente', {
         mutation_uuid: mutationUuid,
-        p_id_sesion:   state.idSesion,
+        p_id_sesion: state.idSesion,
       })
       if (error) throw error
       setState((s) => ({ ...s, isSubmitting: false }))
@@ -134,14 +136,17 @@ export function useFiliacion() {
     }
   }
 
-  async function actualizarEstado(idPaciente: string, nuevoEstado: EstadoPaciente): Promise<boolean> {
+  async function actualizarEstado(
+    idPaciente: string,
+    nuevoEstado: EstadoPaciente
+  ): Promise<boolean> {
     setState((s) => ({ ...s, isSubmitting: true, error: null }))
     const mutationUuid = crypto.randomUUID()
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.rpc as any)('rpc_actualizar_estado_paciente', {
-        mutation_uuid:  mutationUuid,
-        p_id_paciente:  idPaciente,
+        mutation_uuid: mutationUuid,
+        p_id_paciente: idPaciente,
         p_nuevo_estado: nuevoEstado,
       })
       if (error) throw error

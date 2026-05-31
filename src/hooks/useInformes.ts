@@ -56,7 +56,9 @@ export function useInformes() {
     try {
       const { data, error } = await supabase
         .from('doc2_informes_svb')
-        .select('id_doc, id_activacion, id_nombre_redactor, timestamp_asistencia, datos_paciente, estado')
+        .select(
+          'id_doc, id_activacion, id_nombre_redactor, timestamp_asistencia, datos_paciente, estado'
+        )
         .eq('id_activacion', idActivacion)
         .order('timestamp_asistencia', { ascending: false })
 
@@ -73,8 +75,8 @@ export function useInformes() {
 
     const mutationUuid = crypto.randomUUID()
     const payload = {
-      mutation_uuid:    mutationUuid,
-      p_id_activacion:  idActivacion,
+      mutation_uuid: mutationUuid,
+      p_id_activacion: idActivacion,
       p_datos_paciente: datos,
     }
 
@@ -90,12 +92,12 @@ export function useInformes() {
           isSubmitting: false,
           informes: [
             {
-              id_doc:               idDoc,
-              id_activacion:        idActivacion,
-              id_nombre_redactor:   '',
+              id_doc: idDoc,
+              id_activacion: idActivacion,
+              id_nombre_redactor: '',
               timestamp_asistencia: new Date().toISOString(),
-              datos_paciente:       datos,
-              estado:               'borrador',
+              datos_paciente: datos,
+              estado: 'borrador',
             },
             ...s.informes,
           ],
@@ -117,8 +119,8 @@ export function useInformes() {
 
     const mutationUuid = crypto.randomUUID()
     const payload = {
-      mutation_uuid:    mutationUuid,
-      p_id_doc:         idDoc,
+      mutation_uuid: mutationUuid,
+      p_id_doc: idDoc,
       p_datos_paciente: datos ?? null,
     }
 
@@ -135,7 +137,7 @@ export function useInformes() {
         ...s,
         isSubmitting: false,
         informes: s.informes.map((inf) =>
-          inf.id_doc === idDoc ? { ...inf, estado: 'cerrado' } : inf,
+          inf.id_doc === idDoc ? { ...inf, estado: 'cerrado' } : inf
         ),
       }))
       return true

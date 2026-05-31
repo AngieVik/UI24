@@ -11,14 +11,14 @@ import { useTablon, type AnuncioItem } from '@/hooks/useTablon'
  * ───────────────────────────────────────────────────────────────────────── */
 
 const SECCION_LABEL: Record<string, string> = {
-  normativas:          'Normativas',
-  protocolos:          'Protocolos',
+  normativas: 'Normativas',
+  protocolos: 'Protocolos',
   avisos_corporativos: 'Avisos corporativos',
 }
 
 const SECCION_VARIANT: Record<string, 'ok' | 'info' | 'warn'> = {
-  normativas:          'ok',
-  protocolos:          'info',
+  normativas: 'ok',
+  protocolos: 'info',
   avisos_corporativos: 'warn',
 }
 
@@ -30,8 +30,11 @@ const SECCIONES: AnuncioItem['seccion'][] = ['normativas', 'protocolos', 'avisos
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-ES', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
@@ -68,7 +71,6 @@ export function TablonCentralScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 p-3">
-
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Megaphone aria-hidden="true" className="size-5 text-muted-foreground" />
@@ -77,12 +79,22 @@ export function TablonCentralScreen() {
             <Badge variant="secondary">{anuncios.length} anuncios</Badge>
           )}
         </div>
-        <Button size="sm" variant="ghost" onClick={cargarTablon} disabled={loading} aria-label="Recargar tablón">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={cargarTablon}
+          disabled={loading}
+          aria-label="Recargar tablón"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {loading ? (
         <div className="space-y-2">
@@ -101,7 +113,9 @@ export function TablonCentralScreen() {
           <TabsList className="w-full">
             <TabsTrigger value="todos">
               Todos
-              <Badge variant="secondary" className="ml-1 text-xs">{anuncios.length}</Badge>
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {anuncios.length}
+              </Badge>
             </TabsTrigger>
             {SECCIONES.map((sec) => {
               const count = porSeccion(sec).length
@@ -109,14 +123,18 @@ export function TablonCentralScreen() {
               return (
                 <TabsTrigger key={sec} value={sec}>
                   {SECCION_LABEL[sec]}
-                  <Badge variant={SECCION_VARIANT[sec]} className="ml-1 text-xs">{count}</Badge>
+                  <Badge variant={SECCION_VARIANT[sec]} className="ml-1 text-xs">
+                    {count}
+                  </Badge>
                 </TabsTrigger>
               )
             })}
           </TabsList>
 
           <TabsContent value="todos" className="mt-3 space-y-2">
-            {anuncios.map((a) => <AnuncioCard key={a.id_anuncio} anuncio={a} />)}
+            {anuncios.map((a) => (
+              <AnuncioCard key={a.id_anuncio} anuncio={a} />
+            ))}
           </TabsContent>
 
           {SECCIONES.map((sec) => (

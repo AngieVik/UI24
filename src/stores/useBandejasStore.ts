@@ -27,14 +27,10 @@ export const useBandejasStore = create<BandejasState>()(
 
       upsertMensaje(mensaje) {
         set((s) => {
-          const exists = s.mensajes.some(
-            (m) => m.id_mensaje === mensaje.id_mensaje,
-          )
+          const exists = s.mensajes.some((m) => m.id_mensaje === mensaje.id_mensaje)
           return {
             mensajes: exists
-              ? s.mensajes.map((m) =>
-                  m.id_mensaje === mensaje.id_mensaje ? mensaje : m,
-                )
+              ? s.mensajes.map((m) => (m.id_mensaje === mensaje.id_mensaje ? mensaje : m))
               : [...s.mensajes, mensaje],
           }
         })
@@ -49,7 +45,7 @@ export const useBandejasStore = create<BandejasState>()(
                   estado: 'leido',
                   timestamp_lectura: new Date().toISOString(),
                 }
-              : m,
+              : m
           ),
         }))
       },
@@ -61,6 +57,6 @@ export const useBandejasStore = create<BandejasState>()(
     {
       name: 'u24-bandejas',
       storage: createIdbStorage<BandejasState>(),
-    },
-  ),
+    }
+  )
 )

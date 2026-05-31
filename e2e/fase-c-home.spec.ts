@@ -15,8 +15,8 @@ import { test, expect, type Route } from '@playwright/test'
 
 const SUPABASE_HOST = 'ygljtbpfpfdbuxvibbom.supabase.co'
 const TERMINAL_ID = 'e2e-terminal-fixture'
-const MATRICULA   = '9999-E2E'
-const ID_DRP      = 'e2e-drp-aaaa-bbbb-cccc-dddddddddddd'
+const MATRICULA = '9999-E2E'
+const ID_DRP = 'e2e-drp-aaaa-bbbb-cccc-dddddddddddd'
 
 interface MockRow {
   match: (url: URL) => boolean
@@ -66,10 +66,10 @@ const FIXTURES: MockRow[] = [
       u.searchParams.get('matricula') === `eq.${MATRICULA}`,
     body: [
       {
-        matricula:         MATRICULA,
-        tipo:              'A1',
+        matricula: MATRICULA,
+        tipo: 'A1',
         condicion_tecnica: 'operativo',
-        estado_operativo:  'activo',
+        estado_operativo: 'activo',
       },
     ],
   },
@@ -81,10 +81,10 @@ const FIXTURES: MockRow[] = [
       u.searchParams.get('matricula') === `eq.${MATRICULA}`,
     body: [
       {
-        pilot:              'admin',
-        carry:              'tes_demo',
+        pilot: 'admin',
+        carry: 'tes_demo',
         timestamp_apertura: '2026-05-25T07:00:00Z',
-        tipo_servicio:      'urgente',
+        tipo_servicio: 'urgente',
       },
     ],
   },
@@ -98,11 +98,11 @@ const FIXTURES: MockRow[] = [
       {
         id_drp: ID_DRP,
         drps: {
-          id_drp:                ID_DRP,
-          estado:                'En_curso',
-          id_coordinacion:       'coord_e2e',
+          id_drp: ID_DRP,
+          estado: 'En_curso',
+          id_coordinacion: 'coord_e2e',
           timestamp_preparacion: '2026-05-25T07:00:00Z',
-          timestamp_inicio:      '2026-05-25T07:30:00Z',
+          timestamp_inicio: '2026-05-25T07:30:00Z',
         },
       },
     ],
@@ -117,10 +117,7 @@ const FIXTURES: MockRow[] = [
   // mensajes_bandeja sin leer
   {
     match: (u) => u.pathname.endsWith('/rest/v1/mensajes_bandeja'),
-    body: [
-      { id_nombre_destino: 'admin' },
-      { id_nombre_destino: 'admin' },
-    ],
+    body: [{ id_nombre_destino: 'admin' }, { id_nombre_destino: 'admin' }],
   },
 ]
 
@@ -153,21 +150,24 @@ test.describe('Fase C — home con datos', () => {
     await page.addInitScript(
       ({ terminalId, matricula }) => {
         // sessionStorage para useAuthStore (estructura igual que el bypass dev)
-        sessionStorage.setItem('u24-auth', JSON.stringify({
-          state: {
-            session: {
-              access_token: 'e2e-bypass-token',
-              user: {
-                id: '00000000-0000-0000-0000-0000000000e2',
-                app_metadata: { rol: 'gerencia', id_nombre: 'admin' },
-                user_metadata: { rol: 'gerencia', id_nombre: 'admin' },
+        sessionStorage.setItem(
+          'u24-auth',
+          JSON.stringify({
+            state: {
+              session: {
+                access_token: 'e2e-bypass-token',
+                user: {
+                  id: '00000000-0000-0000-0000-0000000000e2',
+                  app_metadata: { rol: 'gerencia', id_nombre: 'admin' },
+                  user_metadata: { rol: 'gerencia', id_nombre: 'admin' },
+                },
               },
+              ejecutorId: 'admin',
+              rol: 'gerencia',
             },
-            ejecutorId: 'admin',
-            rol:        'gerencia',
-          },
-          version: 0,
-        }))
+            version: 0,
+          })
+        )
         // IDB del terminal — el adapter idb-keyval lo lee en el primer render
         // del store con persist. Hacemos el seed via la promesa de idb.
         const req = indexedDB.open('keyval-store', 1)
@@ -176,11 +176,29 @@ test.describe('Fase C — home con datos', () => {
           const db = req.result
           const tx = db.transaction('keyval', 'readwrite')
           const store = tx.objectStore('keyval')
-          store.put({ state: { id_terminal: terminalId, tipoGalleta: 'temporal', fingerprint: terminalId }, version: 0 }, 'u24-terminal')
-          store.put({ state: { id_activacion: 'e2e-act', id_parte: '', id_checklist: '', matricula, checklistCerrado: true }, version: 0 }, 'u24-activacion')
+          store.put(
+            {
+              state: { id_terminal: terminalId, tipoGalleta: 'temporal', fingerprint: terminalId },
+              version: 0,
+            },
+            'u24-terminal'
+          )
+          store.put(
+            {
+              state: {
+                id_activacion: 'e2e-act',
+                id_parte: '',
+                id_checklist: '',
+                matricula,
+                checklistCerrado: true,
+              },
+              version: 0,
+            },
+            'u24-activacion'
+          )
         }
       },
-      { terminalId: TERMINAL_ID, matricula: MATRICULA },
+      { terminalId: TERMINAL_ID, matricula: MATRICULA }
     )
 
     // 3) Cargamos.
@@ -201,7 +219,7 @@ test.describe('Fase C — home con datos', () => {
     await expect(page.getByText(MATRICULA)).toBeVisible()
     await expect(page.getByText('Urgente')).toBeVisible()
     // Pilot y carry — aparecen en PanelPersonal (id_nombre) + PanelVehiculo (celda)
-    await expect(page.getByText('admin',    { exact: true })).toHaveCount(2)
+    await expect(page.getByText('admin', { exact: true })).toHaveCount(2)
     await expect(page.getByText('tes_demo', { exact: true })).toHaveCount(2)
 
     // VisualInfoDRP

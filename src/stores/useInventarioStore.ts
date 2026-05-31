@@ -4,8 +4,7 @@ import { createIdbStorage } from '@/lib/idb'
 import type { Database } from '@/types/supabase'
 
 type InventarioBaseRow = Database['public']['Tables']['inventario_base']['Row']
-type InventarioVehiculoRow =
-  Database['public']['Tables']['inventario_vehiculo']['Row']
+type InventarioVehiculoRow = Database['public']['Tables']['inventario_vehiculo']['Row']
 
 interface InventarioState {
   base: InventarioBaseRow[]
@@ -39,6 +38,6 @@ export const useInventarioStore = create<InventarioState>()(
     {
       name: 'u24-inventario',
       storage: createIdbStorage<InventarioState>(),
-    },
-  ),
+    }
+  )
 )

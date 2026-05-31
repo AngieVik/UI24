@@ -9,7 +9,7 @@ export interface CompressOptions {
  */
 export async function compressImage(
   file: File | Blob,
-  { maxPx = 1200, quality = 0.70 }: CompressOptions = {},
+  { maxPx = 1200, quality = 0.7 }: CompressOptions = {}
 ): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
 

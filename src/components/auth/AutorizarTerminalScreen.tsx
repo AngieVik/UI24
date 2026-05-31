@@ -13,11 +13,13 @@ import logoUrl from '@/assets/logo.svg'
 
 const schema = z.object({
   identificador: z.string().min(1, 'Identificador requerido'),
-  password:      z.string().min(8, 'Mínimo 8 caracteres'),
+  password: z.string().min(8, 'Mínimo 8 caracteres'),
 })
 type Schema = z.infer<typeof schema>
 
-const APP_VERSION = (typeof window !== 'undefined' && (window as { __APP_VERSION__?: string }).__APP_VERSION__) || '0.1.0'
+const APP_VERSION =
+  (typeof window !== 'undefined' && (window as { __APP_VERSION__?: string }).__APP_VERSION__) ||
+  '0.1.0'
 
 /**
  * AutorizarTerminalScreen — estado_0a.
@@ -44,7 +46,7 @@ export function AutorizarTerminalScreen() {
   async function onSubmit(values: Schema) {
     await autorizar({
       id_nombre_gerencia: values.identificador.trim(),
-      password:           values.password,
+      password: values.password,
     })
   }
 
@@ -65,8 +67,8 @@ export function AutorizarTerminalScreen() {
                 Autorizar terminal
               </h1>
               <p className="font-body text-base font-light text-muted-foreground">
-                Este dispositivo aún no está vinculado a U24. Gerencia introduce
-                sus credenciales una sola vez para autorizar el terminal.
+                Este dispositivo aún no está vinculado a U24. Gerencia introduce sus credenciales
+                una sola vez para autorizar el terminal.
               </p>
             </header>
 
@@ -91,7 +93,9 @@ export function AutorizarTerminalScreen() {
                 name="identificador"
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="autorizar-identificador">Identificador (gerencia)</FieldLabel>
+                    <FieldLabel htmlFor="autorizar-identificador">
+                      Identificador (gerencia)
+                    </FieldLabel>
                     <Input
                       {...field}
                       id="autorizar-identificador"
@@ -127,9 +131,11 @@ export function AutorizarTerminalScreen() {
                         tabIndex={-1}
                         className="absolute inset-y-0 right-0 grid w-9 place-items-center text-muted-foreground hover:text-foreground"
                       >
-                        {showPassword
-                          ? <EyeOff aria-hidden="true" className="size-4" />
-                          : <Eye   aria-hidden="true" className="size-4" />}
+                        {showPassword ? (
+                          <EyeOff aria-hidden="true" className="size-4" />
+                        ) : (
+                          <Eye aria-hidden="true" className="size-4" />
+                        )}
                       </button>
                     </div>
                     {fieldState.error && <FieldError errors={[fieldState.error]} />}

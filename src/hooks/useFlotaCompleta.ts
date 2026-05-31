@@ -3,11 +3,11 @@ import { supabase } from '@/lib/supabase'
 import { useRealtimeInvalidator } from '@/hooks/useRealtimeInvalidator'
 
 export interface VehiculoFila {
-  matricula:            string
-  tipo:                 string
-  condicion_tecnica:    string
-  estado_operativo:     string
-  subestado_operativo:  string | null
+  matricula: string
+  tipo: string
+  condicion_tecnica: string
+  estado_operativo: string
+  subestado_operativo: string | null
 }
 
 /**
@@ -40,9 +40,9 @@ export function useFlotaCompleta() {
   })
 
   return {
-    data:      query.data ?? [],
+    data: query.data ?? [],
     isLoading: query.isLoading,
-    isError:   query.isError,
-    error:     (query.error as Error | null) ?? null,
+    isError: query.isError,
+    error: (query.error as Error | null) ?? null,
   }
 }

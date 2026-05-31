@@ -40,13 +40,16 @@ function usePsaSesiones() {
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-ES', {
-    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
 const ESTADO_VARIANT: Record<string, 'ok' | 'warn' | 'secondary'> = {
-  Abierta:   'ok',
-  Cerrada:   'secondary',
+  Abierta: 'ok',
+  Cerrada: 'secondary',
   Archivada: 'secondary',
 }
 
@@ -104,15 +107,17 @@ export function ModuloPsaScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-lg flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <BriefcaseMedical aria-hidden="true" className="size-5 text-muted-foreground" />
           <h2 className="font-display text-lg font-bold">Módulo PSA</h2>
-          <span className="font-body text-sm text-muted-foreground">Puesto de soporte avanzado</span>
+          <span className="font-body text-sm text-muted-foreground">
+            Puesto de soporte avanzado
+          </span>
         </div>
         <Button
-          size="sm" variant="outline"
+          size="sm"
+          variant="outline"
           onClick={() => query.refetch()}
           disabled={query.isLoading}
           aria-label="Recargar sesiones PSA"
@@ -148,12 +153,7 @@ export function ModuloPsaScreen() {
               disabled={actingOpen}
             />
           </Field>
-          <Button
-            size="sm"
-            onClick={handleAbrirSesion}
-            disabled={actingOpen}
-            className="w-full"
-          >
+          <Button size="sm" onClick={handleAbrirSesion} disabled={actingOpen} className="w-full">
             {actingOpen ? 'Abriendo…' : 'Abrir sesión PSA'}
           </Button>
         </CardContent>

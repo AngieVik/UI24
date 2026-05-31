@@ -3,7 +3,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 import { useVehiculoActivo } from '@/hooks/useVehiculoActivo'
 import { useDrpActivo } from '@/hooks/useDrpActivo'
@@ -30,7 +37,7 @@ export function PanelPersonal() {
   // Contexto para derivar el estado de cada persona — TanStack Query
   // dedupe estos hooks con los de los otros paneles del home.
   const vehiculo = useVehiculoActivo()
-  const drp      = useDrpActivo()
+  const drp = useDrpActivo()
 
   const deriveEstado = (): EstadoTurno => {
     if (drp.data) return 'En DRP'
@@ -94,7 +101,9 @@ export function PanelPersonal() {
                         </Avatar>
                         <div className="flex flex-col leading-tight">
                           <span className="font-bold">{p.nombre_real}</span>
-                          <span className="text-xs font-light text-muted-foreground">{p.id_nombre}</span>
+                          <span className="text-xs font-light text-muted-foreground">
+                            {p.id_nombre}
+                          </span>
                         </div>
                       </div>
                     </TableCell>

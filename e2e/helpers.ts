@@ -2,35 +2,39 @@ import { type Page, type Route, expect } from '@playwright/test'
 
 // ── Configuración de entorno ───────────────────────────────────────────────
 
-export const SUPABASE_HOST =
-  process.env.E2E_SUPABASE_HOST || 'ygljtbpfpfdbuxvibbom.supabase.co'
+export const SUPABASE_HOST = process.env.E2E_SUPABASE_HOST || 'ygljtbpfpfdbuxvibbom.supabase.co'
 
 export const TERMINAL_ID = 'e2e-terminal-fixture'
-export const MATRICULA   = '9999-E2E'
-export const ID_DRP      = 'e2e-drp-aaaa-bbbb-cccc-dddddddddddd'
+export const MATRICULA = '9999-E2E'
+export const ID_DRP = 'e2e-drp-aaaa-bbbb-cccc-dddddddddddd'
 
 // ── Credenciales para tests de formulario (real o mock) ───────────────────
 
 export const CREDS = {
   gerencia: {
     id_nombre: 'admin',
-    password:  process.env.E2E_GERENCIA_PASSWORD || 'Gerencia1234!',
+    password: process.env.E2E_GERENCIA_PASSWORD || 'Gerencia1234!',
   },
   tes: {
     id_nombre: 'tes_demo',
-    password:  process.env.E2E_USER_PASSWORD || 'Demo1234!',
+    password: process.env.E2E_USER_PASSWORD || 'Demo1234!',
   },
 }
 
 // ── Fixtures Supabase mock ─────────────────────────────────────────────────
 
-interface MockRow { match: (url: URL) => boolean; body: unknown }
+interface MockRow {
+  match: (url: URL) => boolean
+  body: unknown
+}
 
-export function buildFixtures(opts: {
-  rol?: string
-  idNombre?: string
-  conDrp?: boolean
-} = {}): MockRow[] {
+export function buildFixtures(
+  opts: {
+    rol?: string
+    idNombre?: string
+    conDrp?: boolean
+  } = {}
+): MockRow[] {
   const { rol = 'gerencia', idNombre = 'admin', conDrp = true } = opts
 
   return [
@@ -65,10 +69,10 @@ export function buildFixtures(opts: {
         u.searchParams.get('matricula') === `eq.${MATRICULA}`,
       body: [
         {
-          matricula:         MATRICULA,
-          tipo:              'A1',
+          matricula: MATRICULA,
+          tipo: 'A1',
           condicion_tecnica: 'operativo',
-          estado_operativo:  'activado',
+          estado_operativo: 'activado',
         },
       ],
     },
@@ -79,10 +83,10 @@ export function buildFixtures(opts: {
         u.searchParams.get('matricula') === `eq.${MATRICULA}`,
       body: [
         {
-          pilot:              idNombre,
-          carry:              null,
+          pilot: idNombre,
+          carry: null,
           timestamp_apertura: '2026-05-31T07:00:00Z',
-          tipo_servicio:      'urgente',
+          tipo_servicio: 'urgente',
         },
       ],
     },
@@ -96,18 +100,18 @@ export function buildFixtures(opts: {
             {
               id_drp: ID_DRP,
               drps: {
-                id_drp:                ID_DRP,
-                estado:                'En_curso',
-                id_coordinacion:       'coord_e2e',
+                id_drp: ID_DRP,
+                estado: 'En_curso',
+                id_coordinacion: 'coord_e2e',
                 timestamp_preparacion: '2026-05-31T07:00:00Z',
-                timestamp_inicio:      '2026-05-31T07:30:00Z',
+                timestamp_inicio: '2026-05-31T07:30:00Z',
               },
             },
           ]
         : [],
     },
     { match: (u) => u.pathname.endsWith('/rest/v1/drp_personal_a_pie'), body: [] },
-    { match: (u) => u.pathname.endsWith('/rest/v1/mensajes_bandeja'),    body: [] },
+    { match: (u) => u.pathname.endsWith('/rest/v1/mensajes_bandeja'), body: [] },
   ]
 }
 
@@ -115,18 +119,18 @@ export async function mockSupabase(route: Route, fixtures: MockRow[]) {
   const url = new URL(route.request().url())
   const fixture = fixtures.find((f) => f.match(url))
   await route.fulfill({
-    status:      200,
+    status: 200,
     contentType: 'application/json',
-    body:        JSON.stringify(fixture ? fixture.body : []),
+    body: JSON.stringify(fixture ? fixture.body : []),
   })
 }
 
 // ── Bootstrap: inyecta stores + mocks API + carga la app ──────────────────
 
 export interface BootstrapOpts {
-  rol?:      string
+  rol?: string
   idNombre?: string
-  conDrp?:   boolean
+  conDrp?: boolean
 }
 
 /**
@@ -141,42 +145,55 @@ export async function bootstrapApp(page: Page, opts: BootstrapOpts = {}) {
   const { rol = 'gerencia', idNombre = 'admin', conDrp = false } = opts
   const fixtures = buildFixtures({ rol, idNombre, conDrp })
 
-  await page.route(`**/${SUPABASE_HOST}/rest/v1/**`, (route) =>
-    mockSupabase(route, fixtures)
-  )
+  await page.route(`**/${SUPABASE_HOST}/rest/v1/**`, (route) => mockSupabase(route, fixtures))
 
   await page.addInitScript(
     ({ terminalId, matricula, rolSesion, idNombreSesion }) => {
       // Auth store (sessionStorage, igual que el patrón del bypass dev)
-      sessionStorage.setItem('u24-auth', JSON.stringify({
-        state: {
-          session: {
-            access_token:  'e2e-bypass-token',
-            refresh_token: 'e2e-refresh-token',
-            user: {
-              id: '00000000-0000-0000-0000-000000000e2e',
-              app_metadata:  { rol: rolSesion, id_nombre: idNombreSesion },
-              user_metadata: { rol: rolSesion, id_nombre: idNombreSesion },
+      sessionStorage.setItem(
+        'u24-auth',
+        JSON.stringify({
+          state: {
+            session: {
+              access_token: 'e2e-bypass-token',
+              refresh_token: 'e2e-refresh-token',
+              user: {
+                id: '00000000-0000-0000-0000-000000000e2e',
+                app_metadata: { rol: rolSesion, id_nombre: idNombreSesion },
+                user_metadata: { rol: rolSesion, id_nombre: idNombreSesion },
+              },
             },
+            ejecutorId: idNombreSesion,
+            rol: rolSesion,
           },
-          ejecutorId: idNombreSesion,
-          rol:        rolSesion,
-        },
-        version: 0,
-      }))
+          version: 0,
+        })
+      )
       // Terminal + activacion stores (IndexedDB vía idb-keyval)
       const req = indexedDB.open('keyval-store', 1)
       req.onupgradeneeded = () => req.result.createObjectStore('keyval')
       req.onsuccess = () => {
-        const db   = req.result
-        const tx   = db.transaction('keyval', 'readwrite')
-        const kv   = tx.objectStore('keyval')
+        const db = req.result
+        const tx = db.transaction('keyval', 'readwrite')
+        const kv = tx.objectStore('keyval')
         kv.put(
-          { state: { id_terminal: terminalId, tipoGalleta: 'temporal', fingerprint: terminalId }, version: 0 },
+          {
+            state: { id_terminal: terminalId, tipoGalleta: 'temporal', fingerprint: terminalId },
+            version: 0,
+          },
           'u24-terminal'
         )
         kv.put(
-          { state: { id_activacion: 'e2e-act-001', id_parte: 'e2e-parte-001', id_checklist: '', matricula, checklistCerrado: true }, version: 0 },
+          {
+            state: {
+              id_activacion: 'e2e-act-001',
+              id_parte: 'e2e-parte-001',
+              id_checklist: '',
+              matricula,
+              checklistCerrado: true,
+            },
+            version: 0,
+          },
           'u24-activacion'
         )
       }
@@ -196,7 +213,8 @@ export async function bootstrapApp(page: Page, opts: BootstrapOpts = {}) {
  * El logo o el texto del panel deben estar visibles.
  */
 export async function goHome(page: Page) {
-  await page.getByRole('navigation', { name: 'Navegación principal' })
+  await page
+    .getByRole('navigation', { name: 'Navegación principal' })
     .getByRole('button', { name: /home/i })
     .click()
 }
@@ -215,10 +233,7 @@ export async function navegarLeafDirecto(page: Page, ariaLabel: string) {
  * después la hoja. Para drill-down de dos niveles (grupo → grupillo → hoja)
  * usa el helper dos veces.
  */
-export async function navegarDrill(
-  page: Page,
-  ...labels: string[]
-) {
+export async function navegarDrill(page: Page, ...labels: string[]) {
   const nav = page.getByRole('navigation', { name: 'Navegación principal' })
   for (const label of labels) {
     await nav.getByRole('button', { name: new RegExp(label, 'i') }).click()

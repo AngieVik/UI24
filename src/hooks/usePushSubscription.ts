@@ -39,16 +39,16 @@ export function usePushSubscription() {
     try {
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({
-        userVisibleOnly:      true,
+        userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       })
-      const key  = sub.getKey('p256dh')
+      const key = sub.getKey('p256dh')
       const auth = sub.getKey('auth')
       const { error: rpcErr } = await supabase.rpc('rpc_suscribir_push', {
-        p_endpoint:    sub.endpoint,
-        p_p256dh:      key  ? btoa(String.fromCharCode(...new Uint8Array(key)))  : '',
-        p_auth:        auth ? btoa(String.fromCharCode(...new Uint8Array(auth))) : '',
-        p_user_agent:  navigator.userAgent.slice(0, 200),
+        p_endpoint: sub.endpoint,
+        p_p256dh: key ? btoa(String.fromCharCode(...new Uint8Array(key))) : '',
+        p_auth: auth ? btoa(String.fromCharCode(...new Uint8Array(auth))) : '',
+        p_user_agent: navigator.userAgent.slice(0, 200),
       })
       if (rpcErr) throw rpcErr
       setIsSubscribed(true)
@@ -67,7 +67,10 @@ export function usePushSubscription() {
     try {
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
-      if (!sub) { setIsSubscribed(false); return true }
+      if (!sub) {
+        setIsSubscribed(false)
+        return true
+      }
       await sub.unsubscribe()
       const { error: rpcErr } = await supabase.rpc('rpc_cancelar_push', {
         p_endpoint: sub.endpoint,

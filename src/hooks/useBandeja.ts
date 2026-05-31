@@ -36,22 +36,24 @@ export function useBandeja() {
     }
   }, [ejecutorId, setMensajes])
 
-  const marcarLeido = useCallback(async (idMensaje: string): Promise<boolean> => {
-    marcarLeidoLocal(idMensaje)
-    if (!isOnline) return true
-    try {
-      const { error: err } = await supabase
-        .rpc('rpc_marcar_mensaje_leido', {
+  const marcarLeido = useCallback(
+    async (idMensaje: string): Promise<boolean> => {
+      marcarLeidoLocal(idMensaje)
+      if (!isOnline) return true
+      try {
+        const { error: err } = await supabase.rpc('rpc_marcar_mensaje_leido', {
           p_mutation_uuid: crypto.randomUUID(),
           p_id_mensaje: idMensaje,
         })
-      if (err) throw err
-      return true
-    } catch (e) {
-      setError(resolveRpcError(e))
-      return false
-    }
-  }, [isOnline, marcarLeidoLocal])
+        if (err) throw err
+        return true
+      } catch (e) {
+        setError(resolveRpcError(e))
+        return false
+      }
+    },
+    [isOnline, marcarLeidoLocal]
+  )
 
   // Suscripción Realtime para mensajes nuevos
   useEffect(() => {
@@ -68,12 +70,14 @@ export function useBandeja() {
           table: 'mensajes_bandeja',
           filter: `id_nombre_destino=eq.${ejecutorId}`,
         },
-        (payload) => upsertMensaje(payload.new as MensajeRow),
+        (payload) => upsertMensaje(payload.new as MensajeRow)
       )
       .subscribe()
 
     channelRef.current = ch
-    return () => { supabase.removeChannel(ch) }
+    return () => {
+      supabase.removeChannel(ch)
+    }
   }, [ejecutorId, isOnline, cargarMensajes, upsertMensaje])
 
   const noLeidos = mensajes.filter((m) => m.estado === 'no_leido').length

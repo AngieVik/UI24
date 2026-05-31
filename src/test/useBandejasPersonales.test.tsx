@@ -5,16 +5,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const fromMock = vi.fn<(table: string) => unknown>()
 const channelMock = vi.fn<(name: string) => unknown>(() => ({
-  on:        vi.fn().mockReturnThis(),
+  on: vi.fn().mockReturnThis(),
   subscribe: vi.fn().mockReturnThis(),
 }))
 const removeChannelMock = vi.fn<(ch: unknown) => unknown>()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    from:          (table: string) => fromMock(table),
-    channel:       (name: string)  => channelMock(name),
-    removeChannel: (ch: unknown)   => removeChannelMock(ch),
+    from: (table: string) => fromMock(table),
+    channel: (name: string) => channelMock(name),
+    removeChannel: (ch: unknown) => removeChannelMock(ch),
   },
 }))
 
@@ -31,9 +31,9 @@ function wrapper(client: QueryClient) {
 }
 
 function buildSelectInEq(result: { data: unknown; error: unknown }) {
-  const eqEstado  = vi.fn().mockResolvedValue(result)
+  const eqEstado = vi.fn().mockResolvedValue(result)
   const inDestino = vi.fn(() => ({ eq: eqEstado }))
-  const select    = vi.fn(() => ({ in: inDestino }))
+  const select = vi.fn(() => ({ in: inDestino }))
   return { select }
 }
 
@@ -69,11 +69,13 @@ describe('useBandejasPersonales', () => {
     })
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    const { result } = renderHook(() => useBandejasPersonales(['admin', 'tes_demo']), { wrapper: wrapper(client) })
+    const { result } = renderHook(() => useBandejasPersonales(['admin', 'tes_demo']), {
+      wrapper: wrapper(client),
+    })
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.data).toEqual([
-      { id_nombre: 'admin',    unreadCount: 3 },
+      { id_nombre: 'admin', unreadCount: 3 },
       { id_nombre: 'tes_demo', unreadCount: 1 },
     ])
   })
@@ -90,11 +92,13 @@ describe('useBandejasPersonales', () => {
     })
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    const { result } = renderHook(() => useBandejasPersonales(['admin', 'tes_demo']), { wrapper: wrapper(client) })
+    const { result } = renderHook(() => useBandejasPersonales(['admin', 'tes_demo']), {
+      wrapper: wrapper(client),
+    })
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.data).toEqual([
-      { id_nombre: 'admin',    unreadCount: 1 },
+      { id_nombre: 'admin', unreadCount: 1 },
       { id_nombre: 'tes_demo', unreadCount: 0 },
     ])
   })
@@ -108,7 +112,9 @@ describe('useBandejasPersonales', () => {
     })
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    const { result } = renderHook(() => useBandejasPersonales(['admin']), { wrapper: wrapper(client) })
+    const { result } = renderHook(() => useBandejasPersonales(['admin']), {
+      wrapper: wrapper(client),
+    })
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(result.current.error?.message).toBe('RLS')

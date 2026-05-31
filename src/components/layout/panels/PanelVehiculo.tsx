@@ -4,26 +4,26 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useVehiculoActivo } from '@/hooks/useVehiculoActivo'
 
 const CONDICION_LABEL: Record<string, string> = {
-  operativo:           'Operativo',
-  averiado:            'Averiado',
-  averiado_leve:       'Avería leve',
-  averiado_grave:      'Avería grave',
-  taller:              'En taller',
+  operativo: 'Operativo',
+  averiado: 'Averiado',
+  averiado_leve: 'Avería leve',
+  averiado_grave: 'Avería grave',
+  taller: 'En taller',
 }
 
 const ESTADO_LABEL: Record<string, string> = {
-  inactivo:       'Inactivo',
-  activo:         'Activo',
-  en_ruta:        'En ruta',
-  en_base:        'En base',
+  inactivo: 'Inactivo',
+  activo: 'Activo',
+  en_ruta: 'En ruta',
+  en_base: 'En base',
   fuera_servicio: 'Fuera de servicio',
 }
 
 const SERVICIO_LABEL: Record<string, string> = {
-  urgente:    'Urgente',
+  urgente: 'Urgente',
   programado: 'Programado',
-  evento:     'Evento',
-  traslado:   'Traslado',
+  evento: 'Evento',
+  traslado: 'Traslado',
 }
 
 function fmt(label: string | null | undefined): string {
@@ -44,7 +44,9 @@ interface CellProps {
 function Cell({ label, value }: CellProps) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-light uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-xs font-light uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
       <span className="font-bold">{fmt(value)}</span>
     </div>
   )
@@ -57,12 +59,13 @@ export function PanelVehiculo() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
         <CardTitle>Vehículo del terminal</CardTitle>
-        {data
-          ? <Badge variant={condicionToBadgeVariant(data.condicion_tecnica)}>
-              {CONDICION_LABEL[data.condicion_tecnica] ?? data.condicion_tecnica}
-            </Badge>
-          : <Badge variant="outline">{isLoading ? '…' : 'Sin asignar'}</Badge>
-        }
+        {data ? (
+          <Badge variant={condicionToBadgeVariant(data.condicion_tecnica)}>
+            {CONDICION_LABEL[data.condicion_tecnica] ?? data.condicion_tecnica}
+          </Badge>
+        ) : (
+          <Badge variant="outline">{isLoading ? '…' : 'Sin asignar'}</Badge>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-3">
@@ -97,10 +100,20 @@ export function PanelVehiculo() {
               <span className="text-sm font-light text-muted-foreground">{data.tipo}</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Cell label="Pilot"    value={fmt(data.pilot)} />
-              <Cell label="Carry"    value={fmt(data.carry)} />
-              <Cell label="Servicio" value={data.tipo_servicio ? (SERVICIO_LABEL[data.tipo_servicio] ?? data.tipo_servicio) : '—'} />
-              <Cell label="Estado"   value={ESTADO_LABEL[data.estado_operativo] ?? data.estado_operativo} />
+              <Cell label="Pilot" value={fmt(data.pilot)} />
+              <Cell label="Carry" value={fmt(data.carry)} />
+              <Cell
+                label="Servicio"
+                value={
+                  data.tipo_servicio
+                    ? (SERVICIO_LABEL[data.tipo_servicio] ?? data.tipo_servicio)
+                    : '—'
+                }
+              />
+              <Cell
+                label="Estado"
+                value={ESTADO_LABEL[data.estado_operativo] ?? data.estado_operativo}
+              />
             </div>
           </>
         )}

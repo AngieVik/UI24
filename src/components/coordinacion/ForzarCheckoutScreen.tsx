@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { resolveRpcError } from '@/lib/resolveRpcError'
 
 interface Presencia {
-  id_nombre:  string
+  id_nombre: string
   id_terminal: string
   checkin_at: string
 }
@@ -42,15 +42,20 @@ export function ForzarCheckoutScreen() {
   const [error, setError] = useState<string | null>(null)
 
   async function handleForzar(idNombre: string, idTerminal: string) {
-    if (!confirm(`¿Seguro que quieres forzar el checkout de ${idNombre}? Se cerrará su turno inmediatamente.`)) return
+    if (
+      !confirm(
+        `¿Seguro que quieres forzar el checkout de ${idNombre}? Se cerrará su turno inmediatamente.`
+      )
+    )
+      return
     setForzandoId(idNombre)
     setError(null)
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: err } = await (supabase as any).rpc('rpc_forzar_checkout', {
-        p_mutation_uuid:    crypto.randomUUID(),
+        p_mutation_uuid: crypto.randomUUID(),
         p_id_nombre_target: idNombre,
-        p_id_terminal:      idTerminal,
+        p_id_terminal: idTerminal,
       })
       if (err) throw err
       await qc.invalidateQueries({ queryKey: ['presencias_forzar'] })
@@ -63,14 +68,19 @@ export function ForzarCheckoutScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <LogOut aria-hidden="true" className="size-5 text-muted-foreground" />
           <h2 className="font-display text-lg font-bold">Forzar checkout</h2>
           {query.data && <Badge variant="secondary">{query.data.length} presencias</Badge>}
         </div>
-        <Button size="sm" variant="outline" onClick={() => query.refetch()} disabled={query.isLoading} aria-label="Recargar presencias">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => query.refetch()}
+          disabled={query.isLoading}
+          aria-label="Recargar presencias"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
@@ -79,13 +89,17 @@ export function ForzarCheckoutScreen() {
         <CardContent className="flex gap-2 py-3">
           <AlertTriangle className="size-4 shrink-0 text-destructive mt-0.5" aria-hidden="true" />
           <p className="font-body text-sm text-destructive">
-            Forzar checkout cierra el turno del trabajador inmediatamente. Usar solo en caso de emergencia
-            o cuando el trabajador no pueda hacer checkout por sí mismo.
+            Forzar checkout cierra el turno del trabajador inmediatamente. Usar solo en caso de
+            emergencia o cuando el trabajador no pueda hacer checkout por sí mismo.
           </p>
         </CardContent>
       </Card>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {query.isLoading ? (
         <div className="space-y-2">
@@ -95,7 +109,9 @@ export function ForzarCheckoutScreen() {
       ) : (query.data?.length ?? 0) === 0 ? (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">No hay trabajadores activos en este momento.</p>
+            <p className="text-sm text-muted-foreground">
+              No hay trabajadores activos en este momento.
+            </p>
           </CardContent>
         </Card>
       ) : (

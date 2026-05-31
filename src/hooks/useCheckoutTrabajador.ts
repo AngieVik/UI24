@@ -42,7 +42,7 @@ export function useCheckoutTrabajador() {
       const { data, error: efErr } = await supabase.functions.invoke('ef-checkout-trabajador', {
         body: {
           id_nombre_target: vars.id_nombre_target,
-          id_terminal:      idTerminal,
+          id_terminal: idTerminal,
         },
       })
       if (efErr) {
@@ -69,7 +69,9 @@ function extractEdgeError(err: unknown): string | null {
       try {
         const parsed = JSON.parse(e.context.body) as { detail?: string; error?: string }
         return parsed.detail ?? parsed.error ?? null
-      } catch { /* swallow */ }
+      } catch {
+        /* swallow */
+      }
     }
     return e.message ?? null
   }

@@ -36,6 +36,6 @@ export const useTerminalStore = create<TerminalState>()(
     {
       name: 'u24-terminal',
       storage: createIdbStorage<TerminalState>(),
-    },
-  ),
+    }
+  )
 )

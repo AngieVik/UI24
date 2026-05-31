@@ -48,9 +48,9 @@ export function useChecklist() {
 
     const mutationUuid = crypto.randomUUID()
     const payload = {
-      mutation_uuid:      mutationUuid,
-      p_id_checklist:     idChecklist,
-      p_items_revisados:  items,
+      mutation_uuid: mutationUuid,
+      p_id_checklist: idChecklist,
+      p_items_revisados: items,
     }
 
     try {

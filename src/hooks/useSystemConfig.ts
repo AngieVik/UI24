@@ -43,7 +43,11 @@ export function useSystemConfig() {
     try {
       const [cfgRes, verRes] = await Promise.all([
         supabase.from('system_config').select('*').order('clave'),
-        supabase.from('versiones_cliente').select('*').eq('activa', true).order('publicada_at', { ascending: false }),
+        supabase
+          .from('versiones_cliente')
+          .select('*')
+          .eq('activa', true)
+          .order('publicada_at', { ascending: false }),
       ])
       if (cfgRes.error) throw cfgRes.error
       if (verRes.error) throw verRes.error
@@ -62,26 +66,41 @@ export function useSystemConfig() {
     }
   }, [])
 
-  const setConfigValue = useCallback(async (clave: string, valor: unknown): Promise<boolean> => {
-    setSubmitting(true)
-    setError(null)
-    try {
-      const { error: err } = await supabase.rpc('rpc_set_system_config', {
-        p_clave: clave,
-        p_valor: valor as import('../types/supabase').Json,
-      })
-      if (err) throw err
-      await cargarConfig()
-      return true
-    } catch (e) {
-      setError(resolveRpcError(e))
-      return false
-    } finally {
-      setSubmitting(false)
-    }
+  const setConfigValue = useCallback(
+    async (clave: string, valor: unknown): Promise<boolean> => {
+      setSubmitting(true)
+      setError(null)
+      try {
+        const { error: err } = await supabase.rpc('rpc_set_system_config', {
+          p_clave: clave,
+          p_valor: valor as import('../types/supabase').Json,
+        })
+        if (err) throw err
+        await cargarConfig()
+        return true
+      } catch (e) {
+        setError(resolveRpcError(e))
+        return false
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [cargarConfig]
+  )
+
+  useEffect(() => {
+    cargarConfig()
   }, [cargarConfig])
 
-  useEffect(() => { cargarConfig() }, [cargarConfig])
-
-  return { config, versiones, forceUpdate, loading, submitting, error, setError, cargarConfig, setConfigValue }
+  return {
+    config,
+    versiones,
+    forceUpdate,
+    loading,
+    submitting,
+    error,
+    setError,
+    cargarConfig,
+    setConfigValue,
+  }
 }

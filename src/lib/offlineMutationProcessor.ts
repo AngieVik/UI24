@@ -1,6 +1,10 @@
 import { QueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { useOfflineMutationQueue, MAX_ATTEMPTS, type PendingMutation } from '@/lib/offlineMutationQueue'
+import {
+  useOfflineMutationQueue,
+  MAX_ATTEMPTS,
+  type PendingMutation,
+} from '@/lib/offlineMutationQueue'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { loadBlob, deleteBlob } from '@/lib/blobStorage'
 
@@ -24,17 +28,23 @@ export function registerOfflineMutationProcessor(queryClient: QueryClient): void
   if (listenerRegistered) return
   listenerRegistered = true
 
-  const handler = () => { void drainQueue(queryClient) }
+  const handler = () => {
+    void drainQueue(queryClient)
+  }
   window.addEventListener('online', handler)
 
   // Drain inicial si arrancamos online y hay cola pendiente.
   if (typeof navigator !== 'undefined' && navigator.onLine) {
     // Pequeño retraso para no penalizar el FCP.
-    setTimeout(() => { void drainQueue(queryClient) }, 1500)
+    setTimeout(() => {
+      void drainQueue(queryClient)
+    }, 1500)
   }
 }
 
-export async function drainQueue(queryClient: QueryClient): Promise<{ synced: number; failed: number }> {
+export async function drainQueue(
+  queryClient: QueryClient
+): Promise<{ synced: number; failed: number }> {
   const state = useOfflineMutationQueue.getState()
   if (state.isProcessing) return { synced: 0, failed: 0 }
 
@@ -59,9 +69,9 @@ export async function drainQueue(queryClient: QueryClient): Promise<{ synced: nu
       else failed++
     }
 
-    useGlobalStore.getState().setPendingQueueCount(
-      useOfflineMutationQueue.getState().pending.length,
-    )
+    useGlobalStore
+      .getState()
+      .setPendingQueueCount(useOfflineMutationQueue.getState().pending.length)
     return { synced, failed }
   } finally {
     state.setProcessing(false)
@@ -78,7 +88,7 @@ async function processOne(mutation: PendingMutation, queryClient: QueryClient): 
       const blob = await loadBlob(mutation.blob.key)
       if (blob) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const storage = (supabase.storage as any)
+        const storage = supabase.storage as any
         const { data: up, error: upErr } = await storage
           .from(mutation.blob.bucket)
           .upload(mutation.blob.storagePath, blob, { contentType: 'image/webp', upsert: true })

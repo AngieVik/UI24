@@ -19,11 +19,18 @@ if (!window.matchMedia) {
 // jsdom no implementa ResizeObserver — Radix UI (Tooltip, Popover, etc.) lo necesita
 if (!('ResizeObserver' in globalThis)) {
   class ResizeObserverMock {
-    observe()    { /* no-op */ }
-    unobserve()  { /* no-op */ }
-    disconnect() { /* no-op */ }
+    observe() {
+      /* no-op */
+    }
+    unobserve() {
+      /* no-op */
+    }
+    disconnect() {
+      /* no-op */
+    }
   }
-  ;(globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver = ResizeObserverMock
+  ;(globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver =
+    ResizeObserverMock
 }
 
 // jsdom no implementa hasPointerCapture / scrollIntoView — Radix los usa en Tooltip/Select

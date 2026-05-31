@@ -74,10 +74,7 @@ export const useOfflineMutationQueue = create<OfflineMutationQueueState>()(
 
       enqueue(m) {
         set((s) => ({
-          pending: [
-            ...s.pending,
-            { ...m, enqueuedAt: new Date().toISOString(), attempts: 0 },
-          ],
+          pending: [...s.pending, { ...m, enqueuedAt: new Date().toISOString(), attempts: 0 }],
         }))
       },
 
@@ -103,9 +100,7 @@ export const useOfflineMutationQueue = create<OfflineMutationQueueState>()(
       retryFailed() {
         set((s) => ({
           pending: s.pending.map((p) =>
-            p.failed
-              ? { ...p, failed: false, attempts: 0, lastError: undefined }
-              : p,
+            p.failed ? { ...p, failed: false, attempts: 0, lastError: undefined } : p
           ),
         }))
       },
@@ -130,6 +125,6 @@ export const useOfflineMutationQueue = create<OfflineMutationQueueState>()(
         // quedado en true. Reset al hidratar.
         state?._reset()
       },
-    },
-  ),
+    }
+  )
 )

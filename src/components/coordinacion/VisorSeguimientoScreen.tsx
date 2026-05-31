@@ -3,13 +3,20 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { useFlotaCompleta } from '@/hooks/useFlotaCompleta'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 interface PersonalActivo {
-  id_nombre:  string
+  id_nombre: string
   id_terminal: string
   checkin_at: string
 }
@@ -34,10 +41,10 @@ function fmtTime(iso: string): string {
 }
 
 const ESTADO_VARIANT: Record<string, 'ok' | 'warn' | 'destructive' | 'secondary'> = {
-  disponible:    'ok',
-  en_servicio:   'ok',
-  en_drp:        'warn',
-  inoperativo:   'destructive',
+  disponible: 'ok',
+  en_servicio: 'ok',
+  en_drp: 'warn',
+  inoperativo: 'destructive',
   en_mantenimiento: 'secondary',
 }
 
@@ -47,11 +54,12 @@ export function VisorSeguimientoScreen() {
 
   const activos = vehiculos.filter((v) => v.estado_operativo !== 'inoperativo')
 
-  function reload() { personalQ.refetch() }
+  function reload() {
+    personalQ.refetch()
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Map aria-hidden="true" className="size-5 text-muted-foreground" />
@@ -135,7 +143,10 @@ export function VisorSeguimientoScreen() {
                     <TableRow key={v.matricula}>
                       <TableCell className="font-bold">{v.matricula}</TableCell>
                       <TableCell>
-                        <Badge variant={ESTADO_VARIANT[v.estado_operativo] ?? 'info'} className="text-xs">
+                        <Badge
+                          variant={ESTADO_VARIANT[v.estado_operativo] ?? 'info'}
+                          className="text-xs"
+                        >
                           {v.subestado_operativo ?? v.estado_operativo.replace(/_/g, ' ')}
                         </Badge>
                       </TableCell>

@@ -37,8 +37,8 @@ import {
 // ── Tipo exportado — usado en useCerrarChecklist360 ───────────
 
 export interface ItemRespuesta {
-  estado:               EstadoEvaluacion
-  campos_extra:         Record<string, string | string[]>
+  estado: EstadoEvaluacion
+  campos_extra: Record<string, string | string[]>
   es_incidencia_heredada: boolean
 }
 
@@ -47,44 +47,50 @@ export interface ItemRespuesta {
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-ES', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
-const ESTADO_CONFIG: Record<EstadoEvaluacion, {
-  label: string
-  shortLabel: string
-  icon: React.ComponentType<{ className?: string }>
-  btnClass: string
-  activeClass: string
-}> = {
+const ESTADO_CONFIG: Record<
+  EstadoEvaluacion,
+  {
+    label: string
+    shortLabel: string
+    icon: React.ComponentType<{ className?: string }>
+    btnClass: string
+    activeClass: string
+  }
+> = {
   OK: {
     label: 'Correcto',
     shortLabel: 'OK',
     icon: CheckCircle2,
-    btnClass:   'border-green-200 text-green-700 hover:bg-green-50',
+    btnClass: 'border-green-200 text-green-700 hover:bg-green-50',
     activeClass: 'bg-green-600 text-white border-green-600 hover:bg-green-700',
   },
   OBSERVACION: {
     label: 'Observación',
     shortLabel: 'OBS',
     icon: AlertTriangle,
-    btnClass:   'border-amber-200 text-amber-700 hover:bg-amber-50',
+    btnClass: 'border-amber-200 text-amber-700 hover:bg-amber-50',
     activeClass: 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600',
   },
   INOPERATIVO: {
     label: 'Inoperativo',
     shortLabel: 'INO',
     icon: XCircle,
-    btnClass:   'border-red-200 text-red-700 hover:bg-red-50',
+    btnClass: 'border-red-200 text-red-700 hover:bg-red-50',
     activeClass: 'bg-red-600 text-white border-red-600 hover:bg-red-700',
   },
   NO_APLICA: {
     label: 'No aplica',
     shortLabel: 'N/A',
     icon: MinusCircle,
-    btnClass:   'border-zinc-200 text-zinc-500 hover:bg-zinc-50',
+    btnClass: 'border-zinc-200 text-zinc-500 hover:bg-zinc-50',
     activeClass: 'bg-zinc-400 text-white border-zinc-400 hover:bg-zinc-500',
   },
 }
@@ -92,8 +98,8 @@ const ESTADO_CONFIG: Record<EstadoEvaluacion, {
 // ── Sub-componente: botones de estado ─────────────────────────
 
 interface EstadoButtonsProps {
-  itemId:   string
-  current:  EstadoEvaluacion | null
+  itemId: string
+  current: EstadoEvaluacion | null
   disabled: boolean
   onChange: (estado: EstadoEvaluacion) => void
 }
@@ -102,11 +108,15 @@ function EstadoButtons({ itemId, current, disabled, onChange }: EstadoButtonsPro
   const estados: EstadoEvaluacion[] = ['OK', 'OBSERVACION', 'INOPERATIVO', 'NO_APLICA']
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={`Estado del ítem ${itemId}`}>
+    <div
+      className="mt-2 flex flex-wrap gap-1.5"
+      role="group"
+      aria-label={`Estado del ítem ${itemId}`}
+    >
       {estados.map((estado) => {
-        const cfg     = ESTADO_CONFIG[estado]
+        const cfg = ESTADO_CONFIG[estado]
         const isActive = current === estado
-        const Icon     = cfg.icon
+        const Icon = cfg.icon
 
         return (
           <button
@@ -138,9 +148,9 @@ import { SubField } from '@/data/checklist360Catalog'
 
 interface SubFieldsProps {
   subFields: SubField[]
-  values:    Record<string, string | string[]>
-  disabled:  boolean
-  onChange:  (key: string, value: string | string[]) => void
+  values: Record<string, string | string[]>
+  disabled: boolean
+  onChange: (key: string, value: string | string[]) => void
 }
 
 function SubFields({ subFields, values, disabled, onChange }: SubFieldsProps) {
@@ -157,7 +167,9 @@ function SubFields({ subFields, values, disabled, onChange }: SubFieldsProps) {
             >
               {field.label}
               {field.required && (
-                <span className="ml-1 text-destructive" aria-hidden="true">*</span>
+                <span className="ml-1 text-destructive" aria-hidden="true">
+                  *
+                </span>
               )}
             </label>
 
@@ -191,7 +203,9 @@ function SubFields({ subFields, values, disabled, onChange }: SubFieldsProps) {
               >
                 <option value="">— Seleccionar —</option>
                 {field.options?.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
                 ))}
               </select>
             ) : (
@@ -214,7 +228,7 @@ function SubFields({ subFields, values, disabled, onChange }: SubFieldsProps) {
                         const arr = value as string[]
                         onChange(
                           field.key,
-                          isSelected ? arr.filter((v) => v !== opt) : [...arr, opt],
+                          isSelected ? arr.filter((v) => v !== opt) : [...arr, opt]
                         )
                       }}
                       className={[
@@ -242,17 +256,17 @@ function SubFields({ subFields, values, disabled, onChange }: SubFieldsProps) {
 // ── Sub-componente: fila de ítem ──────────────────────────────
 
 interface ItemRowProps {
-  item:        ChecklistItem
-  respuesta:   ItemRespuesta | null
-  disabled:    boolean
-  onChangeEstado:     (id: string, estado: EstadoEvaluacion) => void
+  item: ChecklistItem
+  respuesta: ItemRespuesta | null
+  disabled: boolean
+  onChangeEstado: (id: string, estado: EstadoEvaluacion) => void
   onChangeCampoExtra: (id: string, key: string, value: string | string[]) => void
 }
 
 function ItemRow({ item, respuesta, disabled, onChangeEstado, onChangeCampoExtra }: ItemRowProps) {
-  const estado        = respuesta?.estado ?? null
-  const camposExtra   = respuesta?.campos_extra ?? {}
-  const esHeredado    = respuesta?.es_incidencia_heredada ?? false
+  const estado = respuesta?.estado ?? null
+  const camposExtra = respuesta?.campos_extra ?? {}
+  const esHeredado = respuesta?.es_incidencia_heredada ?? false
   const tieneSubCampos = estado === 'OBSERVACION' || estado === 'INOPERATIVO'
 
   return (
@@ -336,23 +350,27 @@ function ItemRow({ item, respuesta, disabled, onChangeEstado, onChangeCampoExtra
 // ── Sub-componente: sección ───────────────────────────────────
 
 interface SectionCardProps {
-  section:    ChecklistSection
+  section: ChecklistSection
   respuestas: Record<string, ItemRespuesta | null>
-  esVIR:      boolean
-  disabled:   boolean
-  onChangeEstado:     (id: string, estado: EstadoEvaluacion) => void
+  esVIR: boolean
+  disabled: boolean
+  onChangeEstado: (id: string, estado: EstadoEvaluacion) => void
   onChangeCampoExtra: (id: string, key: string, value: string | string[]) => void
 }
 
 function SectionCard({
-  section, respuestas, esVIR, disabled,
-  onChangeEstado, onChangeCampoExtra,
+  section,
+  respuestas,
+  esVIR,
+  disabled,
+  onChangeEstado,
+  onChangeCampoExtra,
 }: SectionCardProps) {
   const visibleItems = section.items.filter((item) => !item.soloVIR || esVIR)
   if (visibleItems.length === 0) return null
 
-  const totalItems    = visibleItems.length
-  const itemsEval     = visibleItems.filter((i) => respuestas[i.id]?.estado).length
+  const totalItems = visibleItems.length
+  const itemsEval = visibleItems.filter((i) => respuestas[i.id]?.estado).length
   const todosEvaluados = itemsEval === totalItems
 
   return (
@@ -400,9 +418,9 @@ interface ChecklistCerradoViewProps {
 function ChecklistCerradoView({ data }: ChecklistCerradoViewProps) {
   if (!data) return null
 
-  const items      = data.items_revisados as Record<string, ItemRespuesta>
+  const items = data.items_revisados as Record<string, ItemRespuesta>
   const incidencias = Object.entries(items).filter(
-    ([, r]) => r.estado === 'OBSERVACION' || r.estado === 'INOPERATIVO',
+    ([, r]) => r.estado === 'OBSERVACION' || r.estado === 'INOPERATIVO'
   )
 
   return (
@@ -461,7 +479,7 @@ function ChecklistCerradoView({ data }: ChecklistCerradoViewProps) {
 
 interface ChecklistContentProps {
   idChecklist: string
-  matricula:   string
+  matricula: string
 }
 
 function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
@@ -472,8 +490,8 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
 
   // ── Tipo de vehículo (VIR) ──────────────────────────────────
   const { data: vehiculoData } = useQuery({
-    queryKey:  ['vehiculo_tipo', matricula],
-    enabled:   !!matricula,
+    queryKey: ['vehiculo_tipo', matricula],
+    enabled: !!matricula,
     staleTime: 30 * 60_000, // tipo de vehículo no cambia durante el turno
     queryFn: async () => {
       const { data, error } = await supabase
@@ -488,10 +506,10 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
   const esVIR = vehiculoData?.tipo === 'VIR'
 
   // ── Estado local del formulario ─────────────────────────────
-  const visibleItems  = getVisibleItems(esVIR)
+  const visibleItems = getVisibleItems(esVIR)
   const [respuestas, setRespuestas] = useState<Record<string, ItemRespuesta>>({})
   const [heredadoInit, setHeredadoInit] = useState(false)
-  const [showModal, setShowModal]       = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const [submitResult, setSubmitResult] = useState<'ok' | 'queued' | null>(null)
 
   // Pre-cargar herencia una sola vez cuando anterior está disponible
@@ -524,19 +542,16 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
   }, [anterior, isLoadingAnterior, heredadoInit, visibleItems])
 
   // ── Callbacks ───────────────────────────────────────────────
-  const handleChangeEstado = useCallback(
-    (itemId: string, estado: EstadoEvaluacion) => {
-      setRespuestas((prev) => ({
-        ...prev,
-        [itemId]: {
-          estado,
-          campos_extra: prev[itemId]?.campos_extra ?? {},
-          es_incidencia_heredada: prev[itemId]?.es_incidencia_heredada ?? false,
-        },
-      }))
-    },
-    [],
-  )
+  const handleChangeEstado = useCallback((itemId: string, estado: EstadoEvaluacion) => {
+    setRespuestas((prev) => ({
+      ...prev,
+      [itemId]: {
+        estado,
+        campos_extra: prev[itemId]?.campos_extra ?? {},
+        es_incidencia_heredada: prev[itemId]?.es_incidencia_heredada ?? false,
+      },
+    }))
+  }, [])
 
   const handleChangeCampoExtra = useCallback(
     (itemId: string, key: string, value: string | string[]) => {
@@ -553,11 +568,11 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
         },
       }))
     },
-    [],
+    []
   )
 
   // ── Cálculos ────────────────────────────────────────────────
-  const totalVisible   = visibleItems.length
+  const totalVisible = visibleItems.length
   const totalEvaluados = visibleItems.filter((i) => !!respuestas[i.id]?.estado).length
   const todosCompletos = totalEvaluados === totalVisible
 
@@ -600,9 +615,7 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
   if (checklist?.cerrado) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-        <h2 className="font-display text-lg font-bold">
-          Checklist 360° — Revisión del vehículo
-        </h2>
+        <h2 className="font-display text-lg font-bold">Checklist 360° — Revisión del vehículo</h2>
         <ChecklistCerradoView data={checklist} />
       </div>
     )
@@ -637,10 +650,7 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
         <h2 className="font-display text-lg font-bold leading-tight">
           Checklist 360° — Revisión del vehículo
         </h2>
-        <Badge
-          variant="info"
-          aria-label={`${totalEvaluados} de ${totalVisible} ítems evaluados`}
-        >
+        <Badge variant="info" aria-label={`${totalEvaluados} de ${totalVisible} ítems evaluados`}>
           {totalEvaluados}/{totalVisible}
         </Badge>
       </div>
@@ -664,9 +674,7 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
           )}
           <div className="text-right">
             <p className="font-body text-xs text-muted-foreground">Inicio revisión</p>
-            <p className="font-body text-sm">
-              {fmtDateTime(checklist?.timestamp_inicio)}
-            </p>
+            <p className="font-body text-sm">{fmtDateTime(checklist?.timestamp_inicio)}</p>
           </div>
         </CardContent>
       </Card>
@@ -711,8 +719,8 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
           {isSubmitting
             ? 'Guardando…'
             : todosCompletos
-            ? 'Completar revisión 360°'
-            : `Faltan ${totalVisible - totalEvaluados} ítems`}
+              ? 'Completar revisión 360°'
+              : `Faltan ${totalVisible - totalEvaluados} ítems`}
         </Button>
       </div>
 
@@ -724,7 +732,9 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
             <DialogDescription id="checklist-confirm-description">
               {(() => {
                 const incidencias = visibleItems.filter(
-                  (i) => respuestas[i.id]?.estado === 'OBSERVACION' || respuestas[i.id]?.estado === 'INOPERATIVO',
+                  (i) =>
+                    respuestas[i.id]?.estado === 'OBSERVACION' ||
+                    respuestas[i.id]?.estado === 'INOPERATIVO'
                 ).length
                 return incidencias > 0
                   ? `Se han registrado ${incidencias} incidencia${incidencias !== 1 ? 's' : ''}. El sistema generará avisos de avería automáticamente. ¿Confirmar y cerrar la revisión?`
@@ -740,10 +750,7 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
             >
               Cancelar
             </Button>
-            <Button
-              onClick={handleConfirmar}
-              aria-label="confirmar revisión 360°"
-            >
+            <Button onClick={handleConfirmar} aria-label="confirmar revisión 360°">
               Confirmar revisión
             </Button>
           </DialogFooter>
@@ -757,7 +764,7 @@ function ChecklistContent({ idChecklist, matricula }: ChecklistContentProps) {
 
 export function Checklist360Screen() {
   const idChecklist = useActivacionStore((s) => s.id_checklist)
-  const matricula   = useActivacionStore((s) => s.matricula)
+  const matricula = useActivacionStore((s) => s.matricula)
 
   // Gate: sin vehículo activado (checklist es exclusivo del vehículo)
   if (!idChecklist || !matricula) {

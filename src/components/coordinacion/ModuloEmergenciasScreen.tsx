@@ -29,7 +29,9 @@ function useGalletas(tipo: 'pq' | 'normal') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('galletas_emergencia')
-        .select('id_galleta, tipo, token, estado, timestamp_emision, timestamp_uso, timestamp_expiracion')
+        .select(
+          'id_galleta, tipo, token, estado, timestamp_emision, timestamp_uso, timestamp_expiracion'
+        )
         .eq('tipo', tipo)
         .order('timestamp_emision', { ascending: false })
         .limit(20)
@@ -41,7 +43,12 @@ function useGalletas(tipo: 'pq' | 'normal') {
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function GalletaPanel({ tipo }: { tipo: 'pq' | 'normal' }) {
@@ -101,8 +108,17 @@ function GalletaPanel({ tipo }: { tipo: 'pq' | 'normal' }) {
               disabled={submitting}
             />
           </Field>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <Button size="sm" className="w-full" onClick={handleEmitir} disabled={submitting || !idNombre.trim()}>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={handleEmitir}
+            disabled={submitting || !idNombre.trim()}
+          >
             {submitting ? 'Emitiendo…' : 'Emitir token'}
           </Button>
         </CardContent>
@@ -122,7 +138,9 @@ function GalletaPanel({ tipo }: { tipo: 'pq' | 'normal' }) {
             <p className="text-xs text-muted-foreground">
               Expira: {fmtDateTime(emitida.timestamp_expiracion)}
             </p>
-            <Button size="sm" variant="ghost" onClick={() => setEmitida(null)}>Cerrar</Button>
+            <Button size="sm" variant="ghost" onClick={() => setEmitida(null)}>
+              Cerrar
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -130,8 +148,15 @@ function GalletaPanel({ tipo }: { tipo: 'pq' | 'normal' }) {
       {/* Historial */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-bold uppercase text-muted-foreground">Historial reciente</span>
-          <Button size="sm" variant="ghost" onClick={() => query.refetch()} aria-label="Recargar historial">
+          <span className="text-xs font-bold uppercase text-muted-foreground">
+            Historial reciente
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => query.refetch()}
+            aria-label="Recargar historial"
+          >
             <RefreshCw className="size-3" aria-hidden="true" />
           </Button>
         </div>
@@ -142,12 +167,17 @@ function GalletaPanel({ tipo }: { tipo: 'pq' | 'normal' }) {
         ) : (
           <div className="space-y-2">
             {(query.data ?? []).map((g) => (
-              <div key={g.id_galleta} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+              <div
+                key={g.id_galleta}
+                className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+              >
                 <code className="font-mono text-sm">{g.token}</code>
                 <Badge variant={g.estado === 'activa' ? 'ok' : 'secondary'} className="text-xs">
                   {g.estado}
                 </Badge>
-                <span className="text-xs text-muted-foreground">{fmtDateTime(g.timestamp_emision)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {fmtDateTime(g.timestamp_emision)}
+                </span>
               </div>
             ))}
           </div>
@@ -170,10 +200,12 @@ export function ModuloEmergenciasScreen({ vista }: { vista?: 'pq' | 'normal' }) 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full">
           <TabsTrigger value="pq">
-            <Cookie className="size-3.5 mr-1" />Galleta pequeña
+            <Cookie className="size-3.5 mr-1" />
+            Galleta pequeña
           </TabsTrigger>
           <TabsTrigger value="normal">
-            <Cookie className="size-3.5 mr-1" />Galleta
+            <Cookie className="size-3.5 mr-1" />
+            Galleta
           </TabsTrigger>
         </TabsList>
         <TabsContent value="pq" className="mt-3">

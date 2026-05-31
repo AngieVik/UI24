@@ -3,11 +3,11 @@ import { useOfflineMutation } from '@/hooks/useOfflineMutation'
 
 interface AnotarVars {
   id_parte: string
-  notas:    string
+  notas: string
 }
 
 interface AnotarResult {
-  online:   boolean
+  online: boolean
   id_parte: string
 }
 
@@ -22,9 +22,9 @@ export function useAnotarParte() {
 
   const mut = useOfflineMutation<{
     p_id_parte: string
-    p_notas:    string
+    p_notas: string
   }>({
-    rpcName:   'rpc_anotar_parte',
+    rpcName: 'rpc_anotar_parte',
     invalidates: [['doc8_activo']],
   })
 
@@ -34,11 +34,11 @@ export function useAnotarParte() {
     try {
       const res = await mut.mutateAsync({
         p_id_parte: vars.id_parte,
-        p_notas:    vars.notas,
+        p_notas: vars.notas,
       })
 
       return {
-        online:   !res.queued,
+        online: !res.queued,
         id_parte: vars.id_parte,
       }
     } catch (err) {

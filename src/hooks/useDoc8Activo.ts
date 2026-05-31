@@ -4,27 +4,27 @@ import { useTurnoStore } from '@/stores/useTurnoStore'
 import { useRealtimeInvalidator } from '@/hooks/useRealtimeInvalidator'
 
 export interface Doc8Data {
-  id_parte:         string
-  id_activacion:    string | null   // nullable — shift can exist without a vehicle
-  id_nombre:        string          // worker who opened the shift
-  km_inicio:        number | null
-  km_fin:           number | null
+  id_parte: string
+  id_activacion: string | null // nullable — shift can exist without a vehicle
+  id_nombre: string // worker who opened the shift
+  km_inicio: number | null
+  km_fin: number | null
   timestamp_inicio: string
-  timestamp_fin:    string | null
-  estado:           'Abierto_En_Turno' | 'Enviado_Cerrado'
-  notas:            string | null
+  timestamp_fin: string | null
+  estado: 'Abierto_En_Turno' | 'Enviado_Cerrado'
+  notas: string | null
   // From activaciones_vehiculo — null when no vehicle is active
-  matricula:        string | null
-  pilot:            string | null
-  carry:            string | null
-  tipo_servicio:    string | null
+  matricula: string | null
+  pilot: string | null
+  carry: string | null
+  tipo_servicio: string | null
 }
 
 interface UseDoc8ActivoResult {
-  data:      Doc8Data | null
+  data: Doc8Data | null
   isLoading: boolean
-  isError:   boolean
-  error:     Error | null
+  isError: boolean
+  error: Error | null
 }
 
 /**
@@ -45,8 +45,8 @@ export function useDoc8Activo(): UseDoc8ActivoResult {
 
   const realtimeActive = useRealtimeInvalidator({
     channelName: `doc8-activo-${idParte || 'none'}`,
-    table:       'doc8_partes_trabajo',
-    filter:      idParte ? `id_parte=eq.${idParte}` : undefined,
+    table: 'doc8_partes_trabajo',
+    filter: idParte ? `id_parte=eq.${idParte}` : undefined,
     queryKey,
   })
 
@@ -61,7 +61,8 @@ export function useDoc8Activo(): UseDoc8ActivoResult {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('doc8_partes_trabajo')
-        .select(`
+        .select(
+          `
           id_parte,
           id_activacion,
           id_nombre,
@@ -77,7 +78,8 @@ export function useDoc8Activo(): UseDoc8ActivoResult {
             carry,
             tipo_servicio
           )
-        `)
+        `
+        )
         .eq('id_parte', idParte)
         .single()
 
@@ -86,34 +88,34 @@ export function useDoc8Activo(): UseDoc8ActivoResult {
 
       // LEFT join: activaciones_vehiculo will be null if id_activacion is null
       const av = data.activaciones_vehiculo as {
-        matricula:     string
-        pilot:         string
-        carry:         string | null
+        matricula: string
+        pilot: string
+        carry: string | null
         tipo_servicio: string
       } | null
 
       return {
-        id_parte:         data.id_parte,
-        id_activacion:    data.id_activacion,
-        id_nombre:        (data as unknown as { id_nombre: string }).id_nombre ?? '',
-        km_inicio:        data.km_inicio,
-        km_fin:           data.km_fin,
+        id_parte: data.id_parte,
+        id_activacion: data.id_activacion,
+        id_nombre: (data as unknown as { id_nombre: string }).id_nombre ?? '',
+        km_inicio: data.km_inicio,
+        km_fin: data.km_fin,
         timestamp_inicio: data.timestamp_inicio,
-        timestamp_fin:    data.timestamp_fin,
-        estado:           data.estado as 'Abierto_En_Turno' | 'Enviado_Cerrado',
-        notas:            data.notas ?? null,
-        matricula:        av?.matricula ?? null,
-        pilot:            av?.pilot ?? null,
-        carry:            av?.carry ?? null,
-        tipo_servicio:    av?.tipo_servicio ?? null,
+        timestamp_fin: data.timestamp_fin,
+        estado: data.estado as 'Abierto_En_Turno' | 'Enviado_Cerrado',
+        notas: data.notas ?? null,
+        matricula: av?.matricula ?? null,
+        pilot: av?.pilot ?? null,
+        carry: av?.carry ?? null,
+        tipo_servicio: av?.tipo_servicio ?? null,
       }
     },
   })
 
   return {
-    data:      query.data ?? null,
+    data: query.data ?? null,
     isLoading: query.isLoading,
-    isError:   query.isError,
-    error:     (query.error as Error | null) ?? null,
+    isError: query.isError,
+    error: (query.error as Error | null) ?? null,
   }
 }

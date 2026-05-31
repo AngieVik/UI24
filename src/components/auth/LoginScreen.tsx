@@ -13,11 +13,13 @@ import logoUrl from '@/assets/logo.svg'
 
 const schema = z.object({
   identificador: z.string().min(1, 'Identificador requerido'),
-  password:      z.string().min(8, 'Mínimo 8 caracteres'),
+  password: z.string().min(8, 'Mínimo 8 caracteres'),
 })
 type Schema = z.infer<typeof schema>
 
-const APP_VERSION = (typeof window !== 'undefined' && (window as { __APP_VERSION__?: string }).__APP_VERSION__) || '0.1.0'
+const APP_VERSION =
+  (typeof window !== 'undefined' && (window as { __APP_VERSION__?: string }).__APP_VERSION__) ||
+  '0.1.0'
 
 export function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false)
@@ -46,18 +48,12 @@ export function LoginScreen() {
       aria-label="Acceso al terminal"
     >
       <div className="flex w-full max-w-[360px] flex-col items-center gap-5">
-        <img
-          src={logoUrl}
-          alt="U24 Servicios Sanitarios"
-          className="h-24 w-auto"
-        />
+        <img src={logoUrl} alt="U24 Servicios Sanitarios" className="h-24 w-auto" />
 
         <Card className="w-full">
           <CardContent className="space-y-4 p-6">
             <header className="space-y-1">
-              <h1 className="font-display text-xl font-bold leading-tight">
-                Acceso al terminal
-              </h1>
+              <h1 className="font-display text-xl font-bold leading-tight">Acceso al terminal</h1>
               <p className="font-body text-base font-light text-muted-foreground">
                 Identifícate para entrar al control operativo.
               </p>
@@ -92,9 +88,7 @@ export function LoginScreen() {
                       aria-invalid={fieldState.invalid}
                       disabled={isLoading || !isOnline}
                     />
-                    {fieldState.error && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
+                    {fieldState.error && <FieldError errors={[fieldState.error]} />}
                   </Field>
                 )}
               />
@@ -122,35 +116,26 @@ export function LoginScreen() {
                         tabIndex={-1}
                         className="absolute inset-y-0 right-0 grid w-9 place-items-center text-muted-foreground hover:text-foreground"
                       >
-                        {showPassword
-                          ? <EyeOff aria-hidden="true" className="size-4" />
-                          : <Eye   aria-hidden="true" className="size-4" />}
+                        {showPassword ? (
+                          <EyeOff aria-hidden="true" className="size-4" />
+                        ) : (
+                          <Eye aria-hidden="true" className="size-4" />
+                        )}
                       </button>
                     </div>
-                    {fieldState.error && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
+                    {fieldState.error && <FieldError errors={[fieldState.error]} />}
                   </Field>
                 )}
               />
 
-              <div
-                role="alert"
-                aria-live="polite"
-                className="min-h-5 text-base text-destructive"
-              >
+              <div role="alert" aria-live="polite" className="min-h-5 text-base text-destructive">
                 {error}
               </div>
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading || !isOnline}
-              >
+              <Button type="submit" className="w-full" disabled={isLoading || !isOnline}>
                 {isLoading ? 'Verificando…' : 'Login'}
               </Button>
             </form>
-
           </CardContent>
         </Card>
 

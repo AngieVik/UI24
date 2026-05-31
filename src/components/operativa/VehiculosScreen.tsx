@@ -25,10 +25,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFlotaCompleta, type VehiculoFila } from '@/hooks/useFlotaCompleta'
-import {
-  useActualizarVehiculo,
-  type TipoServicio,
-} from '@/hooks/useActualizarVehiculo'
+import { useActualizarVehiculo, type TipoServicio } from '@/hooks/useActualizarVehiculo'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 import { formatRol } from '@/lib/formatRol'
 
@@ -39,40 +36,40 @@ const TIPO_ORDER = ['A1', 'A2', 'B', 'C', 'VIR', 'Quad', 'Unidad Movil', 'Logist
 
 const ESTADO_LABELS: Record<string, string> = {
   desactivado: 'Desactivado',
-  activado:    'Activado',
-  en_drp:      'En DRP',
+  activado: 'Activado',
+  en_drp: 'En DRP',
   // legado
-  inactivo:    'Desactivado',
-  activo:      'Activado',
+  inactivo: 'Desactivado',
+  activo: 'Activado',
 }
 
 const SUBESTADO_LABELS: Record<string, string> = {
-  en_espera:   'En espera',
-  ruta:        'En ruta',
+  en_espera: 'En espera',
+  ruta: 'En ruta',
   estacionado: 'Estacionado',
-  alerta:      'Alerta',
+  alerta: 'Alerta',
 }
 
 const TIPO_SERVICIO_LABELS: Record<TipoServicio, string> = {
-  programado:        'Programado',
-  dispositivo:       'Dispositivo',
-  traslado:          'Traslado',
+  programado: 'Programado',
+  dispositivo: 'Dispositivo',
+  traslado: 'Traslado',
   guardia_urgencias: 'Guardia urgencias',
-  drp:               'DRP',
-  privado:           'Privado',
-  simulacro:         'Simulacro',
-  formacion:         'Formación',
-  sin_asignar:       'Sin asignar',
+  drp: 'DRP',
+  privado: 'Privado',
+  simulacro: 'Simulacro',
+  formacion: 'Formación',
+  sin_asignar: 'Sin asignar',
 }
 
 const CONDICION_LABEL: Record<string, string> = {
-  operativo:     'Operativo',
+  operativo: 'Operativo',
   averiado_leve: 'Avería leve',
-  critico:       'Crítico',
+  critico: 'Crítico',
   // legado
   averiado_grave: 'Avería grave',
-  en_taller:     'En taller',
-  dado_de_baja:  'Dado de baja',
+  en_taller: 'En taller',
+  dado_de_baja: 'Dado de baja',
 }
 
 function estadoVariant(estado: string): 'default' | 'secondary' | 'outline' | 'destructive' {
@@ -89,16 +86,17 @@ function subestadoVariant(s: string): 'default' | 'secondary' | 'outline' | 'des
 
 function condicionVariant(c: string): 'secondary' | 'destructive' | 'outline' {
   if (c === 'operativo') return 'secondary'
-  if (c === 'critico' || c === 'dado_de_baja' || c === 'en_taller' || c === 'averiado_grave') return 'destructive'
+  if (c === 'critico' || c === 'dado_de_baja' || c === 'en_taller' || c === 'averiado_grave')
+    return 'destructive'
   return 'outline'
 }
 
 function SubestadoIcon({ subestado }: { subestado: string }) {
   const icons: Record<string, typeof Power> = {
-    en_espera:   Pause,
-    ruta:        Navigation,
+    en_espera: Pause,
+    ruta: Navigation,
     estacionado: Clock,
-    alerta:      AlertTriangle,
+    alerta: AlertTriangle,
   }
   const Icon = icons[subestado] ?? Disc3
   return <Icon aria-hidden="true" className="size-4" />
@@ -111,18 +109,18 @@ export function VehiculosScreen() {
   const personal = usePersonalEnTurno()
   const { run, isSubmitting, error } = useActualizarVehiculo()
 
-  const [selectedMatricula, setSelectedMatricula]   = useState<string | null>(null)
-  const [mode, setMode]                             = useState<'view' | 'iniciar' | 'finalizar'>('view')
-  const [tipoServicio, setTipoServicio]             = useState<TipoServicio>('sin_asignar')
-  const [pilot, setPilot]                           = useState('')
-  const [carry, setCarry]                           = useState(NO_CARRY)
-  const [kmInicio, setKmInicio]                     = useState<number | ''>('')
-  const [kmFin, setKmFin]                           = useState<number | ''>('')
-  const [feedback, setFeedback]                     = useState<string | null>(null)
+  const [selectedMatricula, setSelectedMatricula] = useState<string | null>(null)
+  const [mode, setMode] = useState<'view' | 'iniciar' | 'finalizar'>('view')
+  const [tipoServicio, setTipoServicio] = useState<TipoServicio>('sin_asignar')
+  const [pilot, setPilot] = useState('')
+  const [carry, setCarry] = useState(NO_CARRY)
+  const [kmInicio, setKmInicio] = useState<number | ''>('')
+  const [kmFin, setKmFin] = useState<number | ''>('')
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   const selectedVehiculo = useMemo<VehiculoFila | null>(
     () => flota.find((v) => v.matricula === selectedMatricula) ?? null,
-    [flota, selectedMatricula],
+    [flota, selectedMatricula]
   )
 
   // Resetear formulario cuando cambia el vehículo seleccionado
@@ -144,7 +142,7 @@ export function VehiculosScreen() {
 
   const carryOptions = useMemo(
     () => personal.data.filter((p) => p.id_nombre !== pilot),
-    [personal.data, pilot],
+    [personal.data, pilot]
   )
 
   // Flota agrupada por tipo para el desplegable
@@ -166,17 +164,15 @@ export function VehiculosScreen() {
     return ordered
   }, [flota])
 
-  const isDesactivado = selectedVehiculo?.estado_operativo === 'desactivado'
-    || selectedVehiculo?.estado_operativo === 'inactivo'
-  const isActivado    = selectedVehiculo?.estado_operativo === 'activado'
-    || selectedVehiculo?.estado_operativo === 'activo'
-  const isEnDrp       = selectedVehiculo?.estado_operativo === 'en_drp'
+  const isDesactivado =
+    selectedVehiculo?.estado_operativo === 'desactivado' ||
+    selectedVehiculo?.estado_operativo === 'inactivo'
+  const isActivado =
+    selectedVehiculo?.estado_operativo === 'activado' ||
+    selectedVehiculo?.estado_operativo === 'activo'
+  const isEnDrp = selectedVehiculo?.estado_operativo === 'en_drp'
 
-  const submitIniciarDisabled =
-    isSubmitting ||
-    !pilot ||
-    kmInicio === '' ||
-    Number(kmInicio) < 0
+  const submitIniciarDisabled = isSubmitting || !pilot || kmInicio === '' || Number(kmInicio) < 0
 
   const submitFinalizarDisabled = isSubmitting
 
@@ -186,19 +182,19 @@ export function VehiculosScreen() {
     if (!selectedVehiculo) return
     setFeedback(null)
     const result = await run({
-      matricula:      selectedVehiculo.matricula,
+      matricula: selectedVehiculo.matricula,
       estado_destino: 'activado',
-      tipo_servicio:  tipoServicio,
-      pilot:          pilot || null,
-      carry:          carry === NO_CARRY ? null : carry,
-      km_inicio:      kmInicio !== '' ? Number(kmInicio) : null,
+      tipo_servicio: tipoServicio,
+      pilot: pilot || null,
+      carry: carry === NO_CARRY ? null : carry,
+      km_inicio: kmInicio !== '' ? Number(kmInicio) : null,
     })
     if (result) {
       setMode('view')
       setFeedback(
         result.online
           ? `Turno iniciado — ${result.matricula} activado.`
-          : 'Turno encolado (offline). Se aplicará al reconectar.',
+          : 'Turno encolado (offline). Se aplicará al reconectar.'
       )
     }
   }
@@ -207,14 +203,12 @@ export function VehiculosScreen() {
     if (!selectedVehiculo) return
     setFeedback(null)
     const result = await run({
-      matricula:      selectedVehiculo.matricula,
+      matricula: selectedVehiculo.matricula,
       estado_destino: subestado,
     })
     if (result) {
       setFeedback(
-        result.online
-          ? `Estado → ${SUBESTADO_LABELS[subestado]}.`
-          : 'Cambio encolado (offline).',
+        result.online ? `Estado → ${SUBESTADO_LABELS[subestado]}.` : 'Cambio encolado (offline).'
       )
     }
   }
@@ -223,9 +217,9 @@ export function VehiculosScreen() {
     if (!selectedVehiculo) return
     setFeedback(null)
     const result = await run({
-      matricula:      selectedVehiculo.matricula,
+      matricula: selectedVehiculo.matricula,
       estado_destino: 'desactivado',
-      km_fin:         kmFin !== '' ? Number(kmFin) : null,
+      km_fin: kmFin !== '' ? Number(kmFin) : null,
     })
     if (result) {
       setSelectedMatricula(null)
@@ -238,7 +232,6 @@ export function VehiculosScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       {/* ─── Selector de flota ─────────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-2">
@@ -280,7 +273,8 @@ export function VehiculosScreen() {
                         <span className="font-mono font-semibold">{v.matricula}</span>
                         <span className="ml-2 text-xs text-muted-foreground">
                           — {ESTADO_LABELS[v.estado_operativo] ?? v.estado_operativo}
-                          {v.subestado_operativo && ` (${SUBESTADO_LABELS[v.subestado_operativo] ?? v.subestado_operativo})`}
+                          {v.subestado_operativo &&
+                            ` (${SUBESTADO_LABELS[v.subestado_operativo] ?? v.subestado_operativo})`}
                         </span>
                       </SelectItem>
                     ))}
@@ -304,27 +298,29 @@ export function VehiculosScreen() {
             <div className="flex items-center gap-2">
               {/* Estado operativo */}
               <Badge variant={estadoVariant(selectedVehiculo.estado_operativo)}>
-                {ESTADO_LABELS[selectedVehiculo.estado_operativo] ?? selectedVehiculo.estado_operativo}
+                {ESTADO_LABELS[selectedVehiculo.estado_operativo] ??
+                  selectedVehiculo.estado_operativo}
               </Badge>
               {/* Subestado (solo cuando activado) */}
               {isActivado && selectedVehiculo.subestado_operativo && (
                 <Badge variant={subestadoVariant(selectedVehiculo.subestado_operativo)}>
                   <SubestadoIcon subestado={selectedVehiculo.subestado_operativo} />
                   <span className="ml-1">
-                    {SUBESTADO_LABELS[selectedVehiculo.subestado_operativo] ?? selectedVehiculo.subestado_operativo}
+                    {SUBESTADO_LABELS[selectedVehiculo.subestado_operativo] ??
+                      selectedVehiculo.subestado_operativo}
                   </span>
                 </Badge>
               )}
               {/* Condición técnica */}
               <Badge variant={condicionVariant(selectedVehiculo.condicion_tecnica)}>
                 <ShieldAlert aria-hidden="true" className="mr-1 size-3" />
-                {CONDICION_LABEL[selectedVehiculo.condicion_tecnica] ?? selectedVehiculo.condicion_tecnica}
+                {CONDICION_LABEL[selectedVehiculo.condicion_tecnica] ??
+                  selectedVehiculo.condicion_tecnica}
               </Badge>
             </div>
           </CardHeader>
 
           <CardContent className="space-y-4">
-
             {/* ── Vehículo desactivado: formulario de inicio de turno ── */}
             {isDesactivado && mode === 'view' && (
               <Button
@@ -439,11 +435,7 @@ export function VehiculosScreen() {
                   >
                     {isSubmitting ? 'Iniciando…' : 'Confirmar inicio de turno'}
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setMode('view')}
-                    disabled={isSubmitting}
-                  >
+                  <Button variant="outline" onClick={() => setMode('view')} disabled={isSubmitting}>
                     Cancelar
                   </Button>
                 </div>
@@ -535,16 +527,15 @@ export function VehiculosScreen() {
             {/* ── Vehículo en DRP ──────────────────────────────────── */}
             {isEnDrp && (
               <p className="text-sm text-muted-foreground">
-                Este vehículo está desplegado en un DRP activo. La gestión se realiza desde el módulo DRP.
+                Este vehículo está desplegado en un DRP activo. La gestión se realiza desde el
+                módulo DRP.
               </p>
             )}
 
             {/* ── Feedback / error ─────────────────────────────────── */}
             <div role="alert" aria-live="polite" className="min-h-5 text-sm">
               {error && <span className="text-destructive">{error}</span>}
-              {!error && feedback && (
-                <span className="text-muted-foreground">{feedback}</span>
-              )}
+              {!error && feedback && <span className="text-muted-foreground">{feedback}</span>}
             </div>
           </CardContent>
         </Card>

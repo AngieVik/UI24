@@ -4,7 +4,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
@@ -42,7 +49,8 @@ function useLocationsData() {
       const { data, error } = await (supabase as any)
         .from('locations')
         .select('location_id, nombre, tipo, activa')
-        .order('tipo').order('nombre')
+        .order('tipo')
+        .order('nombre')
       if (error) throw error
       return (data ?? []) as LocationRow[]
     },
@@ -57,7 +65,9 @@ function useAuditorias() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('auditorias_inventario')
-        .select('id_auditoria, location_id, id_nombre_responsable, timestamp_inicio, timestamp_fin, estado')
+        .select(
+          'id_auditoria, location_id, id_nombre_responsable, timestamp_inicio, timestamp_fin, estado'
+        )
         .order('timestamp_inicio', { ascending: false })
         .limit(50)
       if (error) throw error
@@ -84,17 +94,26 @@ function useInventariosDinamicos() {
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const TIPO_VARIANT: Record<string, 'ok' | 'info' | 'warn' | 'secondary'> = {
-  almacen:  'info',
+  almacen: 'info',
   vehiculo: 'ok',
-  mochila:  'warn',
-  externo:  'secondary',
+  mochila: 'warn',
+  externo: 'secondary',
 }
 
-export function InventarioMaestroScreen({ vista }: { vista?: 'locations' | 'auditorias' | 'dinamicos' }) {
+export function InventarioMaestroScreen({
+  vista,
+}: {
+  vista?: 'locations' | 'auditorias' | 'dinamicos'
+}) {
   const [tab, setTab] = useState<string>(vista ?? 'locations')
   const locationsQ = useLocationsData()
   const auditoriasQ = useAuditorias()
@@ -137,7 +156,9 @@ export function InventarioMaestroScreen({ vista }: { vista?: 'locations' | 'audi
         {/* Locations */}
         <TabsContent value="locations" className="mt-3">
           {locationsQ.isLoading ? (
-            <div className="space-y-2"><Skeleton className="h-40 w-full" /></div>
+            <div className="space-y-2">
+              <Skeleton className="h-40 w-full" />
+            </div>
           ) : (
             <Card>
               <CardContent className="p-0">
@@ -173,7 +194,9 @@ export function InventarioMaestroScreen({ vista }: { vista?: 'locations' | 'audi
         {/* Auditorías */}
         <TabsContent value="auditorias" className="mt-3">
           {auditoriasQ.isLoading ? (
-            <div className="space-y-2"><Skeleton className="h-40 w-full" /></div>
+            <div className="space-y-2">
+              <Skeleton className="h-40 w-full" />
+            </div>
           ) : (auditoriasQ.data?.length ?? 0) === 0 ? (
             <Card>
               <CardContent className="py-8 text-center">
@@ -213,11 +236,15 @@ export function InventarioMaestroScreen({ vista }: { vista?: 'locations' | 'audi
         {/* Inventarios dinámicos */}
         <TabsContent value="dinamicos" className="mt-3">
           {dinamicosQ.isLoading ? (
-            <div className="space-y-2"><Skeleton className="h-40 w-full" /></div>
+            <div className="space-y-2">
+              <Skeleton className="h-40 w-full" />
+            </div>
           ) : (dinamicosQ.data?.length ?? 0) === 0 ? (
             <Card>
               <CardContent className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">No hay subinventarios dinámicos configurados.</p>
+                <p className="text-sm text-muted-foreground">
+                  No hay subinventarios dinámicos configurados.
+                </p>
               </CardContent>
             </Card>
           ) : (

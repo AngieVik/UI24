@@ -71,7 +71,7 @@ export function useRealtimeInvalidator({
         { event: '*', schema: 'public', table, ...(filter ? { filter } : {}) },
         () => {
           queryClient.invalidateQueries({ queryKey: JSON.parse(queryKeySerialized) })
-        },
+        }
       )
       .subscribe()
 

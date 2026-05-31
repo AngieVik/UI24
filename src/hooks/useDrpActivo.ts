@@ -5,7 +5,7 @@ import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 import { useRealtimeInvalidator } from '@/hooks/useRealtimeInvalidator'
 
 const ESTADOS_ACTIVOS = ['En_espera', 'En_preparacion', 'En_curso'] as const
-type EstadoActivo = typeof ESTADOS_ACTIVOS[number]
+type EstadoActivo = (typeof ESTADOS_ACTIVOS)[number]
 
 export type DrpEntradaVia = 'vehiculo' | 'personal_a_pie'
 
@@ -59,7 +59,7 @@ export function useDrpActivo(): UseDrpActivoResult {
   const idsKey = idsNombres.join(',')
 
   const hasMatricula = matricula.length > 0
-  const hasPersonal  = idsNombres.length > 0
+  const hasPersonal = idsNombres.length > 0
   const enabled = hasMatricula || hasPersonal
 
   const queryKey = ['drp_activo', matricula, idsKey] as const
@@ -149,9 +149,9 @@ function extractDrp(row: JoinRow, via: DrpEntradaVia): DrpActivo[] {
 }
 
 const ESTADO_PRIORIDAD: Record<EstadoActivo, number> = {
-  En_curso:       0,
+  En_curso: 0,
   En_preparacion: 1,
-  En_espera:      2,
+  En_espera: 2,
 }
 
 function comparePriority(a: DrpActivo, b: DrpActivo): number {

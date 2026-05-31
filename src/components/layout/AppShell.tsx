@@ -36,11 +36,7 @@ export function AppShell({ ticker, unreadCount, onOpenInbox, children }: AppShel
   return (
     <BlackColumnProvider>
       <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
-        <Header
-          ticker={ticker}
-          unreadCount={unreadCount}
-          onOpenInbox={onOpenInbox}
-        />
+        <Header ticker={ticker} unreadCount={unreadCount} onOpenInbox={onOpenInbox} />
 
         <div className="flex min-h-0 flex-1">
           <BlackColumn />
@@ -53,7 +49,10 @@ export function AppShell({ ticker, unreadCount, onOpenInbox, children }: AppShel
                 className="flex items-center gap-2 border-b border-u24-yellow/30 bg-u24-yellow-soft px-4 py-2 text-base font-medium text-u24-black"
               >
                 <WifiOff aria-hidden="true" className="size-4" />
-                <span>Sin conexión — las mutaciones se encolan localmente y se sincronizarán al recuperar red.</span>
+                <span>
+                  Sin conexión — las mutaciones se encolan localmente y se sincronizarán al
+                  recuperar red.
+                </span>
               </div>
             )}
 

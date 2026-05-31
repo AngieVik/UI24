@@ -6,7 +6,7 @@ import { resolveRpcError } from '@/lib/resolveRpcError'
 
 interface CerrarTurnoResult {
   closed: boolean
-  noop:   boolean
+  noop: boolean
 }
 
 /**
@@ -19,7 +19,7 @@ interface CerrarTurnoResult {
  * Idempotente vía mutation_uuid.
  */
 export function useCerrarTurno() {
-  const [error, setError]               = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function cerrar(params: { id_parte: string }): Promise<CerrarTurnoResult | null> {
@@ -32,11 +32,10 @@ export function useCerrarTurno() {
 
       // rpc_cerrar_turno not yet in generated types → cast
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error: rpcErr } = await (supabase as any)
-        .rpc('rpc_cerrar_turno', {
-          p_mutation_uuid: mutationUuid,
-          p_id_parte:      params.id_parte,
-        })
+      const { data, error: rpcErr } = await (supabase as any).rpc('rpc_cerrar_turno', {
+        p_mutation_uuid: mutationUuid,
+        p_id_parte: params.id_parte,
+      })
 
       if (rpcErr) throw rpcErr
 

@@ -61,17 +61,14 @@ function DescuadreRow({ desc, onResolver, isActing }: DescuadreRowProps) {
                 size="sm"
                 variant="outline"
                 disabled={isActing}
-                onClick={() => onResolver(desc.id_descuadre, 'Archivado', notas.trim() || undefined)}
+                onClick={() =>
+                  onResolver(desc.id_descuadre, 'Archivado', notas.trim() || undefined)
+                }
                 aria-label="Archivar descuadre"
               >
                 Archivar
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setOpen(false)}
-                disabled={isActing}
-              >
+              <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={isActing}>
                 Cancelar
               </Button>
             </div>
@@ -94,20 +91,29 @@ function DescuadreRow({ desc, onResolver, isActing }: DescuadreRowProps) {
 export function LogisticaDrpScreen() {
   const isOnline = useGlobalStore((s) => s.isOnline)
   const {
-    drps, drpActivo, descuadresPendientes, loading, error,
-    cargarDrps, cargarDetalle, resolverDescuadre,
+    drps,
+    drpActivo,
+    descuadresPendientes,
+    loading,
+    error,
+    cargarDrps,
+    cargarDetalle,
+    resolverDescuadre,
   } = useDrp()
 
   const [actingId, setActingId] = useState<string | null>(null)
 
-  const drpConDatos = drpActivo ?? drps.find((d) => d.estado === 'En_curso' || d.estado === 'En_preparacion') ?? null
+  const drpConDatos =
+    drpActivo ?? drps.find((d) => d.estado === 'En_curso' || d.estado === 'En_preparacion') ?? null
 
   if (!isOnline) {
     return (
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-6 py-16 text-center">
         <WifiOff className="size-10 text-muted-foreground/60" aria-hidden="true" />
         <h2 className="font-display text-lg font-bold">Sin conexión</h2>
-        <p className="font-body text-sm text-muted-foreground">La logística DRP requiere conexión en tiempo real.</p>
+        <p className="font-body text-sm text-muted-foreground">
+          La logística DRP requiere conexión en tiempo real.
+        </p>
       </div>
     )
   }
@@ -124,7 +130,6 @@ export function LogisticaDrpScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-lg flex-col gap-3 p-3">
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -134,16 +139,26 @@ export function LogisticaDrpScreen() {
             <Badge variant="warn">{descuadresPendientes.length} descuadres</Badge>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={cargarDrps} disabled={loading} aria-label="Recargar">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={cargarDrps}
+          disabled={loading}
+          aria-label="Recargar"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Selector de DRP activo */}
-      {!drpConDatos && (
-        loading ? (
+      {!drpConDatos &&
+        (loading ? (
           <Skeleton className="h-16 w-full" />
         ) : drps.length === 0 ? (
           <Card>
@@ -157,20 +172,21 @@ export function LogisticaDrpScreen() {
               <CardTitle className="font-display text-sm">Seleccionar DRP</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {drps.filter((d) => d.estado === 'En_curso').map((d) => (
-                <Button
-                  key={d.id_drp}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleSeleccionarDrp(d.id_drp)}
-                >
-                  #{d.id_drp.slice(0, 8).toUpperCase()}
-                </Button>
-              ))}
+              {drps
+                .filter((d) => d.estado === 'En_curso')
+                .map((d) => (
+                  <Button
+                    key={d.id_drp}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSeleccionarDrp(d.id_drp)}
+                  >
+                    #{d.id_drp.slice(0, 8).toUpperCase()}
+                  </Button>
+                ))}
             </CardContent>
           </Card>
-        )
-      )}
+        ))}
 
       {/* Descuadres del DRP activo */}
       {drpConDatos && (
@@ -223,8 +239,8 @@ export function LogisticaDrpScreen() {
         <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
           <AlertCircle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <p className="font-body text-xs text-muted-foreground">
-            Los descuadres se calculan comparando el stock real de las dotaciones del DRP
-            con el stock esperado según plantillas.
+            Los descuadres se calculan comparando el stock real de las dotaciones del DRP con el
+            stock esperado según plantillas.
           </p>
         </div>
       )}

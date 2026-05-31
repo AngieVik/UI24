@@ -120,7 +120,7 @@ describe('BlackColumn — drill-down a grupillo (3 niveles)', () => {
 
     // El padre directo es "Operativas rutinarias"
     expect(
-      screen.getByRole('button', { name: 'Operativas rutinarias', current: 'page' }),
+      screen.getByRole('button', { name: 'Operativas rutinarias', current: 'page' })
     ).toBeInTheDocument()
   })
 
@@ -151,8 +151,8 @@ describe('BlackColumn — orden de botones inferiores', () => {
     await user.click(screen.getByRole('button', { name: 'Operativa' }))
 
     const buttons = within(container).getAllByRole('button')
-    const lastBtn       = buttons[buttons.length - 1]
-    const penultimaBtn  = buttons[buttons.length - 2]
+    const lastBtn = buttons[buttons.length - 1]
+    const penultimaBtn = buttons[buttons.length - 2]
     // Toggle se actualiza a "Contraer panel" cuando expanded=true
     expect(lastBtn.getAttribute('aria-label')).toMatch(/Contraer panel|Expandir panel/)
     expect(penultimaBtn).toHaveAttribute('aria-label', 'Atrás')
@@ -179,7 +179,9 @@ describe('BlackColumn — RBAC visual', () => {
     renderWithShell(<BlackColumn />)
     expect(screen.queryByRole('button', { name: 'Logística' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Flota' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Coordinación y seguridad' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Coordinación y seguridad' })
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Gestión y RRHH' })).not.toBeInTheDocument()
     // pero sí ve Operativa, DRP, Tablón, Doc-13
     expect(screen.getByRole('button', { name: 'Operativa' })).toBeInTheDocument()

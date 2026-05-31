@@ -1,0 +1,24 @@
+# Carpetas de documentación (formato deliberado, no gestionado por Prettier)
+01_arquitectura_y_reglas/
+02_seguridad_y_acceso/
+03_nucleos_de_negocio/
+04_diccionarios_y_repositorios/
+05_interfaz_y_desarrollo/
+06_operaciones/
+
+# Salida generada
+dist/
+coverage/
+e2e-report/
+
+# Contexto Claude (no es código fuente)
+.claude/
+
+# Templates de GitHub
+.github/pull_request_template.md
+
+# Estado Netlify
+.netlify/
+
+# Supabase Edge Functions (formato propio)
+supabase/functions/

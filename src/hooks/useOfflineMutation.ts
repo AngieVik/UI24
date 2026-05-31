@@ -1,4 +1,9 @@
-import { useMutation, useQueryClient, type QueryKey, type UseMutationResult } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQueryClient,
+  type QueryKey,
+  type UseMutationResult,
+} from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -45,7 +50,7 @@ interface OfflineMutationOptions<TVars> {
  * progresivamente en sus respectivas sub-fases D.
  */
 export function useOfflineMutation<TVars extends Record<string, unknown>>(
-  options: OfflineMutationOptions<TVars>,
+  options: OfflineMutationOptions<TVars>
 ): UseMutationResult<OfflineMutationResult, Error, TVars> {
   const queryClient = useQueryClient()
   const enqueue = useOfflineMutationQueue((s) => s.enqueue)
@@ -80,8 +85,7 @@ export function useOfflineMutation<TVars extends Record<string, unknown>>(
         // Lo envolvemos en un Error real para que `err.message` y
         // `String(err)` funcionen correctamente en los catches.
         const err = new Error(
-          (error as { message?: string })?.message ??
-          'Error al ejecutar el RPC',
+          (error as { message?: string })?.message ?? 'Error al ejecutar el RPC'
         )
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(err as any).cause = error

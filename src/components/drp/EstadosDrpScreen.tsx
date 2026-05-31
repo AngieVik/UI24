@@ -7,37 +7,52 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useDrp, type DrpRecord } from '@/hooks/useDrp'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 
-const ESTADO_CONFIG: Record<string, { label: string; variant: 'ok' | 'warn' | 'destructive' | 'info' | 'secondary' }> = {
-  En_espera:          { label: 'En espera',    variant: 'secondary' },
-  En_preparacion:     { label: 'Preparación',  variant: 'warn' },
-  En_curso:           { label: 'Activo',       variant: 'ok' },
-  Cancelado:          { label: 'Cancelado',    variant: 'destructive' },
-  Finalizado:         { label: 'Finalizado',   variant: 'secondary' },
-  Finalizado_Retenido:{ label: 'Retenido',     variant: 'warn' },
-  Archivado:          { label: 'Archivado',    variant: 'secondary' },
+const ESTADO_CONFIG: Record<
+  string,
+  { label: string; variant: 'ok' | 'warn' | 'destructive' | 'info' | 'secondary' }
+> = {
+  En_espera: { label: 'En espera', variant: 'secondary' },
+  En_preparacion: { label: 'Preparación', variant: 'warn' },
+  En_curso: { label: 'Activo', variant: 'ok' },
+  Cancelado: { label: 'Cancelado', variant: 'destructive' },
+  Finalizado: { label: 'Finalizado', variant: 'secondary' },
+  Finalizado_Retenido: { label: 'Retenido', variant: 'warn' },
+  Archivado: { label: 'Archivado', variant: 'secondary' },
 }
 
-const ACCIONES: Record<string, { accion: 'preparar' | 'iniciar' | 'finalizar' | 'archivar'; label: string; variant: 'default' | 'outline' | 'destructive' | 'secondary' }[]> = {
-  En_espera:      [{ accion: 'preparar',  label: 'Preparar DRP',   variant: 'default' }],
-  En_preparacion: [{ accion: 'iniciar',   label: 'Activar DRP',    variant: 'default' }],
-  En_curso:       [{ accion: 'finalizar', label: 'Finalizar DRP',  variant: 'outline' }],
-  Finalizado:     [{ accion: 'archivar',  label: 'Archivar DRP',   variant: 'secondary' }],
+const ACCIONES: Record<
+  string,
+  {
+    accion: 'preparar' | 'iniciar' | 'finalizar' | 'archivar'
+    label: string
+    variant: 'default' | 'outline' | 'destructive' | 'secondary'
+  }[]
+> = {
+  En_espera: [{ accion: 'preparar', label: 'Preparar DRP', variant: 'default' }],
+  En_preparacion: [{ accion: 'iniciar', label: 'Activar DRP', variant: 'default' }],
+  En_curso: [{ accion: 'finalizar', label: 'Finalizar DRP', variant: 'outline' }],
+  Finalizado: [{ accion: 'archivar', label: 'Archivar DRP', variant: 'secondary' }],
   Finalizado_Retenido: [{ accion: 'archivar', label: 'Archivar DRP', variant: 'secondary' }],
-  Cancelado:      [],
-  Archivado:      [],
+  Cancelado: [],
+  Archivado: [],
 }
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-ES', {
-    day: '2-digit', month: '2-digit',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
 interface DrpEstadoCardProps {
   drp: DrpRecord
-  onTransicion: (idDrp: string, accion: 'preparar' | 'iniciar' | 'finalizar' | 'archivar') => Promise<void>
+  onTransicion: (
+    idDrp: string,
+    accion: 'preparar' | 'iniciar' | 'finalizar' | 'archivar'
+  ) => Promise<void>
   onCancelar: (idDrp: string) => Promise<void>
   isActing: boolean
 }
@@ -114,7 +129,10 @@ export function EstadosDrpScreen() {
     )
   }
 
-  async function handleTransicion(idDrp: string, accion: 'preparar' | 'iniciar' | 'finalizar' | 'archivar') {
+  async function handleTransicion(
+    idDrp: string,
+    accion: 'preparar' | 'iniciar' | 'finalizar' | 'archivar'
+  ) {
     setActingId(idDrp)
     await transicionarDrp(idDrp, accion)
     setActingId(null)
@@ -128,7 +146,6 @@ export function EstadosDrpScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-lg flex-col gap-3 p-3">
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -136,12 +153,22 @@ export function EstadosDrpScreen() {
           <h2 className="font-display text-lg font-bold">Estados DRP</h2>
           <Badge variant="secondary">{drps.length}</Badge>
         </div>
-        <Button size="sm" variant="outline" onClick={cargarDrps} disabled={loading} aria-label="Recargar">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={cargarDrps}
+          disabled={loading}
+          aria-label="Recargar"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {loading ? (
         <div role="status" aria-label="Cargando DRPs" className="space-y-2">
@@ -151,7 +178,9 @@ export function EstadosDrpScreen() {
       ) : drps.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">No hay DRPs activos. Usa «Crear DRP» para iniciar uno.</p>
+            <p className="text-sm text-muted-foreground">
+              No hay DRPs activos. Usa «Crear DRP» para iniciar uno.
+            </p>
           </CardContent>
         </Card>
       ) : (

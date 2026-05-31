@@ -1,20 +1,20 @@
 import type { Rol } from '@/lib/auth-roles'
 
 const ROL_LABELS: Record<string, string> = {
-  tes:                   'TES',
-  due:                   'DUE',
-  medico:                'Médico',
-  flota:                 'Flota',
-  responsable_flota:     'Resp. flota',
-  coordinacion:          'Coordinación',
-  logistica:             'Logística',
+  tes: 'TES',
+  due: 'DUE',
+  medico: 'Médico',
+  flota: 'Flota',
+  responsable_flota: 'Resp. flota',
+  coordinacion: 'Coordinación',
+  logistica: 'Logística',
   responsable_logistica: 'Resp. logística',
-  personal_externo:      'Externo',
-  gerencia:              'Gerencia',
-  rrhh:                  'RRHH',
-  invitado:              'Invitado',
-  sin_rol:               'Sin rol',
-  inactivo:              'Inactivo',
+  personal_externo: 'Externo',
+  gerencia: 'Gerencia',
+  rrhh: 'RRHH',
+  invitado: 'Invitado',
+  sin_rol: 'Sin rol',
+  inactivo: 'Inactivo',
 }
 
 export function formatRol(rol: Rol | string): string {

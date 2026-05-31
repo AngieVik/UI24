@@ -7,7 +7,7 @@ describe('BlackColumnContext', () => {
     // Silenciamos el error de React para no contaminar la salida del test.
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => renderHook(() => useBlackColumn())).toThrow(
-      /useBlackColumn debe usarse dentro de BlackColumnProvider/,
+      /useBlackColumn debe usarse dentro de BlackColumnProvider/
     )
     spy.mockRestore()
   })

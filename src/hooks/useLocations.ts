@@ -3,8 +3,8 @@ import { supabase } from '@/lib/supabase'
 
 export interface Location {
   location_id: string
-  nombre:      string
-  tipo:        string
+  nombre: string
+  tipo: string
 }
 
 /**
@@ -27,9 +27,9 @@ export function useLocations() {
   })
 
   return {
-    data:      query.data ?? [],
+    data: query.data ?? [],
     isLoading: query.isLoading,
-    isError:   query.isError,
-    error:     (query.error as Error | null) ?? null,
+    isError: query.isError,
+    error: (query.error as Error | null) ?? null,
   }
 }

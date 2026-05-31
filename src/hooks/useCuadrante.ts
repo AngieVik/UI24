@@ -39,29 +39,34 @@ export function useCuadrante(idNombre?: string) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const cargarSemana = useCallback(async (offset: number) => {
-    if (!target) return
-    setLoading(true)
-    setError(null)
-    const { start, end } = isoWeekDates(offset)
-    try {
-      const { data, error: err } = await supabase
-        .from('cuadrante_turnos')
-        .select('id, id_nombre, fecha, tipo_turno, es_excepcion_absoluta')
-        .eq('id_nombre', target)
-        .gte('fecha', start)
-        .lte('fecha', end)
-        .order('fecha')
-      if (err) throw err
-      setTurnos((data ?? []) as TurnoItem[])
-    } catch (e) {
-      setError(resolveRpcError(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [target])
+  const cargarSemana = useCallback(
+    async (offset: number) => {
+      if (!target) return
+      setLoading(true)
+      setError(null)
+      const { start, end } = isoWeekDates(offset)
+      try {
+        const { data, error: err } = await supabase
+          .from('cuadrante_turnos')
+          .select('id, id_nombre, fecha, tipo_turno, es_excepcion_absoluta')
+          .eq('id_nombre', target)
+          .gte('fecha', start)
+          .lte('fecha', end)
+          .order('fecha')
+        if (err) throw err
+        setTurnos((data ?? []) as TurnoItem[])
+      } catch (e) {
+        setError(resolveRpcError(e))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [target]
+  )
 
-  useEffect(() => { cargarSemana(semanaOffset) }, [cargarSemana, semanaOffset])
+  useEffect(() => {
+    cargarSemana(semanaOffset)
+  }, [cargarSemana, semanaOffset])
 
   const semanaActual = isoWeekDates(semanaOffset)
 

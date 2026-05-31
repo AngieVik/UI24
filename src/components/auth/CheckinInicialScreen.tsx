@@ -15,11 +15,13 @@ import logoUrl from '@/assets/logo.svg'
 
 const schema = z.object({
   identificador: z.string().min(1, 'Identificador requerido'),
-  password:      z.string().min(8, 'Mínimo 8 caracteres'),
+  password: z.string().min(8, 'Mínimo 8 caracteres'),
 })
 type Schema = z.infer<typeof schema>
 
-const APP_VERSION = (typeof window !== 'undefined' && (window as { __APP_VERSION__?: string }).__APP_VERSION__) || '0.1.0'
+const APP_VERSION =
+  (typeof window !== 'undefined' && (window as { __APP_VERSION__?: string }).__APP_VERSION__) ||
+  '0.1.0'
 
 /**
  * CheckinInicialScreen — estado_0b.
@@ -36,9 +38,9 @@ const APP_VERSION = (typeof window !== 'undefined' && (window as { __APP_VERSION
  */
 export function CheckinInicialScreen() {
   const [showPassword, setShowPassword] = useState(false)
-  const { checkin, isSubmitting, error }   = useCheckinTrabajador()
+  const { checkin, isSubmitting, error } = useCheckinTrabajador()
   const { abrir, isSubmitting: abriendo } = useAbrirTurno()
-  const isOnline   = useGlobalStore((s) => s.isOnline)
+  const isOnline = useGlobalStore((s) => s.isOnline)
   const idTerminal = useTerminalStore((s) => s.id_terminal)
 
   const isBusy = isSubmitting || abriendo
@@ -74,8 +76,8 @@ export function CheckinInicialScreen() {
                 Check-in al turno
               </h1>
               <p className="font-body text-base font-light text-muted-foreground">
-                El terminal está listo. Cualquier trabajador (TES, DUE, médico,
-                flota, coordinación…) introduce sus credenciales para abrir su turno.
+                El terminal está listo. Cualquier trabajador (TES, DUE, médico, flota,
+                coordinación…) introduce sus credenciales para abrir su turno.
               </p>
             </header>
 
@@ -136,9 +138,11 @@ export function CheckinInicialScreen() {
                         tabIndex={-1}
                         className="absolute inset-y-0 right-0 grid w-9 place-items-center text-muted-foreground hover:text-foreground"
                       >
-                        {showPassword
-                          ? <EyeOff aria-hidden="true" className="size-4" />
-                          : <Eye   aria-hidden="true" className="size-4" />}
+                        {showPassword ? (
+                          <EyeOff aria-hidden="true" className="size-4" />
+                        ) : (
+                          <Eye aria-hidden="true" className="size-4" />
+                        )}
                       </button>
                     </div>
                     {fieldState.error && <FieldError errors={[fieldState.error]} />}
@@ -161,7 +165,8 @@ export function CheckinInicialScreen() {
           U24 Servicios Sanitarios · v{APP_VERSION}
           {idTerminal && (
             <>
-              {' · '}terminal <span className="font-medium text-foreground">{idTerminal.slice(0, 8)}</span>
+              {' · '}terminal{' '}
+              <span className="font-medium text-foreground">{idTerminal.slice(0, 8)}</span>
             </>
           )}
         </p>

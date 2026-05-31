@@ -12,7 +12,9 @@ vi.mock('@/hooks/useDeducirMaterial', () => ({
 
 let matriculaMock = '1111-DEMO'
 vi.mock('@/stores/useActivacionStore', () => {
-  function useActivacionStore<T = unknown>(selector?: (s: { matricula: string }) => T): T | { matricula: string } {
+  function useActivacionStore<T = unknown>(
+    selector?: (s: { matricula: string }) => T
+  ): T | { matricula: string } {
     const s = { matricula: matriculaMock }
     return selector ? selector(s) : s
   }
@@ -24,21 +26,46 @@ import { useInventarioVehiculo } from '@/hooks/useInventarioVehiculo'
 import { useDeducirMaterial } from '@/hooks/useDeducirMaterial'
 
 const useInventarioVehiculoMock = vi.mocked(useInventarioVehiculo)
-const useDeducirMaterialMock    = vi.mocked(useDeducirMaterial)
+const useDeducirMaterialMock = vi.mocked(useDeducirMaterial)
 
 const deducirMock = vi.fn()
 
-function invReturn(overrides: Partial<ReturnType<typeof useInventarioVehiculo>> = {}): ReturnType<typeof useInventarioVehiculo> {
+function invReturn(
+  overrides: Partial<ReturnType<typeof useInventarioVehiculo>> = {}
+): ReturnType<typeof useInventarioVehiculo> {
   return { data: [], isLoading: false, isError: false, error: null, ...overrides }
 }
 
-function dedReturn(overrides: Partial<ReturnType<typeof useDeducirMaterial>> = {}): ReturnType<typeof useDeducirMaterial> {
+function dedReturn(
+  overrides: Partial<ReturnType<typeof useDeducirMaterial>> = {}
+): ReturnType<typeof useDeducirMaterial> {
   return { deducir: deducirMock, isSubmitting: false, error: null, setError: vi.fn(), ...overrides }
 }
 
-const ITEM_A = { id_item: 1, subgrupo: 'mochila', stock_real: 5,  nombre: 'Gasa estéril',     categoria: 'Curas',     especificacion: 'caja x10'  }
-const ITEM_B = { id_item: 2, subgrupo: 'mochila', stock_real: 12, nombre: 'Suero fisiológico', categoria: 'Fluidos',   especificacion: '500 ml'    }
-const ITEM_C = { id_item: 3, subgrupo: 'vehiculo', stock_real: 0, nombre: 'Mascarilla FFP2',   categoria: 'EPI',       especificacion: null         }
+const ITEM_A = {
+  id_item: 1,
+  subgrupo: 'mochila',
+  stock_real: 5,
+  nombre: 'Gasa estéril',
+  categoria: 'Curas',
+  especificacion: 'caja x10',
+}
+const ITEM_B = {
+  id_item: 2,
+  subgrupo: 'mochila',
+  stock_real: 12,
+  nombre: 'Suero fisiológico',
+  categoria: 'Fluidos',
+  especificacion: '500 ml',
+}
+const ITEM_C = {
+  id_item: 3,
+  subgrupo: 'vehiculo',
+  stock_real: 0,
+  nombre: 'Mascarilla FFP2',
+  categoria: 'EPI',
+  especificacion: null,
+}
 
 beforeEach(() => {
   matriculaMock = '1111-DEMO'
@@ -63,7 +90,9 @@ describe('Doc6GastoMaterialScreen — gates', () => {
   })
 
   it('muestra error si la query falla', () => {
-    useInventarioVehiculoMock.mockReturnValue(invReturn({ isError: true, error: new Error('boom') }))
+    useInventarioVehiculoMock.mockReturnValue(
+      invReturn({ isError: true, error: new Error('boom') })
+    )
     renderWithShell(<Doc6GastoMaterialScreen />)
     expect(screen.getByText(/no se pudo cargar el inventario/i)).toBeInTheDocument()
   })
@@ -158,7 +187,7 @@ describe('Doc6GastoMaterialScreen — confirmar', () => {
 
     // Tras éxito, feedback visible
     await waitFor(() =>
-      expect(screen.getByText(/2 deducción\(es\) registradas\./i)).toBeInTheDocument(),
+      expect(screen.getByText(/2 deducción\(es\) registradas\./i)).toBeInTheDocument()
     )
   })
 
@@ -171,9 +200,7 @@ describe('Doc6GastoMaterialScreen — confirmar', () => {
     await user.click(screen.getByRole('button', { name: /añadir gasa estéril/i }))
     await user.click(screen.getByRole('button', { name: /confirmar gasto/i }))
 
-    await waitFor(() =>
-      expect(screen.getByText(/0 confirmadas, 1 fallaron/i)).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText(/0 confirmadas, 1 fallaron/i)).toBeInTheDocument())
   })
 
   it('motivo opcional se envía si está presente', async () => {

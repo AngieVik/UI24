@@ -18,15 +18,20 @@ import { useVehiculoActivo } from '@/hooks/useVehiculoActivo'
 import { useDrpActivo } from '@/hooks/useDrpActivo'
 
 const usePersonalEnTurnoMock = vi.mocked(usePersonalEnTurno)
-const useVehiculoActivoMock  = vi.mocked(useVehiculoActivo)
-const useDrpActivoMock       = vi.mocked(useDrpActivo)
+const useVehiculoActivoMock = vi.mocked(useVehiculoActivo)
+const useDrpActivoMock = vi.mocked(useDrpActivo)
 
 beforeEach(() => {
   usePersonalEnTurnoMock.mockReset()
   useVehiculoActivoMock.mockReset()
   useDrpActivoMock.mockReset()
   // Default: sin vehículo ni DRP → estado 'En base'
-  useVehiculoActivoMock.mockReturnValue({ data: null, isLoading: false, isError: false, error: null })
+  useVehiculoActivoMock.mockReturnValue({
+    data: null,
+    isLoading: false,
+    isError: false,
+    error: null,
+  })
   useDrpActivoMock.mockReturnValue({ data: null, isLoading: false, isError: false, error: null })
 })
 
@@ -72,18 +77,18 @@ describe('PanelPersonal', () => {
     usePersonalEnTurnoMock.mockReturnValue({
       data: [
         {
-          id_nombre:   'pmartin',
+          id_nombre: 'pmartin',
           nombre_real: 'Pedro Martín',
-          rol:         'tes',
-          telefono:    '600111222',
-          checkin_at:  '2026-05-24T07:30:00.000Z',
+          rol: 'tes',
+          telefono: '600111222',
+          checkin_at: '2026-05-24T07:30:00.000Z',
         },
         {
-          id_nombre:   'rsoto',
+          id_nombre: 'rsoto',
           nombre_real: 'Rosa Soto',
-          rol:         'due',
-          telefono:    null,
-          checkin_at:  '2026-05-24T07:45:00.000Z',
+          rol: 'due',
+          telefono: null,
+          checkin_at: '2026-05-24T07:45:00.000Z',
         },
       ],
       isLoading: false,
@@ -110,18 +115,32 @@ describe('PanelPersonal', () => {
 
   it('estado derivado "En servicio" cuando hay vehículo activo y no hay DRP', () => {
     usePersonalEnTurnoMock.mockReturnValue({
-      data: [{
-        id_nombre: 'pmartin', nombre_real: 'Pedro Martín', rol: 'tes',
-        telefono: null, checkin_at: '2026-05-24T07:30:00.000Z',
-      }],
-      isLoading: false, isError: false, error: null,
+      data: [
+        {
+          id_nombre: 'pmartin',
+          nombre_real: 'Pedro Martín',
+          rol: 'tes',
+          telefono: null,
+          checkin_at: '2026-05-24T07:30:00.000Z',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
     })
     useVehiculoActivoMock.mockReturnValue({
       data: {
-        matricula: '1234ABC', tipo: 'SVB', condicion_tecnica: 'operativo',
-        estado_operativo: 'activo', pilot: 'pmartin', carry: null, tipo_servicio: 'urgente',
+        matricula: '1234ABC',
+        tipo: 'SVB',
+        condicion_tecnica: 'operativo',
+        estado_operativo: 'activo',
+        pilot: 'pmartin',
+        carry: null,
+        tipo_servicio: 'urgente',
       },
-      isLoading: false, isError: false, error: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     })
 
     render(<PanelPersonal />)
@@ -130,19 +149,31 @@ describe('PanelPersonal', () => {
 
   it('estado derivado "En DRP" cuando hay DRP activo', () => {
     usePersonalEnTurnoMock.mockReturnValue({
-      data: [{
-        id_nombre: 'pmartin', nombre_real: 'Pedro Martín', rol: 'tes',
-        telefono: null, checkin_at: '2026-05-24T07:30:00.000Z',
-      }],
-      isLoading: false, isError: false, error: null,
+      data: [
+        {
+          id_nombre: 'pmartin',
+          nombre_real: 'Pedro Martín',
+          rol: 'tes',
+          telefono: null,
+          checkin_at: '2026-05-24T07:30:00.000Z',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
     })
     useDrpActivoMock.mockReturnValue({
       data: {
-        id_drp: 'drp-1', estado: 'En_curso', id_coordinacion: 'c',
-        timestamp_preparacion: null, timestamp_inicio: '2026-05-24T08:00:00Z',
+        id_drp: 'drp-1',
+        estado: 'En_curso',
+        id_coordinacion: 'c',
+        timestamp_preparacion: null,
+        timestamp_inicio: '2026-05-24T08:00:00Z',
         via: 'vehiculo',
       },
-      isLoading: false, isError: false, error: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     })
 
     render(<PanelPersonal />)

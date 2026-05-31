@@ -43,7 +43,7 @@ export function useAutorizarTerminal() {
       const { data, error: efErr } = await supabase.functions.invoke('ef-autorizar-terminal', {
         body: {
           id_nombre_gerencia: vars.id_nombre_gerencia,
-          password:           vars.password,
+          password: vars.password,
           fingerprint,
         },
       })
@@ -59,7 +59,7 @@ export function useAutorizarTerminal() {
 
       // Set session del USUARIO MÁQUINA del terminal.
       await supabase.auth.setSession({
-        access_token:  payload.session.access_token,
+        access_token: payload.session.access_token,
         refresh_token: payload.session.refresh_token,
       })
       useAuthStore.getState().setSession(payload.session)
@@ -88,7 +88,9 @@ function extractEdgeError(err: unknown): string | null {
       try {
         const parsed = JSON.parse(e.context.body) as { detail?: string; error?: string }
         return parsed.detail ?? parsed.error ?? null
-      } catch { /* swallow */ }
+      } catch {
+        /* swallow */
+      }
     }
     return e.message ?? null
   }

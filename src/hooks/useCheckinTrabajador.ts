@@ -42,8 +42,8 @@ export function useCheckinTrabajador() {
       }
       const { data, error: efErr } = await supabase.functions.invoke('ef-checkin-trabajador', {
         body: {
-          id_nombre:   vars.id_nombre,
-          password:    vars.password,
+          id_nombre: vars.id_nombre,
+          password: vars.password,
           id_terminal: idTerminal,
         },
       })
@@ -72,7 +72,9 @@ function extractEdgeError(err: unknown): string | null {
       try {
         const parsed = JSON.parse(e.context.body) as { detail?: string; error?: string }
         return parsed.detail ?? parsed.error ?? null
-      } catch { /* swallow */ }
+      } catch {
+        /* swallow */
+      }
     }
     return e.message ?? null
   }

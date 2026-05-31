@@ -76,12 +76,12 @@ export function useDoc7(matricula: string) {
       }
 
       const payload: Record<string, unknown> = {
-        mutation_uuid:     mutationUuid,
-        p_matricula:       matricula,
+        mutation_uuid: mutationUuid,
+        p_matricula: matricula,
         p_sistema_afectado: form.sistemaAfectado,
         p_nivel_criticidad: form.nivelCriticidad,
-        p_descripcion:     form.descripcion || null,
-        p_imagen_url:      imagenUrl ?? null,
+        p_descripcion: form.descripcion || null,
+        p_imagen_url: imagenUrl ?? null,
       }
 
       if (isOnline) {
@@ -95,7 +95,7 @@ export function useDoc7(matricula: string) {
           mutationUuid,
           blobKey
             ? { blobKey, blobStoragePath: blobStoragePath!, blobUrlField: 'p_imagen_url' }
-            : undefined,
+            : undefined
         )
       }
 

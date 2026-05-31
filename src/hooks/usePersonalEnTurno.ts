@@ -54,13 +54,17 @@ export function usePersonalEnTurno(): UsePersonalEnTurnoResult {
       if (error) throw error
       return (data ?? []).map((row) => {
         // El join `!inner` garantiza ficha existente.
-        const ficha = row.fichas_empleados as unknown as { nombre_real: string; rol: string; telefono: string | null }
+        const ficha = row.fichas_empleados as unknown as {
+          nombre_real: string
+          rol: string
+          telefono: string | null
+        }
         return {
-          id_nombre:  row.id_nombre,
+          id_nombre: row.id_nombre,
           checkin_at: row.checkin_at,
           nombre_real: ficha.nombre_real,
-          rol:        ficha.rol,
-          telefono:   ficha.telefono ?? null,
+          rol: ficha.rol,
+          telefono: ficha.telefono ?? null,
         }
       })
     },

@@ -3,8 +3,8 @@ import { supabase } from '@/lib/supabase'
 import type { EstadoEvaluacion } from '@/data/checklist360Catalog'
 
 export interface ItemRespuestaAnterior {
-  estado:               EstadoEvaluacion
-  campos_extra:         Record<string, string | string[]>
+  estado: EstadoEvaluacion
+  campos_extra: Record<string, string | string[]>
   es_incidencia_heredada: boolean
 }
 
@@ -45,7 +45,7 @@ export function useChecklist360Anterior(matricula: string | null) {
 
   return {
     /** Respuestas del checklist anterior (vacío si no hay historial o error) */
-    anterior:  (query.data ?? {}) as RespuestasAnteriores,
+    anterior: (query.data ?? {}) as RespuestasAnteriores,
     isLoading: query.isLoading,
   }
 }

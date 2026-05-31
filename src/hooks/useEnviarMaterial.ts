@@ -3,18 +3,18 @@ import { useOfflineMutation } from '@/hooks/useOfflineMutation'
 import { useActivacionStore } from '@/stores/useActivacionStore'
 
 export interface EnvioItem {
-  id_item:  number
+  id_item: number
   subgrupo: string
   cantidad: number
 }
 
 interface EnviarVars {
   /** id_nombre del trabajador que firma el envío (presente del terminal). */
-  operador:         string
+  operador: string
   /** Una de las dos opciones de destino debe ir presente. */
   location_destino?: string | null
-  destino_externo?:  string | null
-  items:            EnvioItem[]
+  destino_externo?: string | null
+  items: EnvioItem[]
 }
 
 interface EnviarResult {
@@ -39,15 +39,13 @@ export function useEnviarMaterial() {
 
   const mut = useOfflineMutation<{
     p_id_nombre_operador: string
-    p_matricula_origen:   string
-    p_location_destino:   string | null
-    p_destino_externo:    string | null
-    p_items:              EnvioItem[]
+    p_matricula_origen: string
+    p_location_destino: string | null
+    p_destino_externo: string | null
+    p_items: EnvioItem[]
   }>({
     rpcName: 'rpc_doc10_enviar_material',
-    invalidates: [
-      ['inventario_vehiculo', matricula],
-    ],
+    invalidates: [['inventario_vehiculo', matricula]],
   })
 
   async function enviar(vars: EnviarVars): Promise<EnviarResult | null> {
@@ -71,10 +69,10 @@ export function useEnviarMaterial() {
 
       const res = await mut.mutateAsync({
         p_id_nombre_operador: vars.operador,
-        p_matricula_origen:   matricula,
-        p_location_destino:   hasLoc ? vars.location_destino! : null,
-        p_destino_externo:    hasExt ? vars.destino_externo!  : null,
-        p_items:              vars.items,
+        p_matricula_origen: matricula,
+        p_location_destino: hasLoc ? vars.location_destino! : null,
+        p_destino_externo: hasExt ? vars.destino_externo! : null,
+        p_items: vars.items,
       })
 
       const data = res.data as { id_transferencia?: string } | null

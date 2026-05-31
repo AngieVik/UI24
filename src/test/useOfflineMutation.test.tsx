@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-const rpcMock = vi.fn<(name: string, payload: unknown) => Promise<{ data: unknown; error: unknown }>>()
+const rpcMock =
+  vi.fn<(name: string, payload: unknown) => Promise<{ data: unknown; error: unknown }>>()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -14,7 +15,9 @@ vi.mock('@/lib/supabase', () => ({
 // Estado mutable para el flag online
 let onlineState = true
 vi.mock('@/stores/useGlobalStore', () => {
-  function useGlobalStore<T = unknown>(selector?: (s: { isOnline: boolean }) => T): T | { isOnline: boolean } {
+  function useGlobalStore<T = unknown>(
+    selector?: (s: { isOnline: boolean }) => T
+  ): T | { isOnline: boolean } {
     const state = { isOnline: onlineState }
     return selector ? selector(state) : state
   }
@@ -58,7 +61,7 @@ describe('useOfflineMutation', () => {
 
     const { result } = renderHook(
       () => useOfflineMutation<{ matricula: string }>({ rpcName: 'rpc_checkin' }),
-      { wrapper: wrapper(client) },
+      { wrapper: wrapper(client) }
     )
 
     await act(async () => {
@@ -69,7 +72,10 @@ describe('useOfflineMutation', () => {
     })
 
     expect(rpcMock).toHaveBeenCalledTimes(1)
-    expect(rpcMock).toHaveBeenCalledWith('rpc_checkin', { matricula: '1234ABC', p_mutation_uuid: 'uuid-1' })
+    expect(rpcMock).toHaveBeenCalledWith('rpc_checkin', {
+      matricula: '1234ABC',
+      p_mutation_uuid: 'uuid-1',
+    })
 
     expect(useOfflineMutationQueue.getState().pending).toEqual([])
   })
@@ -79,8 +85,11 @@ describe('useOfflineMutation', () => {
     const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
 
     const { result } = renderHook(
-      () => useOfflineMutation<{ p_matricula: string; p_km_inicio: number }>({ rpcName: 'rpc_checkin_vehiculo' }),
-      { wrapper: wrapper(client) },
+      () =>
+        useOfflineMutation<{ p_matricula: string; p_km_inicio: number }>({
+          rpcName: 'rpc_checkin_vehiculo',
+        }),
+      { wrapper: wrapper(client) }
     )
 
     await act(async () => {
@@ -88,8 +97,8 @@ describe('useOfflineMutation', () => {
     })
 
     expect(rpcMock).toHaveBeenCalledWith('rpc_checkin_vehiculo', {
-      p_matricula:     '1234ABC',
-      p_km_inicio:     100000,
+      p_matricula: '1234ABC',
+      p_km_inicio: 100000,
       p_mutation_uuid: 'uuid-1',
     })
     // No encolado
@@ -102,14 +111,17 @@ describe('useOfflineMutation', () => {
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
 
     const { result } = renderHook(
-      () => useOfflineMutation<{ x: number }>({
-        rpcName: 'rpc_x',
-        invalidates: [['personal_en_turno'], ['vehiculo_activo', 'foo']],
-      }),
-      { wrapper: wrapper(client) },
+      () =>
+        useOfflineMutation<{ x: number }>({
+          rpcName: 'rpc_x',
+          invalidates: [['personal_en_turno'], ['vehiculo_activo', 'foo']],
+        }),
+      { wrapper: wrapper(client) }
     )
 
-    await act(async () => { await result.current.mutateAsync({ x: 1 }) })
+    await act(async () => {
+      await result.current.mutateAsync({ x: 1 })
+    })
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['personal_en_turno'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['vehiculo_activo', 'foo'] })
@@ -121,16 +133,15 @@ describe('useOfflineMutation', () => {
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
 
     const { result } = renderHook(
-      () => useOfflineMutation<{ x: number }>({
-        rpcName: 'rpc_x',
-        invalidates: [['k']],
-      }),
-      { wrapper: wrapper(client) },
+      () =>
+        useOfflineMutation<{ x: number }>({
+          rpcName: 'rpc_x',
+          invalidates: [['k']],
+        }),
+      { wrapper: wrapper(client) }
     )
 
-    await expect(
-      act(() => result.current.mutateAsync({ x: 1 })),
-    ).rejects.toThrow('boom')
+    await expect(act(() => result.current.mutateAsync({ x: 1 }))).rejects.toThrow('boom')
     expect(invalidateSpy).not.toHaveBeenCalled()
   })
 
@@ -139,11 +150,12 @@ describe('useOfflineMutation', () => {
     const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
 
     const { result } = renderHook(
-      () => useOfflineMutation<{ matricula: string }>({
-        rpcName: 'rpc_checkin',
-        invalidates: [['personal_en_turno']],
-      }),
-      { wrapper: wrapper(client) },
+      () =>
+        useOfflineMutation<{ matricula: string }>({
+          rpcName: 'rpc_checkin',
+          invalidates: [['personal_en_turno']],
+        }),
+      { wrapper: wrapper(client) }
     )
 
     await act(async () => {
@@ -168,14 +180,17 @@ describe('useOfflineMutation', () => {
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
 
     const { result } = renderHook(
-      () => useOfflineMutation<{ x: number }>({
-        rpcName: 'rpc_x',
-        invalidates: [['k']],
-      }),
-      { wrapper: wrapper(client) },
+      () =>
+        useOfflineMutation<{ x: number }>({
+          rpcName: 'rpc_x',
+          invalidates: [['k']],
+        }),
+      { wrapper: wrapper(client) }
     )
 
-    await act(async () => { await result.current.mutateAsync({ x: 1 }) })
+    await act(async () => {
+      await result.current.mutateAsync({ x: 1 })
+    })
     expect(invalidateSpy).not.toHaveBeenCalled()
   })
 
@@ -183,16 +198,21 @@ describe('useOfflineMutation', () => {
     rpcMock.mockResolvedValue({ data: null, error: null })
     const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
 
-    const { result } = renderHook(
-      () => useOfflineMutation<{ x: number }>({ rpcName: 'rpc_x' }),
-      { wrapper: wrapper(client) },
-    )
+    const { result } = renderHook(() => useOfflineMutation<{ x: number }>({ rpcName: 'rpc_x' }), {
+      wrapper: wrapper(client),
+    })
 
-    await act(async () => { await result.current.mutateAsync({ x: 1 }) })
-    await act(async () => { await result.current.mutateAsync({ x: 2 }) })
+    await act(async () => {
+      await result.current.mutateAsync({ x: 1 })
+    })
+    await act(async () => {
+      await result.current.mutateAsync({ x: 2 })
+    })
 
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(2))
-    const uuids = rpcMock.mock.calls.map((c) => (c[1] as { p_mutation_uuid: string }).p_mutation_uuid)
+    const uuids = rpcMock.mock.calls.map(
+      (c) => (c[1] as { p_mutation_uuid: string }).p_mutation_uuid
+    )
     expect(new Set(uuids).size).toBe(2)
   })
 })

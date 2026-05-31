@@ -4,7 +4,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useActivacionStore } from '@/stores/useActivacionStore'
 import { useInventarioVehiculo, type InventarioItem } from '@/hooks/useInventarioVehiculo'
@@ -16,7 +22,7 @@ import { formatRol } from '@/lib/formatRol'
 const DESTINO_EXTERNO = '__externo__'
 
 type CarritoEntry = EnvioItem & {
-  nombre:    string
+  nombre: string
   categoria: string
 }
 
@@ -48,7 +54,7 @@ export function Doc10EnvioMaterialScreen() {
   // Destinos disponibles = locations sin el propio vehículo + 'externo'
   const destinosLista = useMemo(
     () => locations.filter((l) => l.location_id !== matricula),
-    [locations, matricula],
+    [locations, matricula]
   )
 
   const filteredByCategoria = useMemo(() => {
@@ -77,13 +83,13 @@ export function Doc10EnvioMaterialScreen() {
     const key = carritoKey(it.id_item, it.subgrupo)
     setCarrito((prev) => {
       const next = new Map(prev)
-      const cur  = next.get(key)
+      const cur = next.get(key)
       const nueva = Math.min((cur?.cantidad ?? 0) + 1, it.stock_real)
       next.set(key, {
-        id_item:   it.id_item,
-        subgrupo:  it.subgrupo,
-        cantidad:  nueva,
-        nombre:    it.nombre,
+        id_item: it.id_item,
+        subgrupo: it.subgrupo,
+        cantidad: nueva,
+        nombre: it.nombre,
         categoria: it.categoria,
       })
       return next
@@ -94,7 +100,7 @@ export function Doc10EnvioMaterialScreen() {
   function restarDelCarrito(key: string) {
     setCarrito((prev) => {
       const next = new Map(prev)
-      const cur  = next.get(key)
+      const cur = next.get(key)
       if (!cur) return prev
       if (cur.cantidad <= 1) next.delete(key)
       else next.set(key, { ...cur, cantidad: cur.cantidad - 1 })
@@ -114,12 +120,14 @@ export function Doc10EnvioMaterialScreen() {
     if (carrito.size === 0 || !operador || !destinoSelect) return
     setFeedback(null)
     const entries = [...carrito.values()].map<EnvioItem>((e) => ({
-      id_item: e.id_item, subgrupo: e.subgrupo, cantidad: e.cantidad,
+      id_item: e.id_item,
+      subgrupo: e.subgrupo,
+      cantidad: e.cantidad,
     }))
     const res = await enviar({
       operador,
       location_destino: destinoSelect === DESTINO_EXTERNO ? null : destinoSelect,
-      destino_externo:  destinoSelect === DESTINO_EXTERNO ? destinoExterno.trim() : null,
+      destino_externo: destinoSelect === DESTINO_EXTERNO ? destinoExterno.trim() : null,
       items: entries,
     })
     if (!res) return
@@ -128,7 +136,7 @@ export function Doc10EnvioMaterialScreen() {
     setFeedback(
       res.online
         ? `Envío registrado (transferencia ${res.id_transferencia?.slice(0, 8)}).`
-        : 'Envío encolado offline. Se aplicará al reconectar.',
+        : 'Envío encolado offline. Se aplicará al reconectar.'
     )
   }
 
@@ -147,10 +155,9 @@ export function Doc10EnvioMaterialScreen() {
   }
 
   const sinOperador = !personal.isLoading && personal.data.length === 0
-  const totalItems  = [...carrito.values()].reduce((a, b) => a + b.cantidad, 0)
-  const destinoOk = destinoSelect === DESTINO_EXTERNO
-    ? destinoExterno.trim().length >= 2
-    : destinoSelect.length > 0
+  const totalItems = [...carrito.values()].reduce((a, b) => a + b.cantidad, 0)
+  const destinoOk =
+    destinoSelect === DESTINO_EXTERNO ? destinoExterno.trim().length >= 2 : destinoSelect.length > 0
   const submitDisabled = isSubmitting || carrito.size === 0 || !operador || !destinoOk
 
   return (
@@ -175,7 +182,11 @@ export function Doc10EnvioMaterialScreen() {
               <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                 Operador (firma)
               </span>
-              <Select value={operador} onValueChange={setOperador} disabled={isSubmitting || sinOperador}>
+              <Select
+                value={operador}
+                onValueChange={setOperador}
+                disabled={isSubmitting || sinOperador}
+              >
                 <SelectTrigger aria-label="Operador">
                   <SelectValue placeholder="Selecciona operador" />
                 </SelectTrigger>
@@ -183,7 +194,9 @@ export function Doc10EnvioMaterialScreen() {
                   {personal.data.map((p) => (
                     <SelectItem key={p.id_nombre} value={p.id_nombre}>
                       <span className="font-bold">{p.nombre_real}</span>
-                      <span className="ml-2 text-xs font-light text-muted-foreground">{formatRol(p.rol)}</span>
+                      <span className="ml-2 text-xs font-light text-muted-foreground">
+                        {formatRol(p.rol)}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -197,7 +210,11 @@ export function Doc10EnvioMaterialScreen() {
               {locLoading ? (
                 <Skeleton className="h-9 w-full" />
               ) : (
-                <Select value={destinoSelect} onValueChange={setDestinoSelect} disabled={isSubmitting}>
+                <Select
+                  value={destinoSelect}
+                  onValueChange={setDestinoSelect}
+                  disabled={isSubmitting}
+                >
                   <SelectTrigger aria-label="Destino">
                     <SelectValue placeholder="Selecciona destino" />
                   </SelectTrigger>
@@ -205,7 +222,9 @@ export function Doc10EnvioMaterialScreen() {
                     {destinosLista.map((l) => (
                       <SelectItem key={l.location_id} value={l.location_id}>
                         <span className="font-bold">{l.nombre}</span>
-                        <span className="ml-2 text-xs font-light text-muted-foreground">{l.tipo}</span>
+                        <span className="ml-2 text-xs font-light text-muted-foreground">
+                          {l.tipo}
+                        </span>
                       </SelectItem>
                     ))}
                     <SelectItem value={DESTINO_EXTERNO}>
@@ -233,7 +252,10 @@ export function Doc10EnvioMaterialScreen() {
           </div>
 
           <div className="relative">
-            <Search aria-hidden="true" className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              aria-hidden="true"
+              className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
             <Input
               placeholder="Buscar por nombre, categoría o especificación…"
               value={query}
@@ -281,7 +303,9 @@ export function Doc10EnvioMaterialScreen() {
                           {it.especificacion && ` · ${it.especificacion}`}
                         </span>
                       </div>
-                      <Badge variant="secondary" aria-label={`Stock ${it.stock_real}`}>{it.stock_real}</Badge>
+                      <Badge variant="secondary" aria-label={`Stock ${it.stock_real}`}>
+                        {it.stock_real}
+                      </Badge>
                       <Button
                         size="sm"
                         variant="outline"
@@ -310,7 +334,12 @@ export function Doc10EnvioMaterialScreen() {
             <Badge variant="secondary">{totalItems}</Badge>
           </CardTitle>
           {carrito.size > 0 && (
-            <Button size="sm" variant="ghost" onClick={() => setCarrito(new Map())} disabled={isSubmitting}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setCarrito(new Map())}
+              disabled={isSubmitting}
+            >
               Vaciar
             </Button>
           )}
@@ -326,13 +355,29 @@ export function Doc10EnvioMaterialScreen() {
                 <li key={key} className="flex items-center gap-2 px-2 py-1.5">
                   <div className="flex flex-1 flex-col leading-tight">
                     <span className="font-bold">{e.nombre}</span>
-                    <span className="text-xs font-light text-muted-foreground">{e.categoria} · {e.subgrupo}</span>
+                    <span className="text-xs font-light text-muted-foreground">
+                      {e.categoria} · {e.subgrupo}
+                    </span>
                   </div>
-                  <Button size="icon" variant="ghost" onClick={() => restarDelCarrito(key)} disabled={isSubmitting} aria-label={`Restar ${e.nombre}`}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => restarDelCarrito(key)}
+                    disabled={isSubmitting}
+                    aria-label={`Restar ${e.nombre}`}
+                  >
                     <Minus aria-hidden="true" className="size-4" />
                   </Button>
-                  <Badge variant="default" aria-label={`Cantidad ${e.cantidad}`}>{e.cantidad}</Badge>
-                  <Button size="icon" variant="ghost" onClick={() => eliminarDelCarrito(key)} disabled={isSubmitting} aria-label={`Eliminar ${e.nombre} del envío`}>
+                  <Badge variant="default" aria-label={`Cantidad ${e.cantidad}`}>
+                    {e.cantidad}
+                  </Badge>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => eliminarDelCarrito(key)}
+                    disabled={isSubmitting}
+                    aria-label={`Eliminar ${e.nombre} del envío`}
+                  >
                     <Trash2 aria-hidden="true" className="size-4" />
                   </Button>
                 </li>

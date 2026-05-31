@@ -5,19 +5,26 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Rol } from '@/lib/auth-roles'
 
 interface FichaEmpleado {
-  id_nombre:        string
-  nombre_real:  string | null
-  rol:              Rol
-  telefono:         string | null
-  email:            string | null
-  activo:           boolean
-  fecha_alta:       string | null
+  id_nombre: string
+  nombre_real: string | null
+  rol: Rol
+  telefono: string | null
+  email: string | null
+  activo: boolean
+  fecha_alta: string | null
 }
 
 function useFichas() {
@@ -38,14 +45,27 @@ function useFichas() {
 }
 
 const ROL_VARIANT: Partial<Record<Rol, 'ok' | 'warn' | 'destructive' | 'info' | 'secondary'>> = {
-  gerencia: 'destructive', coordinacion: 'warn', responsable_flota: 'warn',
-  responsable_logistica: 'warn', tes: 'ok', due: 'ok', medico: 'ok',
-  flota: 'info', logistica: 'info', rrhh: 'info', personal_externo: 'secondary', invitado: 'secondary',
+  gerencia: 'destructive',
+  coordinacion: 'warn',
+  responsable_flota: 'warn',
+  responsable_logistica: 'warn',
+  tes: 'ok',
+  due: 'ok',
+  medico: 'ok',
+  flota: 'info',
+  logistica: 'info',
+  rrhh: 'info',
+  personal_externo: 'secondary',
+  invitado: 'secondary',
 }
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }
 
 export function FichasEmpleadosScreen() {
@@ -55,16 +75,17 @@ export function FichasEmpleadosScreen() {
 
   const empleados = (query.data ?? []).filter((e) => {
     const q = search.toLowerCase()
-    return e.id_nombre.toLowerCase().includes(q) ||
+    return (
+      e.id_nombre.toLowerCase().includes(q) ||
       (e.nombre_real ?? '').toLowerCase().includes(q) ||
       e.rol.toLowerCase().includes(q)
+    )
   })
 
   const detalle = detalleId ? (query.data ?? []).find((e) => e.id_nombre === detalleId) : null
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <UserCircle aria-hidden="true" className="size-5 text-muted-foreground" />
@@ -73,13 +94,22 @@ export function FichasEmpleadosScreen() {
             <Badge variant="secondary">{query.data.filter((e) => e.activo).length} activos</Badge>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={() => query.refetch()} disabled={query.isLoading} aria-label="Recargar fichas">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => query.refetch()}
+          disabled={query.isLoading}
+          aria-label="Recargar fichas"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Search
+          className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
         <Input
           type="search"
           placeholder="Buscar por nombre, identificador o rol…"
@@ -122,7 +152,9 @@ export function FichasEmpleadosScreen() {
                     <TableCell className="font-medium">{e.id_nombre}</TableCell>
                     <TableCell className="text-sm">{e.nombre_real ?? '—'}</TableCell>
                     <TableCell>
-                      <Badge variant={ROL_VARIANT[e.rol] ?? 'info'} className="text-xs">{e.rol}</Badge>
+                      <Badge variant={ROL_VARIANT[e.rol] ?? 'info'} className="text-xs">
+                        {e.rol}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={e.activo ? 'ok' : 'secondary'} className="text-xs">
@@ -131,7 +163,8 @@ export function FichasEmpleadosScreen() {
                     </TableCell>
                     <TableCell>
                       <Button
-                        size="sm" variant="ghost"
+                        size="sm"
+                        variant="ghost"
                         onClick={() => setDetalleId(detalleId === e.id_nombre ? null : e.id_nombre)}
                         aria-label={`Ver ficha de ${e.id_nombre}`}
                       >

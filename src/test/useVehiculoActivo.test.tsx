@@ -5,16 +5,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const fromMock = vi.fn<(table: string) => unknown>()
 const channelMock = vi.fn<(name: string) => unknown>(() => ({
-  on:        vi.fn().mockReturnThis(),
+  on: vi.fn().mockReturnThis(),
   subscribe: vi.fn().mockReturnThis(),
 }))
 const removeChannelMock = vi.fn<(ch: unknown) => unknown>()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    from:          (table: string) => fromMock(table),
-    channel:       (name: string)  => channelMock(name),
-    removeChannel: (ch: unknown)   => removeChannelMock(ch),
+    from: (table: string) => fromMock(table),
+    channel: (name: string) => channelMock(name),
+    removeChannel: (ch: unknown) => removeChannelMock(ch),
   },
 }))
 
@@ -27,7 +27,9 @@ function setMatricula(matricula: string) {
   activacionState = { matricula }
 }
 vi.mock('@/stores/useActivacionStore', () => {
-  function useActivacionStore<T = unknown>(selector?: (s: typeof activacionState) => T): T | typeof activacionState {
+  function useActivacionStore<T = unknown>(
+    selector?: (s: typeof activacionState) => T
+  ): T | typeof activacionState {
     return selector ? selector(activacionState) : activacionState
   }
   return { useActivacionStore }
@@ -43,11 +45,11 @@ function wrapper(client: QueryClient) {
 
 function buildBuilder(result: { data: unknown; error: unknown }) {
   return {
-    select:      vi.fn().mockReturnThis(),
-    eq:          vi.fn().mockReturnThis(),
-    is:          vi.fn().mockReturnThis(),
-    order:       vi.fn().mockReturnThis(),
-    limit:       vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue(result),
   }
 }
@@ -75,17 +77,22 @@ describe('useVehiculoActivo', () => {
       if (table === 'vehiculos') {
         return buildBuilder({
           data: {
-            matricula:         '1234ABC',
-            tipo:              'SVB',
+            matricula: '1234ABC',
+            tipo: 'SVB',
             condicion_tecnica: 'operativo',
-            estado_operativo:  'activo',
+            estado_operativo: 'activo',
           },
           error: null,
         })
       }
       if (table === 'activaciones_vehiculo') {
         return buildBuilder({
-          data: { pilot: 'pmartin', carry: 'rsoto', timestamp_apertura: '2026-05-24T07:00:00Z', tipo_servicio: 'urgente' },
+          data: {
+            pilot: 'pmartin',
+            carry: 'rsoto',
+            timestamp_apertura: '2026-05-24T07:00:00Z',
+            tipo_servicio: 'urgente',
+          },
           error: null,
         })
       }
@@ -97,13 +104,13 @@ describe('useVehiculoActivo', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.data).toEqual({
-      matricula:         '1234ABC',
-      tipo:              'SVB',
+      matricula: '1234ABC',
+      tipo: 'SVB',
       condicion_tecnica: 'operativo',
-      estado_operativo:  'activo',
-      pilot:             'pmartin',
-      carry:             'rsoto',
-      tipo_servicio:     'urgente',
+      estado_operativo: 'activo',
+      pilot: 'pmartin',
+      carry: 'rsoto',
+      tipo_servicio: 'urgente',
     })
   })
 
@@ -114,10 +121,10 @@ describe('useVehiculoActivo', () => {
       if (table === 'vehiculos') {
         return buildBuilder({
           data: {
-            matricula:         '1234ABC',
-            tipo:              'SVB',
+            matricula: '1234ABC',
+            tipo: 'SVB',
             condicion_tecnica: 'operativo',
-            estado_operativo:  'inactivo',
+            estado_operativo: 'inactivo',
           },
           error: null,
         })

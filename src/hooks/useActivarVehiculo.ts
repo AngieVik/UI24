@@ -9,19 +9,19 @@ interface ActivarResult {
 
 interface ActivarVehiculoVars {
   /** id_nombre del pilot — debe estar presente en el terminal. */
-  pilot:    string
+  pilot: string
   matricula: string
   km_inicio: number
   /** id_nombre del carry (opcional). */
-  carry?:   string | null
+  carry?: string | null
 }
 
 interface CheckinRpcData {
   id_activacion: string
-  id_parte:      string
-  id_checklist:  string
-  matricula:     string
-  pilot:         string
+  id_parte: string
+  id_checklist: string
+  matricula: string
+  pilot: string
 }
 
 /**
@@ -41,15 +41,12 @@ export function useActivarVehiculo() {
 
   const checkin = useOfflineMutation<{
     p_id_nombre_pilot: string
-    p_matricula:       string
-    p_km_inicio:       number
-    p_carry:           string | null
+    p_matricula: string
+    p_km_inicio: number
+    p_carry: string | null
   }>({
     rpcName: 'rpc_checkin_vehiculo_v2',
-    invalidates: [
-      ['vehiculo_activo'],
-      ['vehiculos_disponibles'],
-    ],
+    invalidates: [['vehiculo_activo'], ['vehiculos_disponibles']],
   })
 
   async function run(vars: ActivarVehiculoVars): Promise<ActivarResult | null> {
@@ -58,24 +55,24 @@ export function useActivarVehiculo() {
     try {
       const result = await checkin.mutateAsync({
         p_id_nombre_pilot: vars.pilot,
-        p_matricula:       vars.matricula,
-        p_km_inicio:       vars.km_inicio,
-        p_carry:           vars.carry ?? null,
+        p_matricula: vars.matricula,
+        p_km_inicio: vars.km_inicio,
+        p_carry: vars.carry ?? null,
       })
 
       if (!result.queued && result.data) {
         const data = result.data as CheckinRpcData
         useActivacionStore.getState().setActivacion({
           id_activacion: data.id_activacion,
-          id_checklist:  data.id_checklist,
-          matricula:     data.matricula,
+          id_checklist: data.id_checklist,
+          matricula: data.matricula,
         })
       } else {
         // Offline: ids placeholder hasta drenar.
         useActivacionStore.getState().setActivacion({
           id_activacion: result.mutation_uuid,
-          id_checklist:  crypto.randomUUID(),
-          matricula:     vars.matricula,
+          id_checklist: crypto.randomUUID(),
+          matricula: vars.matricula,
         })
       }
 

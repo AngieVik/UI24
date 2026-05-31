@@ -4,36 +4,43 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 interface StockRow {
-  location_id:  string
-  id_item:      number
-  stock_real:   number
-  stock_min:    number | null
-  stock_max:    number | null
-  updated_at:   string
-  nombre?:      string
+  location_id: string
+  id_item: number
+  stock_real: number
+  stock_min: number | null
+  stock_max: number | null
+  updated_at: string
+  nombre?: string
 }
 
 interface PlantillaRow {
-  id_plantilla:  string
-  nombre:        string
-  tipo:          string
-  activa:        boolean
-  num_items?:    number
+  id_plantilla: string
+  nombre: string
+  tipo: string
+  activa: boolean
+  num_items?: number
 }
 
 interface AlertaRow {
-  location_id:   string
-  id_item:       number
-  stock_real:    number
-  stock_min:     number
-  diferencia:    number
-  nombre?:       string
+  location_id: string
+  id_item: number
+  stock_real: number
+  stock_min: number
+  diferencia: number
+  nombre?: string
 }
 
 function useStockHistorial() {
@@ -44,18 +51,22 @@ function useStockHistorial() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('inventario_stock_actual')
-        .select('location_id, id_item, stock_real, stock_min, stock_max, updated_at, catalogo_items(nombre)')
+        .select(
+          'location_id, id_item, stock_real, stock_min, stock_max, updated_at, catalogo_items(nombre)'
+        )
         .order('updated_at', { ascending: false })
         .limit(100)
       if (error) throw error
       return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
         location_id: r['location_id'] as string,
-        id_item:     r['id_item'] as number,
-        stock_real:  r['stock_real'] as number,
-        stock_min:   r['stock_min'] as number | null,
-        stock_max:   r['stock_max'] as number | null,
-        updated_at:  r['updated_at'] as string,
-        nombre:      ((r['catalogo_items'] as Record<string, unknown> | null)?.['nombre'] as string) ?? undefined,
+        id_item: r['id_item'] as number,
+        stock_real: r['stock_real'] as number,
+        stock_min: r['stock_min'] as number | null,
+        stock_max: r['stock_max'] as number | null,
+        updated_at: r['updated_at'] as string,
+        nombre:
+          ((r['catalogo_items'] as Record<string, unknown> | null)?.['nombre'] as string) ??
+          undefined,
       }))
     },
   })
@@ -91,11 +102,13 @@ function useAlertas() {
       return ((data ?? []) as Record<string, unknown>[])
         .map((r) => ({
           location_id: r['location_id'] as string,
-          id_item:     r['id_item'] as number,
-          stock_real:  r['stock_real'] as number,
-          stock_min:   r['stock_min'] as number,
-          diferencia:  (r['stock_min'] as number) - (r['stock_real'] as number),
-          nombre:      ((r['catalogo_items'] as Record<string, unknown> | null)?.['nombre'] as string) ?? undefined,
+          id_item: r['id_item'] as number,
+          stock_real: r['stock_real'] as number,
+          stock_min: r['stock_min'] as number,
+          diferencia: (r['stock_min'] as number) - (r['stock_real'] as number),
+          nombre:
+            ((r['catalogo_items'] as Record<string, unknown> | null)?.['nombre'] as string) ??
+            undefined,
         }))
         .filter((r) => r.stock_real < r.stock_min)
     },
@@ -103,10 +116,19 @@ function useAlertas() {
 }
 
 function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
-export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'alertas' | 'gestion' }) {
+export function StockScreen({
+  vista,
+}: {
+  vista?: 'historial' | 'plantillas' | 'alertas' | 'gestion'
+}) {
   const [tab, setTab] = useState<string>(vista ?? 'historial')
   const histQ = useStockHistorial()
   const planQ = usePlantillas()
@@ -114,7 +136,6 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Tag aria-hidden="true" className="size-5 text-muted-foreground" />
@@ -124,8 +145,13 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
           )}
         </div>
         <Button
-          size="sm" variant="outline"
-          onClick={() => { histQ.refetch(); planQ.refetch(); alertQ.refetch() }}
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            histQ.refetch()
+            planQ.refetch()
+            alertQ.refetch()
+          }}
           aria-label="Recargar stock"
         >
           <RefreshCw className="size-4" aria-hidden="true" />
@@ -134,21 +160,34 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="historial"><Clock className="size-3.5 mr-1" />Historial</TabsTrigger>
-          <TabsTrigger value="plantillas"><Tag className="size-3.5 mr-1" />Plantillas</TabsTrigger>
+          <TabsTrigger value="historial">
+            <Clock className="size-3.5 mr-1" />
+            Historial
+          </TabsTrigger>
+          <TabsTrigger value="plantillas">
+            <Tag className="size-3.5 mr-1" />
+            Plantillas
+          </TabsTrigger>
           <TabsTrigger value="alertas">
             <Bell className="size-3.5 mr-1" />
             Alertas
             {(alertQ.data?.length ?? 0) > 0 && (
-              <Badge variant="destructive" className="ml-1 text-xs">{alertQ.data!.length}</Badge>
+              <Badge variant="destructive" className="ml-1 text-xs">
+                {alertQ.data!.length}
+              </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="gestion"><Settings2 className="size-3.5 mr-1" />Gestión</TabsTrigger>
+          <TabsTrigger value="gestion">
+            <Settings2 className="size-3.5 mr-1" />
+            Gestión
+          </TabsTrigger>
         </TabsList>
 
         {/* Historial */}
         <TabsContent value="historial" className="mt-3">
-          {histQ.isLoading ? <Skeleton className="h-40 w-full" /> : (
+          {histQ.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
             <Card>
               <CardContent className="p-0">
                 <Table>
@@ -169,7 +208,13 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
                           <div className="text-sm font-medium">{r.nombre ?? `#${r.id_item}`}</div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={r.stock_min != null && r.stock_real < r.stock_min ? 'destructive' : 'ok'}>
+                          <Badge
+                            variant={
+                              r.stock_min != null && r.stock_real < r.stock_min
+                                ? 'destructive'
+                                : 'ok'
+                            }
+                          >
                             {r.stock_real}
                           </Badge>
                         </TableCell>
@@ -188,7 +233,9 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
 
         {/* Plantillas */}
         <TabsContent value="plantillas" className="mt-3">
-          {planQ.isLoading ? <Skeleton className="h-40 w-full" /> : (
+          {planQ.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
             <Card>
               <CardContent className="p-0">
                 <Table>
@@ -203,9 +250,13 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
                     {(planQ.data ?? []).map((p) => (
                       <TableRow key={p.id_plantilla}>
                         <TableCell className="font-medium">{p.nombre}</TableCell>
-                        <TableCell><Badge variant="info">{p.tipo}</Badge></TableCell>
                         <TableCell>
-                          <Badge variant={p.activa ? 'ok' : 'secondary'}>{p.activa ? 'Activa' : 'Inactiva'}</Badge>
+                          <Badge variant="info">{p.tipo}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={p.activa ? 'ok' : 'secondary'}>
+                            {p.activa ? 'Activa' : 'Inactiva'}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -218,7 +269,9 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
 
         {/* Alertas */}
         <TabsContent value="alertas" className="mt-3">
-          {alertQ.isLoading ? <Skeleton className="h-40 w-full" /> : (alertQ.data?.length ?? 0) === 0 ? (
+          {alertQ.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (alertQ.data?.length ?? 0) === 0 ? (
             <Card>
               <CardContent className="py-8 text-center">
                 <p className="text-sm text-muted-foreground">No hay alertas de stock activas.</p>
@@ -234,7 +287,9 @@ export function StockScreen({ vista }: { vista?: 'historial' | 'plantillas' | 'a
                       <div className="text-xs text-muted-foreground">{a.location_id}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-destructive">{a.stock_real} / {a.stock_min} min</div>
+                      <div className="font-bold text-destructive">
+                        {a.stock_real} / {a.stock_min} min
+                      </div>
                       <div className="text-xs text-destructive">Faltan {a.diferencia} uds</div>
                     </div>
                   </CardContent>

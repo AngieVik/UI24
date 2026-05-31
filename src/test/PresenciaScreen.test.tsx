@@ -14,36 +14,52 @@ import { PresenciaScreen } from '@/components/operativa/PresenciaScreen'
 import { useMiPresencia } from '@/hooks/useMiPresencia'
 import { useCheckinTrabajador } from '@/hooks/useCheckinTrabajador'
 
-const useMiPresenciaMock      = vi.mocked(useMiPresencia)
+const useMiPresenciaMock = vi.mocked(useMiPresencia)
 const useCheckinTrabajadorMock = vi.mocked(useCheckinTrabajador)
 
 const checkoutMock = vi.fn()
-const checkinMock  = vi.fn()
+const checkinMock = vi.fn()
 
-function presenciaReturn(overrides: Partial<ReturnType<typeof useMiPresencia>> = {}): ReturnType<typeof useMiPresencia> {
+function presenciaReturn(
+  overrides: Partial<ReturnType<typeof useMiPresencia>> = {}
+): ReturnType<typeof useMiPresencia> {
   return {
-    ejecutorId:   'admin',
-    personal:     [],
-    isLoading:    false,
-    checkout:     checkoutMock,
+    ejecutorId: 'admin',
+    personal: [],
+    isLoading: false,
+    checkout: checkoutMock,
     isSubmitting: false,
-    error:        null,
+    error: null,
     ...overrides,
   }
 }
 
-function checkinReturn(overrides: Partial<ReturnType<typeof useCheckinTrabajador>> = {}): ReturnType<typeof useCheckinTrabajador> {
+function checkinReturn(
+  overrides: Partial<ReturnType<typeof useCheckinTrabajador>> = {}
+): ReturnType<typeof useCheckinTrabajador> {
   return {
-    checkin:      checkinMock,
+    checkin: checkinMock,
     isSubmitting: false,
-    error:        null,
-    setError:     vi.fn(),
+    error: null,
+    setError: vi.fn(),
     ...overrides,
   }
 }
 
-const ADMIN = { id_nombre: 'admin',    nombre_real: 'Administrador Demo', rol: 'gerencia', telefono: null, checkin_at: '2026-05-26T08:00:00Z' }
-const TES   = { id_nombre: 'tes_demo', nombre_real: 'TES Demo',           rol: 'tes',      telefono: null, checkin_at: '2026-05-26T08:05:00Z' }
+const ADMIN = {
+  id_nombre: 'admin',
+  nombre_real: 'Administrador Demo',
+  rol: 'gerencia',
+  telefono: null,
+  checkin_at: '2026-05-26T08:00:00Z',
+}
+const TES = {
+  id_nombre: 'tes_demo',
+  nombre_real: 'TES Demo',
+  rol: 'tes',
+  telefono: null,
+  checkin_at: '2026-05-26T08:05:00Z',
+}
 
 beforeEach(() => {
   useMiPresenciaMock.mockReset()
@@ -64,7 +80,12 @@ describe('PresenciaScreen — sumar otro trabajador', () => {
   })
 
   it('al submit válido llama checkin con (id_nombre, password)', async () => {
-    checkinMock.mockResolvedValue({ id_nombre: 'tes_demo', id_terminal: 't1', nombre_real: 'TES Demo', rol: 'tes' })
+    checkinMock.mockResolvedValue({
+      id_nombre: 'tes_demo',
+      id_terminal: 't1',
+      nombre_real: 'TES Demo',
+      rol: 'tes',
+    })
     const user = userEvent.setup()
     renderWithShell(<PresenciaScreen />)
 
@@ -73,7 +94,7 @@ describe('PresenciaScreen — sumar otro trabajador', () => {
     await user.click(screen.getByRole('button', { name: /sumar al turno/i }))
 
     await waitFor(() =>
-      expect(checkinMock).toHaveBeenCalledWith({ id_nombre: 'tes_demo', password: 'Password123!' }),
+      expect(checkinMock).toHaveBeenCalledWith({ id_nombre: 'tes_demo', password: 'Password123!' })
     )
   })
 
@@ -120,13 +141,17 @@ describe('PresenciaScreen — lista con check-out por item', () => {
   })
 
   it('marca "Tú" junto al id_nombre del logueado', () => {
-    useMiPresenciaMock.mockReturnValue(presenciaReturn({ ejecutorId: 'admin', personal: [ADMIN, TES] }))
+    useMiPresenciaMock.mockReturnValue(
+      presenciaReturn({ ejecutorId: 'admin', personal: [ADMIN, TES] })
+    )
     renderWithShell(<PresenciaScreen />)
     expect(screen.getByText(/admin · Tú/i)).toBeInTheDocument()
   })
 
   it('click en "Salir" llama checkout(id_nombre)', async () => {
-    useMiPresenciaMock.mockReturnValue(presenciaReturn({ ejecutorId: 'admin', personal: [ADMIN, TES] }))
+    useMiPresenciaMock.mockReturnValue(
+      presenciaReturn({ ejecutorId: 'admin', personal: [ADMIN, TES] })
+    )
     checkoutMock.mockResolvedValue({ noop: false })
     const user = userEvent.setup()
     renderWithShell(<PresenciaScreen />)
@@ -136,7 +161,9 @@ describe('PresenciaScreen — lista con check-out por item', () => {
   })
 
   it('botones deshabilitados mientras isSubmitting', () => {
-    useMiPresenciaMock.mockReturnValue(presenciaReturn({ ejecutorId: 'admin', personal: [ADMIN], isSubmitting: true }))
+    useMiPresenciaMock.mockReturnValue(
+      presenciaReturn({ ejecutorId: 'admin', personal: [ADMIN], isSubmitting: true })
+    )
     renderWithShell(<PresenciaScreen />)
     expect(screen.getByRole('button', { name: /check-out de administrador demo/i })).toBeDisabled()
   })
@@ -149,7 +176,7 @@ describe('PresenciaScreen — lista con check-out por item', () => {
 
     await user.click(screen.getByRole('button', { name: /check-out de administrador demo/i }))
     await waitFor(() =>
-      expect(screen.getByText(/no se pudo completar el check-out/i)).toBeInTheDocument(),
+      expect(screen.getByText(/no se pudo completar el check-out/i)).toBeInTheDocument()
     )
   })
 

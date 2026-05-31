@@ -55,12 +55,12 @@ describe('VisualInfoDRP', () => {
   it('renderiza ID, estado, coordinación y vía cuando hay DRP por vehículo', () => {
     useDrpActivoMock.mockReturnValue({
       data: {
-        id_drp:                'abcdef12-3456-7890-abcd-ef1234567890',
-        estado:                'En_curso',
-        id_coordinacion:       'coord1',
+        id_drp: 'abcdef12-3456-7890-abcd-ef1234567890',
+        estado: 'En_curso',
+        id_coordinacion: 'coord1',
         timestamp_preparacion: '2026-05-24T09:00:00.000Z',
-        timestamp_inicio:      '2026-05-24T10:00:00.000Z',
-        via:                   'vehiculo',
+        timestamp_inicio: '2026-05-24T10:00:00.000Z',
+        via: 'vehiculo',
       },
       isLoading: false,
       isError: false,
@@ -79,12 +79,12 @@ describe('VisualInfoDRP', () => {
   it('marca la vía como "A pie" cuando via === personal_a_pie', () => {
     useDrpActivoMock.mockReturnValue({
       data: {
-        id_drp:                'xyz12345-0000-0000-0000-000000000000',
-        estado:                'En_preparacion',
-        id_coordinacion:       'coord2',
+        id_drp: 'xyz12345-0000-0000-0000-000000000000',
+        estado: 'En_preparacion',
+        id_coordinacion: 'coord2',
         timestamp_preparacion: '2026-05-24T09:00:00.000Z',
-        timestamp_inicio:      null,
-        via:                   'personal_a_pie',
+        timestamp_inicio: null,
+        via: 'personal_a_pie',
       },
       isLoading: false,
       isError: false,

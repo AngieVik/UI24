@@ -18,53 +18,71 @@ import { useFlotaCompleta } from '@/hooks/useFlotaCompleta'
 import { useActualizarVehiculo } from '@/hooks/useActualizarVehiculo'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 
-const useFlotaCompletaMock      = vi.mocked(useFlotaCompleta)
+const useFlotaCompletaMock = vi.mocked(useFlotaCompleta)
 const useActualizarVehiculoMock = vi.mocked(useActualizarVehiculo)
-const usePersonalEnTurnoMock    = vi.mocked(usePersonalEnTurno)
+const usePersonalEnTurnoMock = vi.mocked(usePersonalEnTurno)
 
 const runMock = vi.fn()
 
 const VEH_DESACT: ReturnType<typeof useFlotaCompleta>['data'][number] = {
-  matricula:           '1111-DEMO',
-  tipo:                'A1',
-  condicion_tecnica:   'operativo',
-  estado_operativo:    'desactivado',
+  matricula: '1111-DEMO',
+  tipo: 'A1',
+  condicion_tecnica: 'operativo',
+  estado_operativo: 'desactivado',
   subestado_operativo: null,
 }
 const VEH_ACTIVO: ReturnType<typeof useFlotaCompleta>['data'][number] = {
-  matricula:           '2222-DEMO',
-  tipo:                'B',
-  condicion_tecnica:   'operativo',
-  estado_operativo:    'activado',
+  matricula: '2222-DEMO',
+  tipo: 'B',
+  condicion_tecnica: 'operativo',
+  estado_operativo: 'activado',
   subestado_operativo: 'en_espera',
 }
 const VEH_CRITICO: ReturnType<typeof useFlotaCompleta>['data'][number] = {
-  matricula:           '3333-DEMO',
-  tipo:                'B',
-  condicion_tecnica:   'critico',
-  estado_operativo:    'desactivado',
+  matricula: '3333-DEMO',
+  tipo: 'B',
+  condicion_tecnica: 'critico',
+  estado_operativo: 'desactivado',
   subestado_operativo: null,
 }
 const VEH_VIR: ReturnType<typeof useFlotaCompleta>['data'][number] = {
-  matricula:           '4444-DEMO',
-  tipo:                'VIR',
-  condicion_tecnica:   'operativo',
-  estado_operativo:    'desactivado',
+  matricula: '4444-DEMO',
+  tipo: 'VIR',
+  condicion_tecnica: 'operativo',
+  estado_operativo: 'desactivado',
   subestado_operativo: null,
 }
 
-const ADMIN = { id_nombre: 'admin',    nombre_real: 'Administrador Demo', rol: 'gerencia', telefono: null, checkin_at: '' }
-const TES   = { id_nombre: 'tes_demo', nombre_real: 'TES Demo',           rol: 'tes',      telefono: null, checkin_at: '' }
+const ADMIN = {
+  id_nombre: 'admin',
+  nombre_real: 'Administrador Demo',
+  rol: 'gerencia',
+  telefono: null,
+  checkin_at: '',
+}
+const TES = {
+  id_nombre: 'tes_demo',
+  nombre_real: 'TES Demo',
+  rol: 'tes',
+  telefono: null,
+  checkin_at: '',
+}
 
-function flotaReturn(overrides: Partial<ReturnType<typeof useFlotaCompleta>> = {}): ReturnType<typeof useFlotaCompleta> {
+function flotaReturn(
+  overrides: Partial<ReturnType<typeof useFlotaCompleta>> = {}
+): ReturnType<typeof useFlotaCompleta> {
   return { data: [], isLoading: false, isError: false, error: null, ...overrides }
 }
 
-function actReturn(overrides: Partial<ReturnType<typeof useActualizarVehiculo>> = {}): ReturnType<typeof useActualizarVehiculo> {
+function actReturn(
+  overrides: Partial<ReturnType<typeof useActualizarVehiculo>> = {}
+): ReturnType<typeof useActualizarVehiculo> {
   return { run: runMock, isSubmitting: false, error: null, ...overrides }
 }
 
-function personalReturn(overrides: Partial<ReturnType<typeof usePersonalEnTurno>> = {}): ReturnType<typeof usePersonalEnTurno> {
+function personalReturn(
+  overrides: Partial<ReturnType<typeof usePersonalEnTurno>> = {}
+): ReturnType<typeof usePersonalEnTurno> {
   return { data: [ADMIN], isLoading: false, isError: false, error: null, ...overrides }
 }
 
@@ -181,7 +199,11 @@ describe('VehiculosScreen — vehículo desactivado', () => {
   })
 
   it('auto-selecciona pilot si solo hay 1 presente', async () => {
-    runMock.mockResolvedValue({ online: true, matricula: '1111-DEMO', estado_operativo: 'activado' })
+    runMock.mockResolvedValue({
+      online: true,
+      matricula: '1111-DEMO',
+      estado_operativo: 'activado',
+    })
     const user = userEvent.setup()
     renderWithShell(<VehiculosScreen />)
     await selectVehiculo(user, '1111-DEMO')
@@ -194,18 +216,24 @@ describe('VehiculosScreen — vehículo desactivado', () => {
     await user.click(screen.getByRole('button', { name: /confirmar inicio/i }))
 
     await waitFor(() =>
-      expect(runMock).toHaveBeenCalledWith(expect.objectContaining({
-        matricula:      '1111-DEMO',
-        estado_destino: 'activado',
-        pilot:          'admin',
-        km_inicio:      120000,
-      })),
+      expect(runMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matricula: '1111-DEMO',
+          estado_destino: 'activado',
+          pilot: 'admin',
+          km_inicio: 120000,
+        })
+      )
     )
   })
 
   it('tipo_servicio incluido en el submit', async () => {
     usePersonalEnTurnoMock.mockReturnValue(personalReturn({ data: [ADMIN, TES] }))
-    runMock.mockResolvedValue({ online: true, matricula: '1111-DEMO', estado_operativo: 'activado' })
+    runMock.mockResolvedValue({
+      online: true,
+      matricula: '1111-DEMO',
+      estado_operativo: 'activado',
+    })
     const user = userEvent.setup()
     renderWithShell(<VehiculosScreen />)
     await selectVehiculo(user, '1111-DEMO')
@@ -226,9 +254,11 @@ describe('VehiculosScreen — vehículo desactivado', () => {
     await user.click(screen.getByRole('button', { name: /confirmar inicio/i }))
 
     await waitFor(() =>
-      expect(runMock).toHaveBeenCalledWith(expect.objectContaining({
-        tipo_servicio: 'dispositivo',
-      })),
+      expect(runMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo_servicio: 'dispositivo',
+        })
+      )
     )
   })
 
@@ -283,7 +313,11 @@ describe('VehiculosScreen — vehículo activado', () => {
   })
 
   it('clicar subestado diferente llama run con el subestado correcto', async () => {
-    runMock.mockResolvedValue({ online: true, matricula: '2222-DEMO', estado_operativo: 'activado' })
+    runMock.mockResolvedValue({
+      online: true,
+      matricula: '2222-DEMO',
+      estado_operativo: 'activado',
+    })
     const user = userEvent.setup()
     renderWithShell(<VehiculosScreen />)
     await selectVehiculo(user, '2222-DEMO')
@@ -291,10 +325,12 @@ describe('VehiculosScreen — vehículo activado', () => {
     await user.click(screen.getByRole('button', { name: /en ruta/i }))
 
     await waitFor(() =>
-      expect(runMock).toHaveBeenCalledWith(expect.objectContaining({
-        matricula:      '2222-DEMO',
-        estado_destino: 'ruta',
-      })),
+      expect(runMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matricula: '2222-DEMO',
+          estado_destino: 'ruta',
+        })
+      )
     )
   })
 
@@ -310,7 +346,11 @@ describe('VehiculosScreen — vehículo activado', () => {
   })
 
   it('finalizar turno llama run con desactivado + km_fin', async () => {
-    runMock.mockResolvedValue({ online: true, matricula: '2222-DEMO', estado_operativo: 'desactivado' })
+    runMock.mockResolvedValue({
+      online: true,
+      matricula: '2222-DEMO',
+      estado_operativo: 'desactivado',
+    })
     const user = userEvent.setup()
     renderWithShell(<VehiculosScreen />)
     await selectVehiculo(user, '2222-DEMO')
@@ -324,11 +364,13 @@ describe('VehiculosScreen — vehículo activado', () => {
     await user.click(screen.getByRole('button', { name: /confirmar finalización/i }))
 
     await waitFor(() =>
-      expect(runMock).toHaveBeenCalledWith(expect.objectContaining({
-        matricula:      '2222-DEMO',
-        estado_destino: 'desactivado',
-        km_fin:         88000,
-      })),
+      expect(runMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matricula: '2222-DEMO',
+          estado_destino: 'desactivado',
+          km_fin: 88000,
+        })
+      )
     )
   })
 
@@ -350,9 +392,11 @@ describe('VehiculosScreen — vehículo activado', () => {
 describe('VehiculosScreen — errores y feedback', () => {
   it('muestra error devuelto por el hook', async () => {
     useFlotaCompletaMock.mockReturnValue(flotaReturn({ data: [VEH_DESACT] }))
-    useActualizarVehiculoMock.mockReturnValue(actReturn({
-      error: 'ERR_PILOT_002: El pilot debe estar presente en un terminal',
-    }))
+    useActualizarVehiculoMock.mockReturnValue(
+      actReturn({
+        error: 'ERR_PILOT_002: El pilot debe estar presente en un terminal',
+      })
+    )
     const user = userEvent.setup()
     renderWithShell(<VehiculosScreen />)
     await selectVehiculo(user, '1111-DEMO')
@@ -362,15 +406,17 @@ describe('VehiculosScreen — errores y feedback', () => {
 
   it('muestra feedback offline cuando run devuelve online=false', async () => {
     useFlotaCompletaMock.mockReturnValue(flotaReturn({ data: [VEH_ACTIVO] }))
-    runMock.mockResolvedValue({ online: false, matricula: '2222-DEMO', estado_operativo: 'activado' })
+    runMock.mockResolvedValue({
+      online: false,
+      matricula: '2222-DEMO',
+      estado_operativo: 'activado',
+    })
     const user = userEvent.setup()
     renderWithShell(<VehiculosScreen />)
     await selectVehiculo(user, '2222-DEMO')
 
     await user.click(screen.getByRole('button', { name: /en ruta/i }))
 
-    await waitFor(() =>
-      expect(screen.getByText(/encolado/i)).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText(/encolado/i)).toBeInTheDocument())
   })
 })

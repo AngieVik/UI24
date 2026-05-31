@@ -56,9 +56,7 @@ describe('useOfflineQueue — enqueue', () => {
       uuid2 = result.current.enqueue('rpc_deducir_material', { id_item: 1, cantidad: 2 })
     })
     expect(uuid1).not.toBe(uuid2)
-    expect(uuid1).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    )
+    expect(uuid1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   })
 
   it('el payload incluye mutation_uuid para el ledger ADR-012', () => {
@@ -90,9 +88,7 @@ describe('useOfflineQueue — enqueue', () => {
     act(() => {
       result.current.enqueue('rpc_deducir_material', {}, fixedUuid)
     })
-    const mutation = result.current.queue.find(
-      (m) => m.mutation_uuid === fixedUuid,
-    )
+    const mutation = result.current.queue.find((m) => m.mutation_uuid === fixedUuid)
     expect(mutation).toBeDefined()
     expect(mutation?.payload.mutation_uuid).toBe(fixedUuid)
   })
@@ -125,9 +121,9 @@ describe('useOfflineQueue — processQueue', () => {
     act(() => {
       result.current.enqueue('rpc_deducir_material', { id_item: 1 })
     })
-    await expect(
-      act(async () => result.current.processQueue()),
-    ).rejects.toThrow('SESSION_REFRESH_FAILED')
+    await expect(act(async () => result.current.processQueue())).rejects.toThrow(
+      'SESSION_REFRESH_FAILED'
+    )
   })
 
   it('elimina mutaciones exitosas de la cola', async () => {
@@ -171,9 +167,7 @@ describe('useOfflineQueue — processQueue', () => {
         await result.current.processQueue()
       })
     }
-    const candidates = result.current.queue.filter(
-      (m) => m.rpc_name === 'rpc_deducir_material',
-    )
+    const candidates = result.current.queue.filter((m) => m.rpc_name === 'rpc_deducir_material')
     expect(candidates.some((m) => m.status === 'failed')).toBe(true)
   })
 
@@ -191,10 +185,12 @@ describe('useOfflineQueue — processQueue', () => {
     const failedBefore = result.current.queue.filter((m) => m.status === 'failed')
     expect(failedBefore.length).toBeGreaterThan(0)
 
-    act(() => { result.current.retryFailed() })
+    act(() => {
+      result.current.retryFailed()
+    })
 
-    const afterRetry = result.current.queue.filter(
-      (m) => failedBefore.some((f) => f.mutation_uuid === m.mutation_uuid),
+    const afterRetry = result.current.queue.filter((m) =>
+      failedBefore.some((f) => f.mutation_uuid === m.mutation_uuid)
     )
     expect(afterRetry.every((m) => m.status === 'pending' && m.attempts === 0)).toBe(true)
   })
@@ -233,7 +229,9 @@ describe('useOfflineQueue — isProcessing', () => {
       result.current.enqueue('rpc_deducir_material', { id_item: 1 })
     })
     try {
-      await act(async () => { await result.current.processQueue() })
+      await act(async () => {
+        await result.current.processQueue()
+      })
     } catch {
       // esperado
     }

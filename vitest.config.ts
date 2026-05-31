@@ -11,7 +11,7 @@ export default mergeConfig(
       exclude: [
         '**/node_modules/**',
         '**/e2e/**',
-        '**/_docs/**',           // documentación externa (Supabase, shadcn, etc.)
+        '**/_docs/**', // documentación externa (Supabase, shadcn, etc.)
         '**/dist/**',
       ],
       coverage: {

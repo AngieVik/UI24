@@ -6,7 +6,7 @@ import { renderWithShell } from '@/test/test-utils'
 // ── Mocks de stores ───────────────────────────────────────────
 
 let idChecklistMock = 'chk00001-0000-0000-0000-000000000001'
-let matriculaMock  = '1234-XX'
+let matriculaMock = '1234-XX'
 const marcarChecklistCerradoMock = vi.fn()
 
 vi.mock('@/stores/useActivacionStore', () => {
@@ -15,11 +15,11 @@ vi.mock('@/stores/useActivacionStore', () => {
       id_checklist: string
       matricula: string
       marcarChecklistCerrado: () => void
-    }) => T,
+    }) => T
   ): T | object {
     const s = {
-      id_checklist:           idChecklistMock,
-      matricula:              matriculaMock,
+      id_checklist: idChecklistMock,
+      matricula: matriculaMock,
       marcarChecklistCerrado: marcarChecklistCerradoMock,
     }
     return selector ? selector(s) : s
@@ -29,9 +29,9 @@ vi.mock('@/stores/useActivacionStore', () => {
 
 // ── Mocks de hooks ────────────────────────────────────────────
 
-vi.mock('@/hooks/useChecklist360Activo',   () => ({ useChecklist360Activo:   vi.fn() }))
+vi.mock('@/hooks/useChecklist360Activo', () => ({ useChecklist360Activo: vi.fn() }))
 vi.mock('@/hooks/useChecklist360Anterior', () => ({ useChecklist360Anterior: vi.fn() }))
-vi.mock('@/hooks/useCerrarChecklist360',   () => ({ useCerrarChecklist360:   vi.fn() }))
+vi.mock('@/hooks/useCerrarChecklist360', () => ({ useCerrarChecklist360: vi.fn() }))
 
 // Mock useQuery para el tipo de vehículo
 vi.mock('@tanstack/react-query', async (importOriginal) => {
@@ -50,27 +50,27 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
 })
 
 import { Checklist360Screen } from '@/components/operativa/Checklist360Screen'
-import { useChecklist360Activo }   from '@/hooks/useChecklist360Activo'
+import { useChecklist360Activo } from '@/hooks/useChecklist360Activo'
 import { useChecklist360Anterior } from '@/hooks/useChecklist360Anterior'
-import { useCerrarChecklist360 }   from '@/hooks/useCerrarChecklist360'
+import { useCerrarChecklist360 } from '@/hooks/useCerrarChecklist360'
 
-const useActivoMock   = vi.mocked(useChecklist360Activo)
+const useActivoMock = vi.mocked(useChecklist360Activo)
 const useAnteriorMock = vi.mocked(useChecklist360Anterior)
-const useCerrarMock   = vi.mocked(useCerrarChecklist360)
+const useCerrarMock = vi.mocked(useCerrarChecklist360)
 
 let vehiculoTipoMock: { tipo: string } | null = { tipo: 'A2' }
 
 // ── Fixtures ──────────────────────────────────────────────────
 
 const CHECKLIST_ABIERTO: ReturnType<typeof useChecklist360Activo>['data'] = {
-  id_checklist:       idChecklistMock,
-  matricula:          '1234-XX',
-  id_activacion:      'act00001-0000-0000-0000-000000000001',
+  id_checklist: idChecklistMock,
+  matricula: '1234-XX',
+  id_activacion: 'act00001-0000-0000-0000-000000000001',
   id_nombre_redactor: 'jperez',
-  timestamp_inicio:   '2026-05-27T08:00:00Z',
-  timestamp_cierre:   null,
-  items_revisados:    {},
-  cerrado:            false,
+  timestamp_inicio: '2026-05-27T08:00:00Z',
+  timestamp_cierre: null,
+  items_revisados: {},
+  cerrado: false,
 }
 
 const CHECKLIST_CERRADO: ReturnType<typeof useChecklist360Activo>['data'] = {
@@ -78,7 +78,11 @@ const CHECKLIST_CERRADO: ReturnType<typeof useChecklist360Activo>['data'] = {
   timestamp_cierre: '2026-05-27T08:45:00Z',
   items_revisados: {
     parabrisas_escobillas: { estado: 'OK', campos_extra: {}, es_incidencia_heredada: false },
-    opticas_frontales:     { estado: 'OBSERVACION', campos_extra: { foco_averiado: ['Cruce Izq'] }, es_incidencia_heredada: false },
+    opticas_frontales: {
+      estado: 'OBSERVACION',
+      campos_extra: { foco_averiado: ['Cruce Izq'] },
+      es_incidencia_heredada: false,
+    },
   },
   cerrado: true,
 }
@@ -87,7 +91,7 @@ const cerrarMock = vi.fn()
 
 beforeEach(() => {
   idChecklistMock = 'chk00001-0000-0000-0000-000000000001'
-  matriculaMock   = '1234-XX'
+  matriculaMock = '1234-XX'
   vehiculoTipoMock = { tipo: 'A2' }
 
   useActivoMock.mockReset()
@@ -96,7 +100,12 @@ beforeEach(() => {
   cerrarMock.mockReset()
   marcarChecklistCerradoMock.mockReset()
 
-  useActivoMock.mockReturnValue({ data: CHECKLIST_ABIERTO, isLoading: false, isError: false, error: null })
+  useActivoMock.mockReturnValue({
+    data: CHECKLIST_ABIERTO,
+    isLoading: false,
+    isError: false,
+    error: null,
+  })
   useAnteriorMock.mockReturnValue({ anterior: {}, isLoading: false })
   useCerrarMock.mockReturnValue({ cerrar: cerrarMock, isSubmitting: false, error: null })
 })
@@ -133,7 +142,12 @@ describe('Checklist360Screen — loading / error', () => {
   })
 
   it('muestra error si falla la query', () => {
-    useActivoMock.mockReturnValue({ data: null, isLoading: false, isError: true, error: new Error('pg error') })
+    useActivoMock.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: true,
+      error: new Error('pg error'),
+    })
     renderWithShell(<Checklist360Screen />)
     expect(screen.getByText(/no se pudo cargar el checklist/i)).toBeInTheDocument()
   })
@@ -143,27 +157,49 @@ describe('Checklist360Screen — loading / error', () => {
 
 describe('Checklist360Screen — checklist cerrado', () => {
   it('muestra vista readonly si cerrado = true', () => {
-    useActivoMock.mockReturnValue({ data: CHECKLIST_CERRADO, isLoading: false, isError: false, error: null })
+    useActivoMock.mockReturnValue({
+      data: CHECKLIST_CERRADO,
+      isLoading: false,
+      isError: false,
+      error: null,
+    })
     renderWithShell(<Checklist360Screen />)
     expect(screen.getByText(/revisión 360° completada/i)).toBeInTheDocument()
   })
 
   it('muestra badge Completado', () => {
-    useActivoMock.mockReturnValue({ data: CHECKLIST_CERRADO, isLoading: false, isError: false, error: null })
+    useActivoMock.mockReturnValue({
+      data: CHECKLIST_CERRADO,
+      isLoading: false,
+      isError: false,
+      error: null,
+    })
     renderWithShell(<Checklist360Screen />)
     expect(screen.getByLabelText(/checklist completado/i)).toBeInTheDocument()
   })
 
   it('lista incidencias del checklist cerrado', () => {
-    useActivoMock.mockReturnValue({ data: CHECKLIST_CERRADO, isLoading: false, isError: false, error: null })
+    useActivoMock.mockReturnValue({
+      data: CHECKLIST_CERRADO,
+      isLoading: false,
+      isError: false,
+      error: null,
+    })
     renderWithShell(<Checklist360Screen />)
     expect(screen.getByText('opticas_frontales')).toBeInTheDocument()
   })
 
   it('no muestra el formulario si cerrado', () => {
-    useActivoMock.mockReturnValue({ data: CHECKLIST_CERRADO, isLoading: false, isError: false, error: null })
+    useActivoMock.mockReturnValue({
+      data: CHECKLIST_CERRADO,
+      isLoading: false,
+      isError: false,
+      error: null,
+    })
     renderWithShell(<Checklist360Screen />)
-    expect(screen.queryByRole('button', { name: /completar revisión 360°/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /completar revisión 360°/i })
+    ).not.toBeInTheDocument()
   })
 })
 
@@ -213,7 +249,9 @@ describe('Checklist360Screen — botones de estado', () => {
     const user = userEvent.setup()
     renderWithShell(<Checklist360Screen />)
 
-    const btnOBS = screen.getAllByRole('button', { name: /observación — parabrisas_escobillas/i })[0]
+    const btnOBS = screen.getAllByRole('button', {
+      name: /observación — parabrisas_escobillas/i,
+    })[0]
     await user.click(btnOBS)
 
     // Sub-campo zona_afectada aparece
@@ -224,7 +262,9 @@ describe('Checklist360Screen — botones de estado', () => {
     const user = userEvent.setup()
     renderWithShell(<Checklist360Screen />)
 
-    const btnOBS = screen.getAllByRole('button', { name: /observación — parabrisas_escobillas/i })[0]
+    const btnOBS = screen.getAllByRole('button', {
+      name: /observación — parabrisas_escobillas/i,
+    })[0]
     await user.click(btnOBS)
     expect(screen.getByLabelText(/zona afectada/i)).toBeInTheDocument()
 
@@ -392,8 +432,8 @@ describe('Checklist360Screen — envío', () => {
 
     await waitFor(() =>
       expect(cerrarMock).toHaveBeenCalledWith(
-        expect.objectContaining({ id_checklist: idChecklistMock }),
-      ),
+        expect.objectContaining({ id_checklist: idChecklistMock })
+      )
     )
   })
 
@@ -407,7 +447,7 @@ describe('Checklist360Screen — envío', () => {
     await user.click(screen.getByRole('button', { name: /confirmar revisión/i }))
 
     await waitFor(() =>
-      expect(screen.getByRole('status', { name: /checklist completado/i })).toBeInTheDocument(),
+      expect(screen.getByRole('status', { name: /checklist completado/i })).toBeInTheDocument()
     )
   })
 
@@ -421,7 +461,9 @@ describe('Checklist360Screen — envío', () => {
     await user.click(screen.getByRole('button', { name: /confirmar revisión/i }))
 
     await waitFor(() =>
-      expect(screen.getByRole('status', { name: /checklist encolado offline/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole('status', { name: /checklist encolado offline/i })
+      ).toBeInTheDocument()
     )
   })
 

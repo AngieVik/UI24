@@ -22,31 +22,45 @@ import type { Database } from '@/types/supabase'
 type NivelCriticidad = Database['public']['Enums']['nivel_criticidad']
 
 const SISTEMAS = [
-  'Motor', 'Frenos', 'Dirección', 'Transmisión', 'Eléctrico',
-  'Carrocería / Chapa', 'Neumáticos', 'Luces / Señalización',
-  'Equipamiento sanitario', 'Climatización', 'Otro',
+  'Motor',
+  'Frenos',
+  'Dirección',
+  'Transmisión',
+  'Eléctrico',
+  'Carrocería / Chapa',
+  'Neumáticos',
+  'Luces / Señalización',
+  'Equipamiento sanitario',
+  'Climatización',
+  'Otro',
 ]
 
-const NIVELES: { value: NivelCriticidad; label: string; variant: 'destructive' | 'warn' | 'info' }[] = [
-  { value: 'Grave',    label: 'Grave — requiere taller urgente',   variant: 'destructive' },
-  { value: 'Moderada', label: 'Moderada — revisión próxima',       variant: 'warn' },
-  { value: 'Leve',     label: 'Leve — revisión programada',        variant: 'info' },
+const NIVELES: {
+  value: NivelCriticidad
+  label: string
+  variant: 'destructive' | 'warn' | 'info'
+}[] = [
+  { value: 'Grave', label: 'Grave — requiere taller urgente', variant: 'destructive' },
+  { value: 'Moderada', label: 'Moderada — revisión próxima', variant: 'warn' },
+  { value: 'Leve', label: 'Leve — revisión programada', variant: 'info' },
 ]
 
 const schema = z.object({
   sistemaAfectado: z.string().min(1, 'Selecciona el sistema afectado'),
-  nivelCriticidad: z.enum(['Leve', 'Moderada', 'Grave'] as const, { message: 'Selecciona el nivel de criticidad' }),
-  descripcion:     z.string().min(10, 'Descripción mínimo 10 caracteres'),
+  nivelCriticidad: z.enum(['Leve', 'Moderada', 'Grave'] as const, {
+    message: 'Selecciona el nivel de criticidad',
+  }),
+  descripcion: z.string().min(10, 'Descripción mínimo 10 caracteres'),
 })
 type Schema = z.infer<typeof schema>
 
 export function Doc7InformeAveriaScreen() {
-  const matricula   = useActivacionStore((s) => s.matricula)
+  const matricula = useActivacionStore((s) => s.matricula)
   const idActivacion = useActivacionStore((s) => s.id_activacion)
   const { registrarAveria, isSubmitting, error, success } = useDoc7(matricula)
-  const [imagen, setImagen]   = useState<File | null>(null)
+  const [imagen, setImagen] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
-  const fileRef               = useRef<HTMLInputElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const form = useForm<Schema>({
     resolver: zodResolver(schema),
@@ -61,9 +75,7 @@ export function Doc7InformeAveriaScreen() {
         <div className="grid size-12 place-items-center rounded-md bg-muted text-muted-foreground/70">
           <Cog aria-hidden="true" className="size-6" />
         </div>
-        <h2 className="font-display text-lg font-bold leading-tight">
-          Doc-7 — Informe de avería
-        </h2>
+        <h2 className="font-display text-lg font-bold leading-tight">Doc-7 — Informe de avería</h2>
         <p className="font-body text-base font-light text-muted-foreground">
           No hay turno activo. Inicia un turno desde Operativa → Vehículos.
         </p>
@@ -84,7 +96,11 @@ export function Doc7InformeAveriaScreen() {
           El informe de avería se ha enviado al equipo de flota.
         </p>
         <Button
-          onClick={() => { form.reset(); setImagen(null); setPreview(null) }}
+          onClick={() => {
+            form.reset()
+            setImagen(null)
+            setPreview(null)
+          }}
           variant="outline"
           size="sm"
         >
@@ -115,7 +131,7 @@ export function Doc7InformeAveriaScreen() {
     await registrarAveria({
       sistemaAfectado: values.sistemaAfectado,
       nivelCriticidad: values.nivelCriticidad,
-      descripcion:     values.descripcion,
+      descripcion: values.descripcion,
       imagen,
     })
   }
@@ -147,13 +163,19 @@ export function Doc7InformeAveriaScreen() {
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor="d7-sistema">Sistema afectado</FieldLabel>
-                  <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={isSubmitting}
+                  >
                     <SelectTrigger id="d7-sistema" aria-label="Sistema afectado">
                       <SelectValue placeholder="Seleccionar…" />
                     </SelectTrigger>
                     <SelectContent>
                       {SISTEMAS.map((s) => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -169,21 +191,32 @@ export function Doc7InformeAveriaScreen() {
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor="d7-nivel">Nivel de criticidad</FieldLabel>
-                  <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={isSubmitting}
+                  >
                     <SelectTrigger id="d7-nivel" aria-label="Nivel de criticidad">
                       <SelectValue placeholder="Seleccionar…">
-                        {field.value && (() => {
-                          const n = NIVELES.find((x) => x.value === field.value)
-                          return n ? <Badge variant={n.variant}>{n.label.split(' —')[0]}</Badge> : null
-                        })()}
+                        {field.value &&
+                          (() => {
+                            const n = NIVELES.find((x) => x.value === field.value)
+                            return n ? (
+                              <Badge variant={n.variant}>{n.label.split(' —')[0]}</Badge>
+                            ) : null
+                          })()}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {NIVELES.map((n) => (
                         <SelectItem key={n.value} value={n.value}>
                           <div className="flex flex-col">
-                            <Badge variant={n.variant} className="w-fit">{n.label.split(' —')[0]}</Badge>
-                            <span className="mt-0.5 text-xs text-muted-foreground">{n.label.split(' — ')[1]}</span>
+                            <Badge variant={n.variant} className="w-fit">
+                              {n.label.split(' —')[0]}
+                            </Badge>
+                            <span className="mt-0.5 text-xs text-muted-foreground">
+                              {n.label.split(' — ')[1]}
+                            </span>
                           </div>
                         </SelectItem>
                       ))}

@@ -34,7 +34,7 @@ interface UseMiPresenciaResult {
  */
 export function useMiPresencia(): UseMiPresenciaResult {
   const ejecutorId = useAuthStore((s) => s.ejecutorId)
-  const personal   = usePersonalEnTurno()
+  const personal = usePersonalEnTurno()
   const { checkout: doCheckout, isSubmitting, error } = useCheckoutTrabajador()
   const { cerrarPorNombre, isSubmitting: cerrando } = useCerrarTurnoPorNombre()
 

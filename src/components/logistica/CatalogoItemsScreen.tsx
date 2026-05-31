@@ -5,16 +5,23 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 interface CatalogoItem {
-  id_item:       number
-  nombre:        string
-  categoria:     string
+  id_item: number
+  nombre: string
+  categoria: string
   especificacion: string | null
-  archivado:     boolean
+  archivado: boolean
 }
 
 function useCatalogo() {
@@ -26,7 +33,8 @@ function useCatalogo() {
         .from('catalogo_items')
         .select('id_item, nombre, categoria, especificacion, archivado')
         .eq('archivado', false)
-        .order('categoria').order('nombre')
+        .order('categoria')
+        .order('nombre')
       if (error) throw error
       return (data ?? []) as CatalogoItem[]
     },
@@ -50,22 +58,28 @@ export function CatalogoItemsScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Tags aria-hidden="true" className="size-5 text-muted-foreground" />
           <h2 className="font-display text-lg font-bold">Catálogo de ítems</h2>
-          {query.data && (
-            <Badge variant="secondary">{query.data.length} ítems</Badge>
-          )}
+          {query.data && <Badge variant="secondary">{query.data.length} ítems</Badge>}
         </div>
-        <Button size="sm" variant="outline" onClick={() => query.refetch()} disabled={query.isLoading} aria-label="Recargar catálogo">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => query.refetch()}
+          disabled={query.isLoading}
+          aria-label="Recargar catálogo"
+        >
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Search
+          className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
         <Input
           type="search"
           placeholder="Buscar por nombre, categoría o especificación…"
@@ -115,7 +129,9 @@ export function CatalogoItemsScreen() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="info" className="text-xs">{item.categoria}</Badge>
+                      <Badge variant="info" className="text-xs">
+                        {item.categoria}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={item.archivado ? 'secondary' : 'ok'}>
