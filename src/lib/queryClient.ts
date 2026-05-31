@@ -15,7 +15,7 @@ import { QueryClient } from '@tanstack/react-query'
  *   pierde foco como una pestaña de escritorio; el foco no es señal de
  *   datos viejos.
  * - `retry: 1` — un solo reintento ante error de red. La cola offline
- *   (rules.md §"Arquitectura de datos") cubre las mutaciones; las
+ *   (CLAUDE.md §"Arquitectura de datos") cubre las mutaciones; las
  *   queries de lectura mejor fallan rápido para no bloquear la UI.
  */
 export const queryClient = new QueryClient({

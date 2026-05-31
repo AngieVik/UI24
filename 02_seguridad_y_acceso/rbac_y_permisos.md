@@ -2,7 +2,7 @@
 
 > La seguridad real recae en políticas RLS de Supabase (PostgreSQL).
 > La visibilidad de componentes en el DOM es cosmética — complementaria, no sustitutiva.
-> Ver `rules.md §4` para la directiva arquitectónica de RLS obligatorio.
+> Ver `CLAUDE.md §4` para la directiva arquitectónica de RLS obligatorio.
 
 ---
 

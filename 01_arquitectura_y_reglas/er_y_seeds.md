@@ -229,8 +229,8 @@ supabase/
 | `fichas_empleados` | UNIQUE(`id_nombre`) | Alias operativo único en todo el sistema |
 | `fichas_empleados` | UNIQUE(`auth_user_id`) | Un empleado = una cuenta Supabase Auth |
 | `galletas_terminales` | UNIQUE(`id_terminal`) | Un fingerprint = un registro (nunca duplicar) |
-| `inventario_vehiculo` | Solo modificable por RPC atómica | Regla de negocio — ver `rules.md §5` |
-| `inventario_base` | Solo modificable por RPC atómica | Regla de negocio — ver `rules.md §5` |
+| `inventario_vehiculo` | Solo modificable por RPC atómica | Regla de negocio — ver `CLAUDE.md §5` |
+| `inventario_base` | Solo modificable por RPC atómica | Regla de negocio — ver `CLAUDE.md §5` |
 | `auditoria_rbac` | RLS UPDATE/DELETE `USING (FALSE)` | Inmutable por diseño |
 | `auditoria_inventario` | RLS UPDATE/DELETE `USING (FALSE)` | Inmutable por diseño |
 | `doc1_asistencias` | RLS UPDATE/DELETE `USING (FALSE)` | Append-only por diseño |

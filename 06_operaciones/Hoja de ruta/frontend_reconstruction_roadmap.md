@@ -465,7 +465,7 @@ Zustand. Convertir los placeholders honestos en información operativa.
 
 1. ¿Mantenemos los stores Zustand existentes (`usePersonaStore`,
    `useActivacionStore`, etc.) o los rehacemos?
-2. ¿TanStack Query (obligatorio por `rules.md §6`) reemplaza la
+2. ¿TanStack Query (obligatorio por `CLAUDE.md §6`) reemplaza la
    suscripción directa a Supabase Realtime, o coexisten?
 3. ¿Cómo se conoce el `id_vehiculo` del terminal cuando todavía no hay
    check-in? (Spec: el panel no aparece, pero hay que validar.)

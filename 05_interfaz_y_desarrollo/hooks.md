@@ -3364,7 +3364,7 @@ sessionStorage → PROHIBIDO para estado operativo.
                  en terminales de flota donde múltiples pestañas pueden
                  estar abiertas simultáneamente.)
 
-Ver rules.md §3 para la directiva arquitectónica completa.
+Ver CLAUDE.md §3 para la directiva arquitectónica completa.
 ```
 
 ### Gestión de errores

@@ -547,4 +547,4 @@ Ver `logic.md §35` para el SQL completo del trigger.
 | `useDocumentosStore` | Documentos en `Borrador_En_Curso` (forms abiertos) | `IndexedDB` |
 | `useGlobalStore` | `periodoVacaciones`, texto marquesina, estado tablón | Supabase Realtime + `IndexedDB` (caché fallback offline) |
 
-**Regla de persistencia (ver `rules.md §4` y `adrs.md ADR-001`):** todos los stores persistentes usan middleware `persist` con adaptador `idb-keyval` sobre `IndexedDB`. `localStorage` queda estrictamente prohibido para estados de sesión. Excepción documentada: `useAuthStore` en `sessionStorage` para garantizar que las credenciales se borran al cerrar la pestaña.
+**Regla de persistencia (ver `CLAUDE.md §4` y `adrs.md ADR-001`):** todos los stores persistentes usan middleware `persist` con adaptador `idb-keyval` sobre `IndexedDB`. `localStorage` queda estrictamente prohibido para estados de sesión. Excepción documentada: `useAuthStore` en `sessionStorage` para garantizar que las credenciales se borran al cerrar la pestaña.

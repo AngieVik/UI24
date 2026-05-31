@@ -6,6 +6,7 @@
 > **Estado del proyecto:** Fase E en curso · 270 tests (240 ✅ / 30 ❌) · deuda de testing Fase D bloqueante
 >
 > **Fuentes de verdad complementarias (NO reemplazadas por este documento):**
+>
 > - Reglas arquitectónicas: `.claude/CLAUDE.md` v2.2
 > - Sistema de diseño: `05_interfaz_y_desarrollo/diseño_chupiwachi.md`
 > - Mapa de navegación: `05_interfaz_y_desarrollo/mapeo_visual_ui.md`
@@ -62,19 +63,7 @@ Archivos de test existentes: 22
 
 ---
 
-## SECCIÓN 2 — Política de trabajo (lectura obligatoria al cambiar de agente)
-
-1. **Una fase a la vez.** No se inicia Fase E completa hasta cerrar el bloqueante de testing.
-2. **Claude pregunta antes de empezar cada fase.** Solo tras confirmación explícita comienza la implementación.
-3. **Cada cambio se documenta en `diseño_chupiwachi.md` §15 (changelog)** en la misma sesión.
-4. **No se hacen `npm run build` definitivos ni `git push` ni despliegues a Vercel** hasta cerrar la Fase E completa.
-5. **Bloqueo de infraestructura (CRÍTICO):** prohibido alterar BD, crear migraciones o ejecutar despliegues en Supabase sin autorización explícita previa.
-6. **Cualquier desviación de las reglas se levanta como deuda** en §6 antes de cerrar la fase.
-7. **Sentence case estricto** en toda copy de UI. Sin emojis salvo si el producto lo pide.
-
----
-
-## SECCIÓN 3 — Bloqueante actual: Deuda de testing Fase D (MÁXIMA PRIORIDAD)
+## SECCIÓN 2 — Bloqueante actual: Deuda de testing Fase D (MÁXIMA PRIORIDAD)
 
 > **Estos tests deben pasar antes de ejecutar cualquier test E2E (Playwright).**
 > Esta es la única tarea accionable del proyecto en este momento.
@@ -84,11 +73,13 @@ Archivos de test existentes: 22
 **Síntoma:** 30 tests fallando relacionados con `ERR_DOC8_002` y estado de turno/vehículo.
 
 **Contexto arquitectónico:**
+
 - `Doc8ParteTrabajoScreen` fue reescrito en Fase D.1.4 con separación de `id_activacion` nullable.
 - Turno se abre vía `rpc_abrir_turno` sin vehículo obligatorio.
 - Los tests asumen comportamientos del flujo anterior (vehículo como prerrequisito).
 
 **Criterio de cierre:**
+
 - [ ] Todos los tests del archivo en verde.
 - [ ] Sin modificar la lógica de negocio del Screen (solo corregir los tests para reflejar el comportamiento actual).
 
@@ -97,11 +88,13 @@ Archivos de test existentes: 22
 **Síntoma:** Tests de integración fallando por el catálogo de 32 ítems VIR-aware y la herencia fail-safe (Fase D.1.5).
 
 **Contexto arquitectónico:**
+
 - `Checklist360Screen` tiene catálogo de 32 ítems con propiedad `vir_aware`.
 - La herencia fail-safe aplica: si un ítem falla, el checklist se bloquea.
 - Los triggers `trg_checklist_genera_doc7` y `trg_doc7_cierre_evaluar_condicion` son backend, no frontend.
 
 **Criterio de cierre:**
+
 - [ ] Todos los tests del archivo en verde.
 - [ ] Cobertura mínima: renderizado de ítems, toggle OK/NG, submit con items críticos fallidos.
 
@@ -110,17 +103,19 @@ Archivos de test existentes: 22
 **Síntoma:** 8 tests nuevos de D-17 (modal overlay) fallan por aserciones de `openModal`/`closeModal`/`modalLeafId`.
 
 **Contexto arquitectónico (D-17 CERRADA):**
+
 - D-17 está cerrada. El overlay de `BandejaModal` está operativo en `App.tsx` vía `ModalArea` + `modalLeafId`.
 - Los 4 archivos dead code (`BandejaLogisticaScreen`, `BandejaFlotaScreen`, `BandejaCoordScreen`, `BandejaRRHHScreen`) ya fueron eliminados.
 - Los tests en `useBlackColumnState.test.ts` cubren `openModal`/`closeModal`. Los tests en `BlackColumn.test.tsx` que fallan prueban el despacho de `openModal` desde el componente visual.
 
 **Criterio de cierre:**
+
 - [ ] Todos los tests del archivo en verde.
 - [ ] `useBlackColumnState.test.ts` sigue en verde (no regresionar).
 
 ---
 
-## SECCIÓN 4 — Fase E — Validación y reapertura del checklist de despliegue
+## SECCIÓN 3 — Fase E — Validación y reapertura del checklist de despliegue
 
 > Solo se inicia tras cerrar los tres bloqueantes de §3.
 
@@ -137,27 +132,32 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 ### Sub-tareas de Fase E
 
 **E.1 — Validación de bundle y build**
+
 - [ ] `npm run build` pasa: bundle total ≤ 3 MB, entry chunk ≤ 800 KB.
 - [ ] Plugin `bundleSizeGuard` en `vite.config.ts` no rompe el build.
 - [ ] CI GitHub Actions verde en rama principal.
 
 **E.2 — Auditoría de seguridad pre-deploy**
+
 - [ ] `f_tablas_sin_rls()` → 0 filas.
 - [ ] `f_funciones_sin_security_definer()` → 0 filas.
 - [ ] Deuda D-12 (GRANTs masivos Sprint 14) — auditoría completa de permisos.
 - [ ] Deuda D-13 (RLS policies en `presencias_activas_terminal` / `activaciones_vehiculo`) — endurecer si el modelo de amenaza lo requiere.
 
 **E.3 — Eliminación de bypasses de desarrollo**
+
 - [x] ~~Bypass dev en `LoginScreen.tsx` eliminado~~ ✅ cerrado 2026-05-28 (D-01).
 - [ ] Grep de confirmación: `git grep -r "import.meta.env.DEV"` no devuelve rutas críticas.
 - [ ] `.env.local` sin `VITE_SENTRY_DSN` (ya configurado, verificar).
 
 **E.4 — E2E Playwright**
+
 - [ ] Suite `e2e/` actualizada al árbol de navegación post-Fase D (49 rutas).
 - [ ] Smoke tests: login, check-in, Doc-8, ciclo offline→online, DRP, PWA.
 - [ ] CI Playwright verde.
 
 **E.5 — Lighthouse + A11y**
+
 - [ ] Lighthouse performance ≥ 80 en dispositivo simulado.
 - [ ] jest-axe sobre todas las pantallas principales (heredado de Sprint 14, validar regresiones).
 
@@ -391,6 +391,7 @@ Incidencias post-deploy: ________________
 **Prerequisitos:** Fase E cerrada y desplegada.
 
 **Sub-tareas:**
+
 1. Recorrido visual de todos los Screens en `.dark`.
 2. Corregir contrastes que no pasen AA.
 3. `ThemeToggle` (`Sun`/`Moon` Lucide) en Header.
@@ -399,6 +400,7 @@ Incidencias post-deploy: ________________
 6. D-16: migración `repositorio_documentos`.
 
 **DoD:**
+
 - [ ] Todas las vistas pasan contraste AA en ambos modos.
 - [ ] `ThemeToggle` accesible por teclado.
 - [ ] Sin flash of unstyled content al cambiar modo.
