@@ -346,6 +346,7 @@ Incidencias post-deploy: ________________
 | ~~D-TEST-01~~ | ~~Testing~~ | ~~`Doc8ParteTrabajoScreen.test.tsx` — 30 tests fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
 | ~~D-TEST-02~~ | ~~Testing~~ | ~~`Checklist360Screen.test.tsx` — tests fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
 | ~~D-TEST-03~~ | ~~Testing~~ | ~~`BlackColumn.test.tsx` — tests de openModal/modalLeafId fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
+| D-18 | CI/BD | `ci-database` falla en migración 15: `REVOKE EXECUTE ON FUNCTION public.rls_auto_enable()` — función no existe en imagen Docker local de Supabase. Funciona en producción. Fix: envolver en `DO $$ IF EXISTS...$$`. | Abierta | Fase E/F |
 
 ---
 
