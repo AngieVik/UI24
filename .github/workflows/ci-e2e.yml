@@ -1,0 +1,92 @@
+name: CI — E2E Playwright
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E (preview · Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ── 1. Checkout + Node ──────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias npm
+        run: npm ci
+
+      # ── 2. Playwright browsers ──────────────────────────────────────────────
+      - name: Caché de binarios Playwright
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Instalar Chromium + dependencias del sistema
+        # --with-deps instala libglib2, libgbm, etc. necesarios en Ubuntu.
+        # Si la caché ya tiene el binario, sólo reinstala las dependencias del OS.
+        run: npx playwright install chromium --with-deps
+
+      # ── 3. Build de producción ──────────────────────────────────────────────
+      - name: Build de producción
+        run: npm run build
+        env:
+          # Variables públicas requeridas por Vite en build time.
+          # Los tests E2E no usan Supabase real (page.route mocks).
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder-ci-anon-key
+
+      # ── 4. Preview server ───────────────────────────────────────────────────
+      - name: Iniciar servidor preview en background
+        # Sirve dist/ en http://localhost:4173 (puerto por defecto de vite preview).
+        # nohup asegura que el proceso sobrevive al fin del paso de shell.
+        run: nohup npm run preview > /tmp/vite-preview.log 2>&1 &
+
+      - name: Esperar a que el servidor esté disponible
+        run: |
+          timeout 30 bash -c \
+            'until curl -sf http://localhost:4173 > /dev/null; do sleep 1; done'
+          echo "Preview listo en http://localhost:4173"
+
+      # ── 5. Tests E2E ────────────────────────────────────────────────────────
+      - name: Ejecutar tests Playwright (chromium-android + chromium-desktop)
+        run: npx playwright test
+        env:
+          E2E_BASE_URL: http://localhost:4173
+          CI: true
+
+      # ── 6. Artefactos ───────────────────────────────────────────────────────
+      - name: Subir informe HTML de Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: e2e-report/
+          retention-days: 14
+
+      - name: Subir trazas y capturas de fallos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+
+      - name: Log del servidor preview (en caso de fallo)
+        if: failure()
+        run: cat /tmp/vite-preview.log || true

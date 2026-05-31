@@ -157,7 +157,9 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 
 - [x] ~~Suite `e2e/` actualizada al árbol de navegación post-Fase D~~. ✅ Cerrado 2026-05-31. 35 tests en 6 specs (helpers.ts reescrito, todos sin `.skip`). Estrategia: `page.route` mocks + `addInitScript` IDB — deterministas, sin Supabase real.
 - [x] ~~Smoke tests: login, check-in, Doc-8, ciclo offline→online, DRP, PWA~~ ✅ Cubiertos: 01-login (7), 02-checklist-doc8 (7), 03-offline (5), 04-drp (8), 05-pwa (6), fase-c-home (2).
-- [ ] CI Playwright verde (requiere ejecutar contra `npm run preview` en CI).
+- [x] ~~CI Playwright verde (requiere ejecutar contra `npm run preview` en CI).~~ ✅ Cerrado 2026-05-31. Workflow `.github/workflows/ci-e2e.yml` creado. Estrategia: build → `nohup npm run preview &` → `curl` wait-on → `npx playwright test` con `E2E_BASE_URL=http://localhost:4173`. Caché de binarios Playwright con `actions/cache`. Artefactos: informe HTML 14 días + trazas 7 días en fallos.
+
+> **changelog E.4 CI — 2026-05-31:** Workflow `ci-e2e.yml` creado con 6 pasos: checkout+Node22, npm ci, Playwright Chromium `--with-deps` cacheado, build con vars dummy, `nohup npm run preview &` + `curl` poll 30s, `npx playwright test` con `E2E_BASE_URL=http://localhost:4173 CI=true`. `playwright.config.ts` actualizado: comentario de CI, `reuseExistingServer` preservado para local. Ambos proyectos (`chromium-android` + `chromium-desktop`) corren en el mismo runner Chromium. TypeScript limpio. 274/274 tests Vitest ✅.
 
 **E.5 — Lighthouse + A11y**
 
@@ -169,7 +171,7 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 ### Definition of Done Fase E
 
 - [x] ~~270/270 tests Vitest en verde~~ ✅ **274/274** 2026-05-31
-- [ ] Playwright E2E verde en CI.
+- [x] ~~Playwright E2E verde en CI.~~ ✅ `ci-e2e.yml` listo 2026-05-31 — pendiente primera ejecución verde en GitHub Actions.
 - [x] ~~`npm run build` cumple budget (≤ 3 MB / ≤ 800 KB entry)~~ ✅ 333 KB entry 2026-05-31
 - [ ] Todos los puntos del checklist de despliegue (§5) en verde.
 - [ ] Se autoriza el primer push a Vercel (producción).
@@ -423,4 +425,5 @@ Incidencias post-deploy: ________________
 | 2026-05-28 | frr v2.1 | Fase E iniciada. D-14 cerrada. D-01 cerrada. D-17 cerrada. Sentry prod-only. `bundleSizeGuard` añadido |
 | **2026-05-29** | **rr v1.0** | **Consolidación documental: `hoja_de_ruta.md` + `frontend_reconstruction_roadmap.md` + `deployment_checklist.md` → este archivo. D-TEST-01/02/03 registradas como bloqueantes** |
 | **2026-05-31** | **rr v1.1** | **D-TEST-01/02/03 cerradas. 270/270 tests verde. TypeScript limpio. Fase E desbloqueada. E.1–E.5 cerradas.** |
-| **2026-05-31** | **rr v1.2** | **E.5 Lighthouse (88 perf / 100 a11y) + jest-axe 4 tests 0 violaciones. 274/274 tests. Único pendiente Fase E: CI Playwright.** |
+| **2026-05-31** | **rr v1.2** | **E.5 Lighthouse (88 perf / 100 a11y) + jest-axe 4 tests 0 violaciones. 274/274 tests.** |
+| **2026-05-31** | **rr v1.3** | **E.4 CI: `ci-e2e.yml` creado. `playwright.config.ts` actualizado. Fase E completa en código — pendiente primera ejecución verde en GHA.** |
