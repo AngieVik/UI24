@@ -9,8 +9,8 @@
 
 - **Fase:** E — Validación y reapertura del checklist de despliegue
 - **Último punto completado:** E.4 CI Playwright cerrada 2026-05-31. `ci-e2e.yml` creado. E.5 también cerrada: Lighthouse 88/100 perf, 100/100 a11y. 4 tests jest-axe sin violaciones. 274/274 tests Vitest ✅.
-- **En progreso:** Verificación de primera ejecución verde en GitHub Actions (push pendiente de autorización).
-- **Bloqueadores:** Ninguno. Fase E completa en código local. Pendiente: push + primer CI verde para DoD formal.
+- **Último punto completado:** E.4 CI cerrado 2026-05-31. `ci-quality` ✅ · `ci-e2e` ✅ verdes (34/34 tests chromium-android). `ci-database` ❌ pre-existente: deuda 1.D1 tipos TypeScript UTF-16LE desincronizados. Requiere `supabase gen types typescript --local` con Docker.
+- **Bloqueadores:** Ninguno para E. `ci-database` es deuda 1.D1 fuera del alcance de Fase E.
 
 ## REGLAS ARQUITECTÓNICAS POLITICA DE TRABAJO - PROYECTO U24 (VERSIÓN 2.2)
 

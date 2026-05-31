@@ -171,7 +171,7 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 ### Definition of Done Fase E
 
 - [x] ~~270/270 tests Vitest en verde~~ ✅ **274/274** 2026-05-31
-- [x] ~~Playwright E2E verde en CI.~~ ✅ `ci-e2e.yml` listo 2026-05-31 — pendiente primera ejecución verde en GitHub Actions.
+- [x] ~~Playwright E2E verde en CI.~~ ✅ Cerrado 2026-05-31. `ci-e2e` **34/34 tests verdes** (chromium-android · Galaxy Tab S4). `ci-quality` ✅ verde. `ci-database` ❌ deuda 1.D1 pre-existente (tipos TS UTF-16LE, requiere `supabase gen types` local).
 - [x] ~~`npm run build` cumple budget (≤ 3 MB / ≤ 800 KB entry)~~ ✅ 333 KB entry 2026-05-31
 - [ ] Todos los puntos del checklist de despliegue (§5) en verde.
 - [ ] Se autoriza el primer push a Vercel (producción).
