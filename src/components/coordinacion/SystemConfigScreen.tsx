@@ -26,7 +26,10 @@ export function SystemConfigScreen() {
           <h1 className="font-display text-xl font-bold">Configuración del sistema</h1>
         </div>
         <Button variant="outline" size="sm" onClick={cargarConfig} disabled={loading}>
-          <RefreshCw aria-hidden="true" className={`mr-2 size-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw
+            aria-hidden="true"
+            className={`mr-2 size-4 ${loading ? 'animate-spin' : ''}`}
+          />
           Recargar
         </Button>
       </header>
@@ -50,7 +53,14 @@ export function SystemConfigScreen() {
               <Skeleton className="h-10 w-3/4" />
             </div>
           ) : (
-            config.map((entry) => <ConfigRow key={entry.clave} entry={entry} onSave={setConfigValue} disabled={submitting} />)
+            config.map((entry) => (
+              <ConfigRow
+                key={entry.clave}
+                entry={entry}
+                onSave={setConfigValue}
+                disabled={submitting}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -138,9 +148,7 @@ function ConfigRow({ entry, onSave, disabled }: ConfigRowProps) {
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="font-mono text-sm font-medium">{clave}</p>
-          {descripcion && (
-            <p className="font-body text-xs text-muted-foreground">{descripcion}</p>
-          )}
+          {descripcion && <p className="font-body text-xs text-muted-foreground">{descripcion}</p>}
           <p className="font-body text-xs text-muted-foreground">
             Última actualización: {new Date(updated_at).toLocaleString('es-ES')}
           </p>

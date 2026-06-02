@@ -8,8 +8,10 @@
 
 # Salida generada
 dist/
+dev-dist/
 coverage/
 e2e-report/
+lh-report.json
 
 # Contexto Claude (no es código fuente)
 .claude/

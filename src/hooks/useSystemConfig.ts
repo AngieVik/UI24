@@ -23,12 +23,7 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION as string | undefined
 
 function semverLt(a: string, b: string): boolean {
   // Strip pre-release suffix (e.g. "0.1.0-dev" → "0.1.0") before comparing.
-  const parse = (v: string) =>
-    v
-      .replace(/^v/, '')
-      .replace(/-.*$/, '')
-      .split('.')
-      .map(Number)
+  const parse = (v: string) => v.replace(/^v/, '').replace(/-.*$/, '').split('.').map(Number)
   const [aMaj, aMin, aPatch] = parse(a)
   const [bMaj, bMin, bPatch] = parse(b)
   if (aMaj !== bMaj) return aMaj < bMaj

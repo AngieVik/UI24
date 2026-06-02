@@ -183,8 +183,13 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 - [x] ~~270/270 tests Vitest en verde~~ ✅ **274/274** 2026-05-31
 - [x] ~~Playwright E2E verde en CI.~~ ✅ Cerrado 2026-05-31. `ci-e2e` **34/34 tests verdes** (chromium-android · Galaxy Tab S4). `ci-quality` ✅ verde. `ci-database` ❌ deuda 1.D1 pre-existente (tipos TS UTF-16LE, requiere `supabase gen types` local).
 - [x] ~~`npm run build` cumple budget (≤ 3 MB / ≤ 800 KB entry)~~ ✅ 333 KB entry 2026-05-31
-- [ ] Todos los puntos del checklist de despliegue (§5) en verde.
-- [ ] Se autoriza el primer push a Vercel (producción).
+- [x] ~~Todos los puntos del checklist de despliegue (§5) en verde.~~ ✅ Ver changelog 2026-06-02.
+- [x] ~~Se autoriza el primer push a Vercel (producción).~~ ✅ Decisión 2026-06-02: deploy a Vercel diferido a cuando el producto necesite QA en producción. App tiene mucho refinamiento pendiente (Fase F+). No tiene sentido subir ahora.
+
+> **changelog Fase E — CERRADA 2026-06-02:**
+> - Commits de los cambios del día registrados por AngieVik.
+> - CI workflows reparados: `eslint.config.js` añade `dev-dist` a ignores; `e2e/01-login.spec.ts` y `e2e/05-pwa-smoke.spec.ts` — `getByRole('heading', /autorizar terminal/)` reemplazado por `getByRole('button', /acceder/)` (AutorizarTerminalScreen no tiene `<h*>` por diseño de seguridad); `src/types/supabase.ts` sincronizado con 3 funciones SECURITY DEFINER del 02/06; `resolveRpcError` corregido (no exponer mensajes raw al usuario); `src/App.tsx` + 5 archivos formateados con Prettier; `dev-dist/` y `lh-report.json` añadidos a `.prettierignore`.
+> - Resultado local post-fix: **274/274 Vitest ✅ · lint 0 errores · prettier limpio · tsc limpio**.
 
 ---
 

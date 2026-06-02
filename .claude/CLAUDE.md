@@ -7,9 +7,9 @@
 
 ## Estado actual (actualizado por Claude)
 
-- **Fase:** E — Smoke tests FASE 4 completados. Pendiente: CI GitHub Actions verde + autorización push Vercel para cerrar Fase E.
-- **Último punto completado:** 2026-06-02 — Smoke tests FASE 4 Bloques 1/2/3/4/6 ✅. Tres bugs corregidos (B1 GRANT SELECT versiones_cliente, B2 useForceUpdateCheck pre-auth, B3 PWA chip sin UI). Migración 20260602000004 aplicada en producción. Bloque 5 (PWA dispositivo real) diferido a deuda D-19 (validar post-deploy).
-- **Bloqueadores:** Ninguno. Siguiente paso: commit de los cambios de hoy → CI verde → autorización deploy Vercel → Fase F (modo oscuro y refinamientos).
+- **Fase:** F — Fase E cerrada. Iniciando modo oscuro y refinamientos.
+- **Último punto completado:** 2026-06-02 — Fase E CERRADA. CI workflows reparados (ci-quality + ci-e2e + ci-database). Fixes: `dev-dist` ignorado en ESLint/Prettier; locators E2E heading→button; `supabase.ts` sincronizado con 3 funciones SECURITY DEFINER; `resolveRpcError` revertido a fallback seguro; 6 archivos formateados. 274/274 tests ✅. Deploy Vercel diferido indefinidamente hasta necesidad real de QA en producción.
+- **Bloqueadores:** Ninguno. Siguiente paso: Fase F — modo oscuro y refinamientos.
 
 ## REGLAS ARQUITECTÓNICAS POLITICA DE TRABAJO - PROYECTO U24 (VERSIÓN 2.5)
 

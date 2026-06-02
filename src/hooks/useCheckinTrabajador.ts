@@ -71,7 +71,7 @@ async function extractEdgeError(err: unknown): Promise<string | null> {
     const ctx = e.context
     if (ctx && typeof (ctx as Response).json === 'function') {
       try {
-        const body = await (ctx as Response).clone().json() as { detail?: string; error?: string }
+        const body = (await (ctx as Response).clone().json()) as { detail?: string; error?: string }
         return body.detail ?? body.error ?? null
       } catch {
         /* swallow */

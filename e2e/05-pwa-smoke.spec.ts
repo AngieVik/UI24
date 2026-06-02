@@ -62,7 +62,7 @@ test.describe('PWA — Performance', () => {
   test('la pantalla de autorización carga en menos de 3 segundos', async ({ page }) => {
     const start = Date.now()
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
+    await expect(page.getByRole('button', { name: /acceder/i })).toBeVisible({
       timeout: 5_000,
     })
     const elapsed = Date.now() - start

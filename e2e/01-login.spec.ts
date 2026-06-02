@@ -12,8 +12,8 @@ test.describe('Autorizar terminal — estado_0a', () => {
     await page.goto('/')
   })
 
-  test('muestra el heading "Autorizar terminal"', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
+  test('muestra el formulario de autorización del terminal', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /acceder/i })).toBeVisible({
       timeout: 8_000,
     })
   })
@@ -25,7 +25,7 @@ test.describe('Autorizar terminal — estado_0a', () => {
   })
 
   test('el formulario tiene los campos identificador y contraseña', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
+    await expect(page.getByRole('button', { name: /acceder/i })).toBeVisible({
       timeout: 8_000,
     })
     await expect(page.getByLabel(/identificador/i)).toBeVisible()
@@ -35,17 +35,16 @@ test.describe('Autorizar terminal — estado_0a', () => {
   })
 
   test('el botón de envío existe y está habilitado', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
+    await expect(page.getByRole('button', { name: /acceder/i })).toBeVisible({
       timeout: 8_000,
     })
-    await expect(page.getByRole('button', { name: /autorizar|entrar/i })).toBeVisible()
   })
 
   test('muestra banner "Sin conexión" cuando la red está cortada', async ({ page, context }) => {
     // La página ya está cargada desde beforeEach.
     // setOffline ANTES de reload bloquearía localhost → reload falla.
     // Estrategia: verificar que la pantalla está cargada, luego simular offline.
-    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
+    await expect(page.getByRole('button', { name: /acceder/i })).toBeVisible({
       timeout: 8_000,
     })
     await context.setOffline(true)
@@ -55,10 +54,10 @@ test.describe('Autorizar terminal — estado_0a', () => {
   })
 
   test('muestra error de validación si se envía sin datos', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /autorizar terminal/i })).toBeVisible({
+    await expect(page.getByRole('button', { name: /acceder/i })).toBeVisible({
       timeout: 8_000,
     })
-    await page.getByRole('button', { name: /autorizar|entrar/i }).click()
+    await page.getByRole('button', { name: /acceder/i }).click()
     // Validación de formulario debe mostrar mensaje de error
     await expect(page.getByText(/requerido|mínimo|obligatorio/i).first()).toBeVisible({
       timeout: 4_000,

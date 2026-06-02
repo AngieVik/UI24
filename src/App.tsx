@@ -23,8 +23,7 @@ import type { BandejaCanal } from '@/components/layout/BandejaModal'
 const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? '0.1.0'
 
 function semverLt(a: string, b: string): boolean {
-  const parse = (v: string) =>
-    v.replace(/^v/, '').replace(/-.*$/, '').split('.').map(Number)
+  const parse = (v: string) => v.replace(/^v/, '').replace(/-.*$/, '').split('.').map(Number)
   const [aMaj, aMin, aPatch] = parse(a)
   const [bMaj, bMin, bPatch] = parse(b)
   if (aMaj !== bMaj) return aMaj < bMaj
@@ -47,14 +46,22 @@ function useForceUpdateCheck() {
       .order('publicada_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data, error }) => {
-        if (error || !data) {
-          // Sin datos o sin red: no modificar el estado actual (beneficio de la duda).
-          return
+      .then(
+        ({ data, error }) => {
+          if (error || !data) {
+            // Sin datos o sin red: no modificar el estado actual (beneficio de la duda).
+            return
+          }
+          setForceUpdate(
+            semverLt(APP_VERSION, data.min_version_permitida),
+            data.min_version_permitida
+          )
+        },
+        () => {
+          /* noop: sin red → sin cambio de estado */
         }
-        setForceUpdate(semverLt(APP_VERSION, data.min_version_permitida), data.min_version_permitida)
-      }, () => {/* noop: sin red → sin cambio de estado */})
-  // Re-ejecutar cuando la sesión cambia (terminal recién autorizado).
+      )
+    // Re-ejecutar cuando la sesión cambia (terminal recién autorizado).
   }, [session, setForceUpdate])
 }
 
@@ -69,7 +76,8 @@ function ForceUpdateBanner({ minVersion }: { minVersion: string | null }) {
             Esta versión de la aplicación ya no está soportada.
             {minVersion && (
               <>
-                {' '}Versión mínima requerida:{' '}
+                {' '}
+                Versión mínima requerida:{' '}
                 <span className="font-medium text-foreground">{minVersion}</span>.
               </>
             )}

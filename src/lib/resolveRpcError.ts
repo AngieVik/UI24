@@ -46,5 +46,5 @@ export function resolveRpcError(error: unknown): string {
   if (match) {
     return ERROR_MESSAGES[match[1]] ?? 'Error inesperado. Contacta con soporte.'
   }
-  return message || 'Error inesperado. Contacta con soporte.'
+  return 'Error inesperado. Contacta con soporte.'
 }
