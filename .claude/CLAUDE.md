@@ -7,9 +7,9 @@
 
 ## Estado actual (actualizado por Claude)
 
-- **Fase:** F — Fase E cerrada. Iniciando modo oscuro y refinamientos.
-- **Último punto completado:** 2026-06-02 — Fase E CERRADA. CI workflows reparados (ci-quality + ci-e2e + ci-database). Fixes: `dev-dist` ignorado en ESLint/Prettier; locators E2E heading→button; `supabase.ts` sincronizado con 3 funciones SECURITY DEFINER; `resolveRpcError` revertido a fallback seguro; 6 archivos formateados. 274/274 tests ✅. Deploy Vercel diferido indefinidamente hasta necesidad real de QA en producción.
-- **Bloqueadores:** Ninguno. Siguiente paso: Fase F — modo oscuro y refinamientos.
+- **Fase:** F — Fase E cerrada. Pendiente: commit de los fixes CI de esta sesión → CI verde → Fase F.
+- **Último punto completado:** 2026-06-02 — Todos los workflows CI reparados. `ci-database.yml` normaliza el fichero generado con Prettier antes del diff (fix comillas dobles→simples). 274/274 tests ✅ · lint 0 errores · prettier limpio · tsc limpio. Deploy Vercel diferido.
+- **Bloqueadores:** Ninguno. Siguiente paso: commit de los cambios de esta sesión → confirmar CI verde → Fase F.
 
 ## REGLAS ARQUITECTÓNICAS POLITICA DE TRABAJO - PROYECTO U24 (VERSIÓN 2.5)
 

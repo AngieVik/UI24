@@ -186,9 +186,18 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 - [x] ~~Todos los puntos del checklist de despliegue (§5) en verde.~~ ✅ Ver changelog 2026-06-02.
 - [x] ~~Se autoriza el primer push a Vercel (producción).~~ ✅ Decisión 2026-06-02: deploy a Vercel diferido a cuando el producto necesite QA en producción. App tiene mucho refinamiento pendiente (Fase F+). No tiene sentido subir ahora.
 
-> **changelog Fase E — CERRADA 2026-06-02:**
+> **changelog Fase E — CERRADA 2026-06-02 (ronda 1):**
 > - Commits de los cambios del día registrados por AngieVik.
-> - CI workflows reparados: `eslint.config.js` añade `dev-dist` a ignores; `e2e/01-login.spec.ts` y `e2e/05-pwa-smoke.spec.ts` — `getByRole('heading', /autorizar terminal/)` reemplazado por `getByRole('button', /acceder/)` (AutorizarTerminalScreen no tiene `<h*>` por diseño de seguridad); `src/types/supabase.ts` sincronizado con 3 funciones SECURITY DEFINER del 02/06; `resolveRpcError` corregido (no exponer mensajes raw al usuario); `src/App.tsx` + 5 archivos formateados con Prettier; `dev-dist/` y `lh-report.json` añadidos a `.prettierignore`.
+> - `eslint.config.js` añade `dev-dist` a ignores (Workbox generado no se lintea).
+> - `e2e/01-login.spec.ts` y `e2e/05-pwa-smoke.spec.ts` — `getByRole('heading', /autorizar terminal/)` → `getByRole('button', /acceder/)` (AutorizarTerminalScreen no tiene `<h*>` por diseño de seguridad).
+> - `src/types/supabase.ts` sincronizado: 3 funciones SECURITY DEFINER del 02/06 añadidas; Prettier formateó el archivo con `singleQuote: true`.
+> - `resolveRpcError` revertido: errores no-ERR_ devuelven el fallback, no el mensaje raw.
+> - `src/App.tsx` + 5 archivos formateados con Prettier; `dev-dist/` y `lh-report.json` añadidos a `.prettierignore`.
+> - **ci-quality** ✅ · **ci-e2e** ✅ — verdes en el siguiente push.
+>
+> **changelog Fase E — CERRADA 2026-06-02 (ronda 2):**
+> - `ci-database` seguía fallando: Prettier convirtió `supabase.ts` a comillas simples, pero `supabase gen types` genera comillas dobles → `diff` byte-a-byte fallaba.
+> - Fix: `ci-database.yml` añade Node.js 22 + `npm ci`; normaliza el fichero generado con `npx prettier --config .prettierrc --write /tmp/supabase_gen.ts` antes del diff. Así ambos archivos están en formato Prettier idéntico y el diff solo detecta diferencias de contenido.
 > - Resultado local post-fix: **274/274 Vitest ✅ · lint 0 errores · prettier limpio · tsc limpio**.
 
 ---

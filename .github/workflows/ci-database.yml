@@ -19,6 +19,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias npm
+        run: npm ci
+
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
@@ -50,12 +59,13 @@ jobs:
         run: |
           supabase gen types typescript --local > /tmp/supabase_gen.ts
 
-          # DEUDA 1.D1: src/types/supabase.ts está actualmente en UTF-16LE.
-          # Hasta que se regenere en UTF-8 (tarea 1.D1), este diff fallará
-          # por diferencias de codificación. Eso es el comportamiento correcto:
-          # el CI fuerza a completar la deuda antes del Sprint 2.
-          #
-          # Para corregir: supabase gen types typescript --local > src/types/supabase.ts
+          # Normalizar el fichero generado con Prettier antes de comparar.
+          # src/types/supabase.ts se mantiene formateado por Prettier en el repo.
+          # El generador de Supabase produce comillas dobles y formato propio;
+          # normalizando ambos con el mismo formateador el diff solo detecta
+          # diferencias de contenido (tablas/funciones nuevas o eliminadas).
+          npx prettier --config .prettierrc --write /tmp/supabase_gen.ts
+
           if ! diff -q src/types/supabase.ts /tmp/supabase_gen.ts > /dev/null 2>&1; then
             echo "❌ Los tipos TypeScript están desincronizados con el esquema."
             echo ""
