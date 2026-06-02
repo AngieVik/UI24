@@ -198,16 +198,21 @@ Bundle size (max chunk):  276 kB (index.js) — referencia pre-Fase D
 ### FASE 0 — Pre-condiciones (T-48h)
 
 ```
-☐ Suite completa en verde: pgTAP + Vitest (270 tests) + lint sin errores
+☑ Suite completa en verde: pgTAP + Vitest (274 tests) + lint sin errores
+    → changelog 2026-06-01: 274/274 Vitest ✅. lint 0 errores (7 warnings react-refresh
+      en shadcn/ui, no bloqueantes). _docs/** añadido a eslint ignores. supabase db reset
+      limpio (25 migraciones). ci-database D-18 cerrado: 2 migraciones de sync
+      (20260601000001/000002) añaden enums critico/desactivado/subestado_operativo.
+      supabase.ts regenerado en UTF-8 — tsc limpio.
 ☐ Staging branch validada: supabase db reset --linked ejecutado limpiamente
 ☐ Seeds de staging ejecutados y smoke tests manuales completados
 ☑ Backup PITR — EXCEPCIÓN ACEPTADA (2026-05-21): plan Free no incluye PITR.
     Riesgo documentado: rollback de BD sería manual. BD vacía pre-deploy.
     Revisar upgrade a Pro post-go-live.
-☐ VAPID keys generadas y guardadas en secrets de producción
-    (npx web-push generate-vapid-keys → VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)
-☐ VITE_SENTRY_DSN configurado en proyecto Supabase de producción
-☐ VITE_APP_VERSION actualizado en .env.production (semver)
+☑ VAPID keys: VITE_VAPID_PUBLIC_KEY en .env.production ✅
+    VAPID_PRIVATE_KEY en Supabase Edge Function secrets (U24-Database) ✅ confirmado 2026-06-01.
+☑ VITE_SENTRY_DSN configurado en .env.production ✅
+☑ VITE_APP_VERSION=1.0.0 en .env.production ✅
 ☐ Notificar al equipo: ventana de mantenimiento
 ```
 
@@ -346,7 +351,7 @@ Incidencias post-deploy: ________________
 | ~~D-TEST-01~~ | ~~Testing~~ | ~~`Doc8ParteTrabajoScreen.test.tsx` — 30 tests fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
 | ~~D-TEST-02~~ | ~~Testing~~ | ~~`Checklist360Screen.test.tsx` — tests fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
 | ~~D-TEST-03~~ | ~~Testing~~ | ~~`BlackColumn.test.tsx` — tests de openModal/modalLeafId fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
-| D-18 | CI/BD | `ci-database` falla en migración 15: `REVOKE EXECUTE ON FUNCTION public.rls_auto_enable()` — función no existe en imagen Docker local de Supabase. Funciona en producción. Fix: envolver en `DO $$ IF EXISTS...$$`. | Abierta | Fase E/F |
+| ~~D-18~~ | ~~CI/BD~~ | ~~`ci-database` falla en migración 15: `REVOKE EXECUTE ON FUNCTION public.rls_auto_enable()` — función no existe en imagen Docker local de Supabase. Funciona en producción. Fix: envolver en `DO $$ IF EXISTS...$$`.~~ | ✅ Cerrado 2026-06-01. Guard IF EXISTS en migración 15. Migraciones 000001+000002 de sync enums/schema añadidas. `tsc` limpio. 274/274 ✅ | — |
 
 ---
 
@@ -428,3 +433,4 @@ Incidencias post-deploy: ________________
 | **2026-05-31** | **rr v1.1** | **D-TEST-01/02/03 cerradas. 270/270 tests verde. TypeScript limpio. Fase E desbloqueada. E.1–E.5 cerradas.** |
 | **2026-05-31** | **rr v1.2** | **E.5 Lighthouse (88 perf / 100 a11y) + jest-axe 4 tests 0 violaciones. 274/274 tests.** |
 | **2026-05-31** | **rr v1.3** | **E.4 CI: `ci-e2e.yml` creado. `playwright.config.ts` actualizado. Fase E completa en código — pendiente primera ejecución verde en GHA.** |
+| **2026-06-01** | **rr v1.4** | **D-18 cerrado. 2 migraciones sync enums/schema. `supabase.ts` regenerado UTF-8. `tsc` limpio. lint 0 errores. 274/274 ✅. Checklist §5 FASE 0 iniciado — suite ✅, env ✅, VAPID parcial, staging pendiente.** |

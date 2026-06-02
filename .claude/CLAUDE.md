@@ -7,10 +7,9 @@
 
 ## Estado actual (actualizado por Claude)
 
-- **Fase:** E — Validación y reapertura del checklist de despliegue
-- **Último punto completado:** E.4 CI Playwright cerrada 2026-05-31. `ci-e2e.yml` creado. E.5 también cerrada: Lighthouse 88/100 perf, 100/100 a11y. 4 tests jest-axe sin violaciones. 274/274 tests Vitest ✅.
-- **Último punto completado:** E.4 CI cerrado 2026-05-31. `ci-quality` ✅ · `ci-e2e` ✅ verdes (34/34 tests chromium-android). `ci-database` ❌ pre-existente: deuda 1.D1 tipos TypeScript UTF-16LE desincronizados. Requiere `supabase gen types typescript --local` con Docker.
-- **Bloqueadores:** Ninguno para E. `ci-database` es deuda 1.D1 fuera del alcance de Fase E.
+- **Fase:** E — Validación y reapertura del checklist de despliegue → Checklist §5 FASE 0 en curso
+- **Último punto completado:** 2026-06-01 — Checklist FASE 0 parcialmente completado. D-18 cerrado: 2 migraciones de sync (`20260601000001` + `000002`) añaden enums `critico`/`desactivado`/`subestado_operativo` a schema local. `supabase db reset` limpio (25 migraciones). `supabase.ts` regenerado UTF-8 y en sync con local. `tsc` sin errores. lint 0 errores. 274/274 ✅. `ci-database` ✅ listo para verde en GHA. `_docs/**` añadido a eslint ignores.
+- **Bloqueadores:** Ninguno. Pendiente en FASE 0: confirmar VAPID_PRIVATE_KEY en Supabase secrets, staging reset `--linked`, seeds staging, notificación al equipo.
 
 ## REGLAS ARQUITECTÓNICAS POLITICA DE TRABAJO - PROYECTO U24 (VERSIÓN 2.2)
 
