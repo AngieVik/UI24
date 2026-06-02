@@ -1,7 +1,10 @@
 import { lazy, Suspense, useEffect } from 'react'
+import { RefreshCw, TriangleAlert } from 'lucide-react'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useTerminalStore } from '@/stores/useTerminalStore'
+import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 // ── Auth / Layout — estáticos (critical path) ──────────────────────────────
 import { AutorizarTerminalScreen } from '@/components/auth/AutorizarTerminalScreen'
@@ -16,6 +19,70 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { BandejaCanal } from '@/components/layout/BandejaModal'
+
+const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? '0.1.0'
+
+function semverLt(a: string, b: string): boolean {
+  const parse = (v: string) =>
+    v.replace(/^v/, '').replace(/-.*$/, '').split('.').map(Number)
+  const [aMaj, aMin, aPatch] = parse(a)
+  const [bMaj, bMin, bPatch] = parse(b)
+  if (aMaj !== bMaj) return aMaj < bMaj
+  if (aMin !== bMin) return aMin < bMin
+  return aPatch < bPatch
+}
+
+function useForceUpdateCheck() {
+  const setForceUpdate = useGlobalStore((s) => s.setForceUpdate)
+  const session = useAuthStore((s) => s.session)
+
+  useEffect(() => {
+    // La política RLS de versiones_cliente requiere 'authenticated'.
+    // Esperar a que la sesión del terminal esté activa para no fallar como anon.
+    if (!session) return
+    supabase
+      .from('versiones_cliente')
+      .select('min_version_permitida')
+      .eq('activa', true)
+      .order('publicada_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          // Sin datos o sin red: no modificar el estado actual (beneficio de la duda).
+          return
+        }
+        setForceUpdate(semverLt(APP_VERSION, data.min_version_permitida), data.min_version_permitida)
+      }, () => {/* noop: sin red → sin cambio de estado */})
+  // Re-ejecutar cuando la sesión cambia (terminal recién autorizado).
+  }, [session, setForceUpdate])
+}
+
+function ForceUpdateBanner({ minVersion }: { minVersion: string | null }) {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-background p-6">
+      <div className="flex w-full max-w-[400px] flex-col items-center gap-5 text-center">
+        <TriangleAlert aria-hidden="true" className="size-14 text-destructive" />
+        <div className="space-y-2">
+          <h1 className="font-display text-2xl font-bold">Actualización obligatoria</h1>
+          <p className="font-body text-base text-muted-foreground">
+            Esta versión de la aplicación ya no está soportada.
+            {minVersion && (
+              <>
+                {' '}Versión mínima requerida:{' '}
+                <span className="font-medium text-foreground">{minVersion}</span>.
+              </>
+            )}
+          </p>
+        </div>
+        <Button onClick={() => window.location.reload()} className="gap-2">
+          <RefreshCw aria-hidden="true" className="size-4" />
+          Recargar aplicación
+        </Button>
+      </div>
+    </main>
+  )
+}
 
 // ── D.1 Operativa — lazy ───────────────────────────────────────────────────
 const PresenciaScreen = lazy(() =>
@@ -175,6 +242,11 @@ const CambioPasswordScreen = lazy(() =>
     default: m.CambioPasswordScreen,
   }))
 )
+const SystemConfigScreen = lazy(() =>
+  import('@/components/coordinacion/SystemConfigScreen').then((m) => ({
+    default: m.SystemConfigScreen,
+  }))
+)
 
 // ── D.7 RRHH — lazy ───────────────────────────────────────────────────────
 const FichasEmpleadosScreen = lazy(() =>
@@ -251,6 +323,8 @@ export default function App() {
   const session = useAuthStore((s) => s.session)
   const idTerminal = useTerminalStore((s) => s.id_terminal)
   const setOnline = useGlobalStore((s) => s.setOnline)
+  const forceUpdateRequired = useGlobalStore((s) => s.forceUpdateRequired)
+  const minVersion = useGlobalStore((s) => s.minVersion)
 
   useEffect(() => {
     const onlineHandler = () => setOnline(true)
@@ -263,6 +337,13 @@ export default function App() {
       window.removeEventListener('offline', offlineHandler)
     }
   }, [setOnline])
+
+  // Verifica versión mínima al montar (una vez por carga de página).
+  useForceUpdateCheck()
+
+  if (forceUpdateRequired) {
+    return <ForceUpdateBanner minVersion={minVersion} />
+  }
 
   // estado_0a — sin sesión o sin id_terminal
   if (!session || !idTerminal) {
@@ -422,6 +503,7 @@ function HomeArea() {
   if (selectedLeafId === 'coord_rbac') return <RbacScreen />
   if (selectedLeafId === 'coord_force_chk') return <ForzarCheckoutScreen />
   if (selectedLeafId === 'coord_password') return <CambioPasswordScreen />
+  if (selectedLeafId === 'system_config') return <SystemConfigScreen />
   // coord_bandeja → opensModal=true, se abre en ModalArea. No ruta aquí.
 
   // ── D.7 RRHH — personal ───────────────────────────────────────────────────

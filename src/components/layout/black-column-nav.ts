@@ -714,6 +714,13 @@ export const NAV_TREE: readonly NavNode[] = [
       },
       {
         kind: 'leaf',
+        id: 'system_config',
+        label: 'Configuración del sistema',
+        icon: Sliders,
+        rolesPermitidos: GERENCIA_ONLY,
+      },
+      {
+        kind: 'leaf',
         id: 'coord_force_chk',
         label: 'Forzar checkout',
         icon: LogOut,

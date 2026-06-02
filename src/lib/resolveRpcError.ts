@@ -33,10 +33,18 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 export function resolveRpcError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
+  let message: string
+  if (error instanceof Error) {
+    message = error.message
+  } else if (error !== null && typeof error === 'object' && 'message' in error) {
+    // PostgrestError de @supabase/supabase-js no extiende Error
+    message = String((error as { message: unknown }).message)
+  } else {
+    message = String(error)
+  }
   const match = message.match(/^(ERR_[A-Z_0-9]+)/)
   if (match) {
     return ERROR_MESSAGES[match[1]] ?? 'Error inesperado. Contacta con soporte.'
   }
-  return 'Error inesperado. Contacta con soporte.'
+  return message || 'Error inesperado. Contacta con soporte.'
 }

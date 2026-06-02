@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, ShieldCheck, WifiOff } from 'lucide-react'
+import { Eye, EyeOff, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
@@ -24,13 +24,15 @@ const APP_VERSION =
 /**
  * AutorizarTerminalScreen — estado_0a.
  *
- * Aparece cuando el terminal no tiene sesión Supabase. Gerencia
- * introduce sus credenciales para autorizar este dispositivo. El
- * backend crea el usuario máquina `terminal_<fp>@u24.local` y devuelve
- * una sesión Supabase que persistirá indefinidamente (refresh
- * automático del JWT).
+ * Pantalla de acceso sin texto explicativo visible. Solo gerencia puede
+ * autorizar un terminal (el servidor verifica el rol). NUNCA añadir
+ * copy que indique quién debe entrar, por qué no puede o qué hace esta
+ * pantalla — compromete la seguridad física del dispositivo.
  *
- * Online obligatorio.
+ * Flujo: credenciales gerencia → ef-autorizar-terminal verifica rol,
+ * crea usuario máquina `terminal_<fp>@u24.local` + galleta permanente
+ * + fichas_empleados con rol gerencia → sesión del terminal persiste
+ * en IndexedDB indefinidamente (refresh automático JWT).
  */
 export function AutorizarTerminalScreen() {
   const [showPassword, setShowPassword] = useState(false)
@@ -61,17 +63,6 @@ export function AutorizarTerminalScreen() {
 
         <Card className="w-full">
           <CardContent className="space-y-4 p-6">
-            <header className="space-y-1">
-              <h1 className="flex items-center gap-2 font-display text-xl font-bold leading-tight">
-                <ShieldCheck aria-hidden="true" className="size-5" />
-                Autorizar terminal
-              </h1>
-              <p className="font-body text-base font-light text-muted-foreground">
-                Este dispositivo aún no está vinculado a U24. Gerencia introduce sus credenciales
-                una sola vez para autorizar el terminal.
-              </p>
-            </header>
-
             {!isOnline && (
               <div
                 role="status"
@@ -93,9 +84,7 @@ export function AutorizarTerminalScreen() {
                 name="identificador"
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="autorizar-identificador">
-                      Identificador (gerencia)
-                    </FieldLabel>
+                    <FieldLabel htmlFor="autorizar-identificador">Identificador</FieldLabel>
                     <Input
                       {...field}
                       id="autorizar-identificador"
@@ -148,7 +137,7 @@ export function AutorizarTerminalScreen() {
               </div>
 
               <Button type="submit" className="w-full" disabled={isSubmitting || !isOnline}>
-                {isSubmitting ? 'Autorizando…' : 'Autorizar este terminal'}
+                {isSubmitting ? 'Verificando…' : 'Acceder'}
               </Button>
             </form>
           </CardContent>

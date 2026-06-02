@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { resolveRpcError } from '@/lib/resolveRpcError'
+import { useGlobalStore } from '@/stores/useGlobalStore'
 
 export interface ConfigEntry {
   clave: string
@@ -21,7 +22,13 @@ export interface VersionEntry {
 const APP_VERSION = import.meta.env.VITE_APP_VERSION as string | undefined
 
 function semverLt(a: string, b: string): boolean {
-  const parse = (v: string) => v.replace(/^v/, '').split('.').map(Number)
+  // Strip pre-release suffix (e.g. "0.1.0-dev" → "0.1.0") before comparing.
+  const parse = (v: string) =>
+    v
+      .replace(/^v/, '')
+      .replace(/-.*$/, '')
+      .split('.')
+      .map(Number)
   const [aMaj, aMin, aPatch] = parse(a)
   const [bMaj, bMin, bPatch] = parse(b)
   if (aMaj !== bMaj) return aMaj < bMaj
@@ -36,6 +43,7 @@ export function useSystemConfig() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const setGlobalForceUpdate = useGlobalStore((s) => s.setForceUpdate)
 
   const cargarConfig = useCallback(async () => {
     setLoading(true)
@@ -54,10 +62,12 @@ export function useSystemConfig() {
       setConfig((cfgRes.data ?? []) as ConfigEntry[])
       setVersiones((verRes.data ?? []) as VersionEntry[])
 
-      // Verificar force-update
+      // Verificar force-update — sincroniza tanto estado local como store global
       if (APP_VERSION && verRes.data && verRes.data.length > 0) {
         const minVer = verRes.data[0].min_version_permitida
-        setForceUpdate(semverLt(APP_VERSION, minVer))
+        const required = semverLt(APP_VERSION, minVer)
+        setForceUpdate(required)
+        setGlobalForceUpdate(required, minVer)
       }
     } catch (e) {
       setError(resolveRpcError(e))

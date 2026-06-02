@@ -48,7 +48,7 @@ export function useAutorizarTerminal() {
         },
       })
       if (efErr) {
-        setError(extractEdgeError(efErr) ?? 'No se pudo autorizar el terminal')
+        setError((await extractEdgeError(efErr)) ?? 'No se pudo autorizar el terminal')
         return null
       }
       const payload = data as { session: Session; fingerprint: string; auth_user_id: string }
@@ -81,13 +81,14 @@ export function useAutorizarTerminal() {
   return { autorizar, isSubmitting, error, setError }
 }
 
-function extractEdgeError(err: unknown): string | null {
+async function extractEdgeError(err: unknown): Promise<string | null> {
   if (typeof err === 'object' && err !== null) {
-    const e = err as { message?: string; context?: { body?: string } }
-    if (e.context?.body) {
+    const e = err as { message?: string; context?: unknown }
+    const ctx = e.context
+    if (ctx && typeof (ctx as Response).json === 'function') {
       try {
-        const parsed = JSON.parse(e.context.body) as { detail?: string; error?: string }
-        return parsed.detail ?? parsed.error ?? null
+        const body = await (ctx as Response).clone().json() as { detail?: string; error?: string }
+        return body.detail ?? body.error ?? null
       } catch {
         /* swallow */
       }

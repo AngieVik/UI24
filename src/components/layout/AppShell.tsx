@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
-import { WifiOff } from 'lucide-react'
+import { Download, WifiOff, X } from 'lucide-react'
 import { BlackColumn } from './BlackColumn'
 import { Header } from './Header'
 import { BlackColumnProvider } from '@/contexts/BlackColumnContext'
 import { useGlobalStore } from '@/stores/useGlobalStore'
+import { useInstallPrompt } from '@/hooks/useInstallPrompt'
 
 interface AppShellProps {
   ticker?: string
@@ -32,6 +33,7 @@ interface AppShellProps {
  */
 export function AppShell({ ticker, unreadCount, onOpenInbox, children }: AppShellProps) {
   const isOnline = useGlobalStore((s) => s.isOnline)
+  const { canInstall, install, dismiss } = useInstallPrompt()
 
   return (
     <BlackColumnProvider>
@@ -42,6 +44,34 @@ export function AppShell({ ticker, unreadCount, onOpenInbox, children }: AppShel
           <BlackColumn />
 
           <div className="flex min-w-0 flex-1 flex-col">
+            {canInstall && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center gap-2 border-b border-border bg-muted px-4 py-2 text-sm"
+              >
+                <Download aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                <span className="flex-1 text-muted-foreground">
+                  Instala U24 como app para acceso rápido sin navegador
+                </span>
+                <button
+                  type="button"
+                  onClick={install}
+                  className="rounded bg-foreground px-2 py-0.5 text-xs font-medium text-background hover:opacity-80"
+                >
+                  Instalar
+                </button>
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  aria-label="Descartar instalación"
+                  className="ml-1 grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent"
+                >
+                  <X aria-hidden="true" className="size-3" />
+                </button>
+              </div>
+            )}
+
             {!isOnline && (
               <div
                 role="status"

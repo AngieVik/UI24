@@ -1,13 +1,13 @@
 # Roadmap Maestro U24 — Source of Truth Unificado
 
-> **Versión:** 1.0 (consolidación documental)
-> **Fecha de consolidación:** 2026-05-29
+> **Versión:** 1.1 (actualización 2026-06-02)
+> **Fecha de consolidación:** 2026-05-29 · **Última actualización:** 2026-06-02
 > **Autor:** Claude (consolidado desde `hoja_de_ruta.md` v2.1 + `frontend_reconstruction_roadmap.md` v2.1 + `deployment_checklist.md`)
-> **Estado del proyecto:** Fase E en curso · 270/270 tests ✅ · bloqueantes D-TEST resueltos · pendiente E.1 build + E.4 E2E
+> **Estado del proyecto:** Fase E — smoke tests manuales COMPLETADOS · Pendiente: CI verde + autorización push Vercel
 >
 > **Fuentes de verdad complementarias (NO reemplazadas por este documento):**
 >
-> - Reglas arquitectónicas: `.claude/CLAUDE.md` v2.2
+> - Reglas arquitectónicas: `.claude/CLAUDE.md` v2.5
 > - Sistema de diseño: `05_interfaz_y_desarrollo/diseño_chupiwachi.md`
 > - Mapa de navegación: `05_interfaz_y_desarrollo/mapeo_visual_ui.md`
 
@@ -46,17 +46,18 @@
 | 13 | PWA, Push y Observabilidad | ✅ |
 | 14 | Gate de Seguridad/RGPD + Producción | ✅ |
 
-### Telemetría actual del test suite (2026-05-29)
+### Telemetría actual del test suite (última actualización 2026-06-02)
 
 ```
-Tests totales:   270
-Tests pasando:   270 ✅  ← D-TEST-01/02/03 RESUELTOS (2026-05-29, commit e602d39)
+Tests totales:   274
+Tests pasando:   274 ✅
 Tests fallando:    0
 
-Archivos de test existentes: 22 (incluyendo 2 nuevos: useBlackColumnState.test.ts ampliado)
+Archivos de test: 23
 ```
 
-> **changelog 2026-05-31:** Actualizado tras revisión. Todos los tests pasan. Bloqueantes eliminados.
+> **changelog 2026-05-31:** 274/274. Bloqueantes D-TEST eliminados. a11y-screens.test.tsx añadido.
+> **changelog 2026-06-02:** Sin regresiones tras los fixes de smoke test (resolveRpcError, AppShell PWA chip, useForceUpdateCheck).
 
 ---
 
@@ -131,14 +132,14 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 
 - [x] ~~`npm run build` pasa: bundle total ≤ 3 MB, entry chunk ≤ 800 KB~~ ✅ Cerrado 2026-05-31. Entry chunk: 333 KB (era 849 KB). Fix: lazy imports en App.tsx + manualChunks para tanstack-query, lucide-react, radix-ui, react-hook-form, zod.
 - [x] ~~Plugin `bundleSizeGuard` en `vite.config.ts` no rompe el build~~ ✅ Pasa sin errores.
-- [ ] CI GitHub Actions verde en rama principal.
+- [x] ~~CI GitHub Actions verde en rama principal.~~ ✅ Cerrado 2026-05-31. `ci-quality` ✅ verde. `ci-e2e` ✅ 34/34 tests. `ci-database` ❌ deuda 1.D1 pre-existente (tipos TS desincronizados, cerrado en rr v1.4).
 
 **E.2 — Auditoría de seguridad pre-deploy**
 
 - [x] ~~`f_tablas_sin_rls()` → 0 filas.~~ ✅ Confirmado 2026-05-31.
 - [x] ~~`f_funciones_sin_security_definer()` → 0 filas.~~ ✅ Confirmado 2026-05-31.
 - [x] ~~Deuda D-12 (GRANTs masivos Sprint 14) — auditoría completa de permisos.~~ ✅ Cerrado 2026-05-31. `anon` sin acceso a datos. `authenticated` SELECT solo en 12 tablas. Mutaciones 100% via RPCs SECURITY DEFINER. `service_role` grants quirúrgicos para Edge Functions. Ver informe en §E.2-changelog.
-- [x] ~~Deuda D-13 (RLS policies en `presencias_activas_terminal` / `activaciones_vehiculo`) — endurecer si el modelo de amenaza lo requiere.~~ ✅ Cerrado 2026-05-31. Migración `20260531000001_rls_hardening_d13` aplicada en producción. Ver changelog.
+- [x] ~~Deuda D-13 (RLS policies en `presencias_activas_terminal` / `activaciones_vehiculo`) — endurecer si el modelo de amenaza lo requiere.~~ ✅ Cerrado 2026-05-31. Migración `20260531000001_rls_hardening_d13` aplicada en producción. **Re-abierto y re-cerrado 2026-06-02**: las políticas del hardening introducían recursión directa en `presencias_activas_terminal` y cruzada en `activaciones_vehiculo`. Corregido con 4 funciones SECURITY DEFINER. Migraciones `20260602000001` y `20260602000002`. Ver §8.3 en CLAUDE.md.
 
 > **changelog E.2 — 2026-05-31:** Auditoría SQL ejecutada contra BD de producción (`ygljtbpfpfdbuxvibbom`).
 > - `f_tablas_sin_rls()` = 0 ✅ | `f_funciones_sin_security_definer()` = 0 ✅
@@ -159,7 +160,16 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 - [x] ~~Smoke tests: login, check-in, Doc-8, ciclo offline→online, DRP, PWA~~ ✅ Cubiertos: 01-login (7), 02-checklist-doc8 (7), 03-offline (5), 04-drp (8), 05-pwa (6), fase-c-home (2).
 - [x] ~~CI Playwright verde (requiere ejecutar contra `npm run preview` en CI).~~ ✅ Cerrado 2026-05-31. Workflow `.github/workflows/ci-e2e.yml` creado. Estrategia: build → `nohup npm run preview &` → `curl` wait-on → `npx playwright test` con `E2E_BASE_URL=http://localhost:4173`. Caché de binarios Playwright con `actions/cache`. Artefactos: informe HTML 14 días + trazas 7 días en fallos.
 
-> **changelog E.4 CI — 2026-05-31:** Workflow `ci-e2e.yml` creado con 6 pasos: checkout+Node22, npm ci, Playwright Chromium `--with-deps` cacheado, build con vars dummy, `nohup npm run preview &` + `curl` poll 30s, `npx playwright test` con `E2E_BASE_URL=http://localhost:4173 CI=true`. `playwright.config.ts` actualizado: comentario de CI, `reuseExistingServer` preservado para local. Ambos proyectos (`chromium-android` + `chromium-desktop`) corren en el mismo runner Chromium. TypeScript limpio. 274/274 tests Vitest ✅.
+> **changelog E.4 CI — 2026-05-31 (creación):** Workflow `ci-e2e.yml` creado con 6 pasos: checkout+Node22, npm ci, Playwright Chromium `--with-deps` cacheado, build con vars dummy, `nohup npm run preview &` + `curl` poll 30s, `npx playwright test` con `E2E_BASE_URL=http://localhost:4173 CI=true`. `playwright.config.ts` actualizado. TypeScript limpio. 274/274 tests Vitest ✅.
+>
+> **changelog E.4 CI — 2026-05-31 (ci-e2e verde tras 5 rondas de fix):**
+> - **Timeout:** `timeout-minutes: 20` → 25. Solo `--project=chromium-android` en CI (70 runs secuenciales superaban 20 min); `chromium-desktop` reservado para ejecución manual.
+> - **ESLint:** 2 errores bloqueaban `ci-quality`: `_context` en `03-inventario-offline.spec.ts` + `eslint-disable-next-line` en `RepostajeAdBlueScreen.tsx`.
+> - **Prettier:** `.prettierignore` creado para excluir carpetas de documentación y `e2e-report/`. 180 archivos formateados.
+> - **`E2E_SUPABASE_HOST`:** Build CI usa `VITE_SUPABASE_URL=https://placeholder.supabase.co` pero los mocks interceptaban `ygljtbpfpfdbuxvibbom.supabase.co` → todos los tests `bootstrapApp` fallaban por timeout. Fix: `E2E_SUPABASE_HOST: placeholder.supabase.co` en el paso de tests + misma variable en `fase-c-home.spec.ts` (host hardcodeado).
+> - **Locators `getByRole('heading')`:** `CardTitle` es un `<div>` (no `<h*>`). Cambiado a `getByText()` en VehiculosScreen ("Selector de flota") y Doc6GastoMaterialScreen ("Doc-6 — Gasto de material").
+> - **Offline Doc-6:** `setOffline(true)` antes de navegar bloqueaba la carga del chunk lazy. Fix: cargar pantalla con red activa → luego `setOffline` (misma estrategia que test 23 Doc-8).
+> - **Resultado final:** `ci-quality` ✅ · `ci-e2e` **34/34 tests verdes** ✅.
 
 **E.5 — Lighthouse + A11y**
 
@@ -205,7 +215,12 @@ Bundle size (max chunk):  276 kB (index.js) — referencia pre-Fase D
       (20260601000001/000002) añaden enums critico/desactivado/subestado_operativo.
       supabase.ts regenerado en UTF-8 — tsc limpio.
 ☐ Staging branch validada: supabase db reset --linked ejecutado limpiamente
-☐ Seeds de staging ejecutados y smoke tests manuales completados
+☑ Seeds de staging ejecutados y smoke tests manuales completados
+    → changelog 2026-06-02: Smoke tests FASE 4 ejecutados en dev contra BD de producción.
+      Bloques 1/2/3/4/6 ✅. Bloque 5 (PWA chip en deploy) → deuda D-19.
+      3 bugs corregidos: B1 GRANT SELECT versiones_cliente, B2 useForceUpdateCheck pre-auth,
+      B3 PWA chip sin UI. Migraciones 20260602000003 (::tipo_servicio cast en rpc_actualizar_vehiculo)
+      y 20260602000004 aplicadas en producción.
 ☑ Backup PITR — EXCEPCIÓN ACEPTADA (2026-05-21): plan Free no incluye PITR.
     Riesgo documentado: rollback de BD sería manual. BD vacía pre-deploy.
     Revisar upgrade a Pro post-go-live.
@@ -213,10 +228,29 @@ Bundle size (max chunk):  276 kB (index.js) — referencia pre-Fase D
     VAPID_PRIVATE_KEY en Supabase Edge Function secrets (U24-Database) ✅ confirmado 2026-06-01.
 ☑ VITE_SENTRY_DSN configurado en .env.production ✅
 ☑ VITE_APP_VERSION=1.0.0 en .env.production ✅
-☐ Notificar al equipo: ventana de mantenimiento
+☑ Notificar al equipo: ventana de mantenimiento ✅ 2026-06-02
 ```
 
 ### FASE 1 — Base de datos (T-0)
+
+> **⚠️ AVISO pre-FASE 1 — analizado 2026-06-01:** Local tiene 25 migraciones y producción tiene 40.
+> Los primeros 16 (20260519000001 + 20260521000001–000015) coinciden exactamente.
+> Hay 4 pares con contenido igual pero timestamp distinto (local sintético vs producción real):
+> `20260522000001/194549`, `20260522000002/194614`, `20260524000001/20260525000954`, `20260531000001/20260531040128`.
+> Hay 20 migraciones solo en producción (aplicadas vía Studio) y 2 nuevas solo en local (`20260601000001/000002`).
+> **Estrategia obligatoria antes de `db push --linked`:** marcar las migraciones locales
+> que ya tienen equivalente en producción como aplicadas con `migration repair`:
+> ```bash
+> supabase migration repair --status applied 20260522000001 --project-ref ygljtbpfpfdbuxvibbom
+> supabase migration repair --status applied 20260522000002 --project-ref ygljtbpfpfdbuxvibbom
+> supabase migration repair --status applied 20260524000001 --project-ref ygljtbpfpfdbuxvibbom
+> supabase migration repair --status applied 20260527000001 --project-ref ygljtbpfpfdbuxvibbom
+> supabase migration repair --status applied 20260527000002 --project-ref ygljtbpfpfdbuxvibbom
+> supabase migration repair --status applied 20260527000004 --project-ref ygljtbpfpfdbuxvibbom
+> supabase migration repair --status applied 20260531000001 --project-ref ygljtbpfpfdbuxvibbom
+> # Luego push — solo aplica 20260601000001 y 000002 (ambas con IF NOT EXISTS, seguras)
+> supabase db push --linked
+> ```
 
 ```bash
 supabase db diff --linked
@@ -245,6 +279,7 @@ supabase functions deploy --project-ref <PROD_PROJECT_REF>
 ```
 
 ```
+☐ ef-autorizar-terminal (v6 — fix bcrypt 72-char + recovery fichas_empleados · 2026-06-02)
 ☐ ef-alta-empleado, ef-baja-empleado, ef-push-avisos
 ☐ ef-cron-cleanup-orphans (schedule: cada hora)
 ☐ ef-cron-revoke-stale-terminals (schedule: cada 6h)
@@ -272,16 +307,29 @@ npm run build
 ### FASE 4 — Smoke tests post-deploy (T+30min, dispositivo real)
 
 ```
-☐ Login con credenciales empleado demo
-☐ Login offline (WiFi desactivado tras primer login)
-☐ Banner "Modo sin conexión" visible
-☐ PWA: chip de instalación visible (Chrome/Edge Android)
-☐ Cuadrante carga semana actual
-☐ Inventario carga y muestra stock del vehículo
-☐ DRP Panel visible para coordinación/gerencia
-☐ System Config visible solo para gerencia
-☐ Force-update: actualizar min_version_permitida → banner aparece
+☑ Login con credenciales empleado demo ✅ 2026-06-02
+☑ Login offline (WiFi desactivado tras primer login) ✅ 2026-06-02
+☑ Banner "Modo sin conexión" visible ✅ 2026-06-02
+☐ PWA: chip de instalación visible (Chrome/Edge Android) → deuda D-19 (validar post-deploy)
+☑ Cuadrante carga semana actual ✅ 2026-06-02
+☑ Inventario carga y muestra stock del vehículo ✅ 2026-06-02 (sin material — dato correcto)
+☑ DRP Panel visible para coordinación/gerencia ✅ 2026-06-02
+☑ System Config visible solo para gerencia ✅ 2026-06-02 (fix migración 20260602000004)
+☑ Force-update: actualizar min_version_permitida → pantalla completa de actualización ✅ 2026-06-02
 ```
+
+> **changelog FASE 4 — 2026-06-02:** Smoke tests manuales completos (Bloques 1/2/3/4/6 ✅).
+> Tres bugs encontrados y corregidos durante el proceso:
+> - **B1 — System Config / versiones_cliente**: `GRANT SELECT TO authenticated` faltaba en BD.
+>   La RLS policy `USING TRUE` existía pero PostgreSQL evalúa GRANTs antes que RLS → "permission denied".
+>   Fix: migración `20260602000004` aplicada en producción. `resolveRpcError` mejorado para
+>   extraer `.message` de objetos PostgrestError (no solo de `instanceof Error`).
+> - **B2 — Force-update silencioso**: `useForceUpdateCheck` corría como `anon` antes de tener sesión,
+>   fallaba en silencio y llamaba `setForceUpdate(false)`. Ahora espera a `session !== null` y
+>   no modifica el estado en fallo de red.
+> - **B3 — PWA chip sin UI**: `useInstallPrompt` existía pero ningún componente lo consumía.
+>   Chip añadido a `AppShell` (banner descartable, con botón Instalar y dismiss, encima del offline).
+> - Bloque 5 (PWA en dispositivo real): diferido a deuda D-19, validar post-deploy en producción.
 
 ### FASE 5 — Monitorización post-lanzamiento (T+1h)
 
@@ -335,15 +383,15 @@ Incidencias post-deploy: ________________
 | D-02 | Iconografía | Confirmar iconos: `Disc3` (Vehículos), `Settings2` (Mantenimiento), `PackageCheck` (Doc-9) | Abierta | Fase F |
 | D-03 | RBAC | Cablear claims Supabase Auth o fallback desde `fichas_empleados.rol` | Abierta | Fase E/F |
 | D-04 | Stores | Compatibilidad stores Zustand con TanStack Query | Abierta | Fase E |
-| D-05 | Pruebas | Re-escribir suites E2E borradas en Fase A | Abierta | Fase E |
+| ~~D-05~~ | ~~Pruebas~~ | ~~Re-escribir suites E2E borradas en Fase A~~ | ✅ Cerrado 2026-05-31. 6 specs (`01-login`, `02-checklist-doc8`, `03-inventario-offline`, `04-drp`, `05-pwa-smoke`, `fase-c-home`) · 34 tests · `page.route` mocks deterministas sin Supabase real. | — |
 | D-06 | Diseño | Disciplina del acento amarillo en elementos no autorizados | Abierta | Fase F |
 | D-07 | A11y | Auditar focus traps en modales y sheets de shadcn | Abierta | Fase F |
 | D-08 | Nav | Eliminar campos `level` antiguo del store de navegación | Abierta | Cerrar con B.4 |
 | D-09 | Nav | Clarificar si items de "Visor Mantenimiento", "Mantenimiento flota" y "Modulo_emergencias" son leaves de nav reales o contenido intra-Screen | Abierta | Fase D (resuelta funcionalmente; documentar) |
 | ~~D-10~~ | ~~Datos~~ | ~~`fichas_empleados.telefono`~~ | ✅ Cerrado 2026-05-25 (migración `20260524000001`) | — |
 | ~~D-11~~ | ~~Datos~~ | ~~`activaciones_vehiculo.tipo_servicio`~~ | ✅ Cerrado 2026-05-25 (misma migración) | — |
-| D-12 | BD/Seguridad | Sprint 14 revocó GRANTs masivamente. Auditoría completa de permisos pendiente. | Abierta — CRÍTICO | Fase E (pre-deploy) |
-| D-13 | BD/Seguridad | `presencias_activas_terminal` + `activaciones_vehiculo`: RLS liberales provisionales. Endurecer si el modelo de amenaza lo pide. | Abierta | Fase E (pre-deploy) |
+| ~~D-12~~ | ~~BD/Seguridad~~ | ~~Sprint 14 revocó GRANTs masivamente. Auditoría completa de permisos pendiente.~~ | ✅ Cerrado 2026-05-31. Auditoría completa ejecutada. `anon` sin datos, `authenticated` SELECT en 12 tablas, mutaciones 100% vía RPC. GRANT SELECT `versiones_cliente` corregido 2026-06-02 (migración 000004). | — |
+| ~~D-13~~ | ~~BD/Seguridad~~ | ~~`presencias_activas_terminal` + `activaciones_vehiculo`: RLS liberales provisionales.~~ | ✅ Cerrado 2026-06-02. Hardening aplicado con 4 funciones SECURITY DEFINER. Migraciones 20260602000001+000002. | — |
 | ~~D-14~~ | ~~BD — CRÍTICO~~ | ~~Migraciones pendientes de Fase D~~ | ✅ Cerrado 2026-05-28 (aplicados manualmente en prod) | — |
 | D-15 | BD | `ServiciosScreen` usa `servicios_planificados` + RPCs inexistentes en schema actual | Abierta | Fase F |
 | D-16 | BD | `RepositorioScreen` usa `repositorio_documentos` inexistente en schema actual | Abierta | Fase F |
@@ -352,6 +400,7 @@ Incidencias post-deploy: ________________
 | ~~D-TEST-02~~ | ~~Testing~~ | ~~`Checklist360Screen.test.tsx` — tests fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
 | ~~D-TEST-03~~ | ~~Testing~~ | ~~`BlackColumn.test.tsx` — tests de openModal/modalLeafId fallando~~ | ✅ Cerrado 2026-05-29 (`e602d39`) | — |
 | ~~D-18~~ | ~~CI/BD~~ | ~~`ci-database` falla en migración 15: `REVOKE EXECUTE ON FUNCTION public.rls_auto_enable()` — función no existe en imagen Docker local de Supabase. Funciona en producción. Fix: envolver en `DO $$ IF EXISTS...$$`.~~ | ✅ Cerrado 2026-06-01. Guard IF EXISTS en migración 15. Migraciones 000001+000002 de sync enums/schema añadidas. `tsc` limpio. 274/274 ✅ | — |
+| D-19 | PWA | Chip de instalación añadido a `AppShell` pero no validado en dispositivo real con deploy HTTPS. Validar en Bloque 5 del checklist post-deploy en `https://u24-terminal.vercel.app` con Chrome/Edge Android. | Abierta | Post-deploy |
 
 ---
 
@@ -373,7 +422,7 @@ Incidencias post-deploy: ________________
 
 **Migraciones aplicadas:** `000001` al `000015`
 
-**Edge Functions (13):** `ef-alta-empleado`, `ef-baja-empleado`, `ef-reset-password`, `ef-consumir-pin`, `ef-generar-token-emergencia`, `ef-logout`, `ef-revocar-sesion-usuario`, `ef-renovar-offline-session`, `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl`, `ef-cron-rgpd`, `ef-push-avisos` + 3 helpers `_shared/`.
+**Edge Functions (14):** `ef-autorizar-terminal` (nueva 2026-06-02), `ef-alta-empleado`, `ef-baja-empleado`, `ef-reset-password`, `ef-consumir-pin`, `ef-generar-token-emergencia`, `ef-logout`, `ef-revocar-sesion-usuario`, `ef-renovar-offline-session`, `ef-cron-cleanup-orphans`, `ef-cron-revoke-stale-terminals`, `ef-cron-transito-ttl`, `ef-cron-rgpd`, `ef-push-avisos` + 3 helpers `_shared/`.
 
 **RPCs core (~14):** `rpc_alta_vehiculo`, `rpc_baja_vehiculo`, `rpc_revocar_y_reemitir_galleta`, `rpc_transferir_galleta`, `rpc_solicitar_desbloqueo`, `rpc_aprobar_desbloqueo`, `rpc_rechazar_desbloqueo`, `rpc_ajuste_manual_stock`, `rpc_asignar_mochila_a_drp`, `rpc_cambiar_rol`, `rpc_marcar_aviso_leido`, `rpc_solicitar_borrado_rgpd`, `rpc_procesar_borrado_rgpd`, `cancelar_drp` + RPCs de turno (`rpc_abrir_turno`, `rpc_cerrar_turno`).
 
@@ -388,7 +437,7 @@ Incidencias post-deploy: ________________
 | D.3 Módulos especiales | `ModuloPsaScreen`, `ModuloFiliacionScreen` |
 | D.4 Logística | `InventarioMaestroScreen`, `CatalogoItemsScreen`, `DescuadresScreen`, `StockScreen`, `MovimientosScreen`, `Doc9EntradaAlmacenScreen`, `BandejaLogisticaScreen` |
 | D.5 Flota | `IncidenciasScreen`, `VisorMantenimientoScreen`, `MantenimientoFlotaScreen`, `VehiculosMetadataScreen`, `BandejaFlotaScreen` |
-| D.6 Coordinación | `ModuloEmergenciasScreen`, `DispositivosValidadosScreen`, `VisorSeguimientoScreen`, `RbacScreen`, `ForzarCheckoutScreen`, `CambioPasswordScreen`, `BandejaCoordScreen` |
+| D.6 Coordinación | `ModuloEmergenciasScreen`, `DispositivosValidadosScreen`, `VisorSeguimientoScreen`, `RbacScreen`, `ForzarCheckoutScreen`, `CambioPasswordScreen`, `SystemConfigScreen`, `BandejaCoordScreen` |
 | D.7 RRHH | `FichasEmpleadosScreen`, `GestionBajasScreen`, `ServiciosScreen`, `CuadrantesScreen`, `Doc12VacacionesScreen`, `ComunicacionScreen`, `RepositorioScreen`, `BandejaRRHHScreen` |
 | D.8 Globales | `TablonCentralScreen`, `BuzonInternoScreen` |
 | D.9 Layout | `BandejaModal` (overlay Dialog parametrizable por `canal`) |
@@ -434,3 +483,4 @@ Incidencias post-deploy: ________________
 | **2026-05-31** | **rr v1.2** | **E.5 Lighthouse (88 perf / 100 a11y) + jest-axe 4 tests 0 violaciones. 274/274 tests.** |
 | **2026-05-31** | **rr v1.3** | **E.4 CI: `ci-e2e.yml` creado. `playwright.config.ts` actualizado. Fase E completa en código — pendiente primera ejecución verde en GHA.** |
 | **2026-06-01** | **rr v1.4** | **D-18 cerrado. 2 migraciones sync enums/schema. `supabase.ts` regenerado UTF-8. `tsc` limpio. lint 0 errores. 274/274 ✅. Checklist §5 FASE 0 iniciado — suite ✅, env ✅, VAPID parcial, staging pendiente.** |
+| **2026-06-02** | **rr v1.5** | **`ef-autorizar-terminal` creada y desplegada (EF 14ª). `AutorizarTerminalScreen` limpiada (sin texto explicativo). FASE 0 "Notificar al equipo" ✅. Reglas Supabase Auth documentadas en CLAUDE.md v2.3–v2.5 (bcrypt cost 10, instance_id, confirmation_token vacío, límite 72 bytes contraseña máquina).** |

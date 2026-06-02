@@ -47,8 +47,8 @@ export default defineConfig({
       // Genera el SW con Workbox durante el build
       strategies: 'generateSW',
       devOptions: {
-        // SW activo en desarrollo para poder probar offline
-        enabled: false,
+        // SW activo en desarrollo para poder probar offline y PWA
+        enabled: true,
       },
       workbox: {
         // App Shell: Cache First (assets estáticos)
@@ -93,6 +93,11 @@ export default defineConfig({
       },
     }),
   ],
+
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
 
   resolve: {
     alias: {
