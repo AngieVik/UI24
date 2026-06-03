@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Disc, Disc3, Droplets, Sliders } from 'lucide-react'
+import { Droplets } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // Textarea not used in current forms — removed
 import { useFlotaCompleta } from '@/hooks/useFlotaCompleta'
 import { useOfflineMutation } from '@/hooks/useOfflineMutation'
@@ -264,7 +263,6 @@ export function MantenimientoFlotaScreen({
 }: {
   vista?: 'aceite' | 'frenos' | 'neumaticos' | 'umbrales'
 }) {
-  const [tab, setTab] = useState<string>(vista ?? 'aceite')
   const { data: vehiculos, isLoading } = useFlotaCompleta()
   const matriculas = vehiculos.map((v) => v.matricula)
 
@@ -275,28 +273,9 @@ export function MantenimientoFlotaScreen({
         <h2 className="font-display text-lg font-bold">Mantenimiento flota</h2>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full">
-          <TabsTrigger value="aceite">
-            <Droplets className="size-3.5 mr-1" />
-            Aceite
-          </TabsTrigger>
-          <TabsTrigger value="frenos">
-            <Disc className="size-3.5 mr-1" />
-            Frenos
-          </TabsTrigger>
-          <TabsTrigger value="neumaticos">
-            <Disc3 className="size-3.5 mr-1" />
-            Neumáticos
-          </TabsTrigger>
-          <TabsTrigger value="umbrales">
-            <Sliders className="size-3.5 mr-1" />
-            Umbrales
-          </TabsTrigger>
-        </TabsList>
-
-        {(['aceite', 'frenos', 'neumaticos'] as const).map((t) => (
-          <TabsContent key={t} value={t} className="mt-3">
+      {(['aceite', 'frenos', 'neumaticos'] as const).map((t) => (
+        (vista ?? 'aceite') === t && (
+          <div key={t} className="mt-0">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="font-display text-base capitalize">
@@ -311,10 +290,12 @@ export function MantenimientoFlotaScreen({
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-        ))}
+          </div>
+        )
+      ))}
 
-        <TabsContent value="umbrales" className="mt-3">
+      {(vista ?? 'aceite') === 'umbrales' && (
+        <div className="mt-0">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-base">
@@ -343,8 +324,8 @@ export function MantenimientoFlotaScreen({
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   )
 }

@@ -8,6 +8,8 @@ export interface VehiculoFila {
   condicion_tecnica: string
   estado_operativo: string
   subestado_operativo: string | null
+  vehiculo_id: string | null
+  nombre_display: string | null
 }
 
 /**
@@ -32,7 +34,7 @@ export function useFlotaCompleta() {
     queryFn: async (): Promise<VehiculoFila[]> => {
       const { data, error } = await supabase
         .from('vehiculos')
-        .select('matricula, tipo, condicion_tecnica, estado_operativo, subestado_operativo')
+        .select('matricula, tipo, condicion_tecnica, estado_operativo, subestado_operativo, vehiculo_id, nombre_display')
         .order('matricula')
       if (error) throw error
       return (data ?? []) as VehiculoFila[]

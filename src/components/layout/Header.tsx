@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 
 interface HeaderProps {
   ticker?: string
+  tickerSpeed?: number
   unreadCount?: number
   onOpenInbox?: () => void
 }
@@ -21,7 +22,7 @@ interface HeaderProps {
  * además puedes pulsar el icono "padre" en la cabecera de la lista para
  * volver al nivel anterior.
  */
-export function Header({ ticker, unreadCount = 0, onOpenInbox }: HeaderProps) {
+export function Header({ ticker, tickerSpeed = 60, unreadCount = 0, onOpenInbox }: HeaderProps) {
   const { goHome, selectedLeafId } = useBlackColumn()
   const onHomeActive = selectedLeafId === 'home'
 
@@ -60,8 +61,11 @@ export function Header({ ticker, unreadCount = 0, onOpenInbox }: HeaderProps) {
 
       {/* Ticker / marquesina */}
       <div className="relative flex-1 overflow-hidden">
-        {ticker && (
-          <div className="flex animate-[marquee_60s_linear_infinite] whitespace-nowrap text-base font-medium text-zinc-200 hover:[animation-play-state:paused] motion-reduce:animate-none">
+        {ticker && ticker.trim() !== '' && (
+          <div
+            className="flex w-max whitespace-nowrap text-base font-medium text-zinc-200 hover:[animation-play-state:paused] motion-reduce:animate-none"
+            style={{ animation: `marquee ${tickerSpeed}s linear infinite` }}
+          >
             <span className="px-6">{ticker}</span>
             <span className="px-6" aria-hidden="true">
               {ticker}

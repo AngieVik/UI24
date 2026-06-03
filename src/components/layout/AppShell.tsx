@@ -8,6 +8,7 @@ import { useInstallPrompt } from '@/hooks/useInstallPrompt'
 
 interface AppShellProps {
   ticker?: string
+  tickerSpeed?: number
   unreadCount?: number
   onOpenInbox?: () => void
   children: ReactNode
@@ -31,14 +32,14 @@ interface AppShellProps {
  * El BlackColumnProvider envuelve ambos para que Header (logo → goHome)
  * y BlackColumn compartan la misma instancia del hook.
  */
-export function AppShell({ ticker, unreadCount, onOpenInbox, children }: AppShellProps) {
+export function AppShell({ ticker, tickerSpeed, unreadCount, onOpenInbox, children }: AppShellProps) {
   const isOnline = useGlobalStore((s) => s.isOnline)
   const { canInstall, install, dismiss } = useInstallPrompt()
 
   return (
     <BlackColumnProvider>
       <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
-        <Header ticker={ticker} unreadCount={unreadCount} onOpenInbox={onOpenInbox} />
+        <Header ticker={ticker} tickerSpeed={tickerSpeed} unreadCount={unreadCount} onOpenInbox={onOpenInbox} />
 
         <div className="flex min-h-0 flex-1">
           <BlackColumn />

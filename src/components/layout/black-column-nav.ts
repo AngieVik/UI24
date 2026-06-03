@@ -309,7 +309,6 @@ export const NAV_TREE: readonly NavNode[] = [
         label: 'Resumen DRP',
         icon: ChartBar,
         rolesPermitidos: COORD_ALL,
-        opensModal: true,
       },
       {
         kind: 'leaf',

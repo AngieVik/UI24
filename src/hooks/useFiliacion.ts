@@ -100,11 +100,11 @@ export function useFiliacion() {
     setState((s) => ({ ...s, isLoadingSesion: true, error: null }))
     const mutationUuid = crypto.randomUUID()
     try {
-      const payload: Record<string, unknown> = { mutation_uuid: mutationUuid }
-      if (idDrp) payload['p_id_drp'] = idDrp
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.rpc as any)('rpc_abrir_sesion_filiacion', payload)
+      const { data, error } = await (supabase.rpc as any)('rpc_abrir_sesion_filiacion', {
+        p_mutation_uuid: mutationUuid,
+        ...(idDrp ? { p_id_drp: idDrp } : {}),
+      })
       if (error) throw error
 
       const idSesion = (data as { id_sesion: string }).id_sesion

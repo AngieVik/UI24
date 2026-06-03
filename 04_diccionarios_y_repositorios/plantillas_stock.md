@@ -109,23 +109,27 @@
 
 ### Mochila Roja
 
-> Botiquín de emergencia básico para intervención hasta llegada de unidad asistencial.
+> Bolsa de circulatorio y control de hemorragias básico.
 
 | ID_item | nombre | especificación | stock_objetivo |
 |---|---|---|---|
 | 26 | Contenedor cortopunzantes | — | 1 |
 | 32 | Guantes | M | 4 |
-| 43 | Cánula de guedel | 6 | 1 |
-| 44 | Cánula de guedel | 7 | 1 |
-| 45 | Cánula de guedel | 8 | 1 |
 | 85 | Gasa estéril x10 | 10x10 | 3 |
-| 117 | Mascarilla reservorio | Adulto | 1 |
-| 164 | Balón resucitador | Adulto | 1 |
 | 168 | Set de control de hemorragias | — | 1 |
 
 ### Mochila Azul
 
-> Sin contenido en vehículo no asistencial. Subgrupo vacío.
+> Bolsa de respiratorio y ventilación básica.
+
+| ID_item | nombre | especificación | stock_objetivo |
+|---|---|---|---|
+| 32 | Guantes | M | 4 |
+| 43 | Cánula de guedel | 6 | 1 |
+| 44 | Cánula de guedel | 7 | 1 |
+| 45 | Cánula de guedel | 8 | 1 |
+| 117 | Mascarilla reservorio | Adulto | 1 |
+| 164 | Balón resucitador | Adulto | 1 |
 
 ### Mochila Amarilla
 
@@ -148,7 +152,7 @@
 
 ## plantilla_B — tipo B
 
-> **Básica (SVB).** Soporte Vital Básico. Sin capacidad de intubación orotraqueal. Farmacología básica de BLS.
+> **Básica (SVB).** Soporte Vital Básico. Farmacología básica de BLS.
 
 ### Cabina conducción
 
@@ -368,68 +372,60 @@
 
 ### Mochila Roja
 
-> Bolsa de emergencias vitales.
+> Bolsa de circulatorio, accesos vasculares y fármacos de emergencia.
 
 | ID_item | nombre | especificación | stock_objetivo |
 |---|---|---|---|
 | 26 | Contenedor cortopunzantes | — | 1 |
 | 31 | Guantes | L | 2 |
 | 32 | Guantes | M | 4 |
-| 38 | Catéter | 18 | 2 |
-| 39 | Catéter | 20 | 2 |
-| 43 | Cánula de guedel | 6 | 1 |
-| 44 | Cánula de guedel | 7 | 1 |
-| 45 | Cánula de guedel | 8 | 1 |
-| 52 | I-gel | 4 | 1 |
-| 53 | I-gel | 5 | 1 |
-| 85 | Gasa estéril x10 | 10x10 | 3 |
-| 106 | Jeringa | 10/12 ml | 3 |
-| 107 | Jeringa | 2/3 ml | 5 |
-| 117 | Mascarilla reservorio | Adulto | 1 |
-| 118 | Mascarilla reservorio | Pediátrico | 1 |
-| 130 | Adrenalina 1mg | — | 2 |
-| 133 | Atropina 1mg | — | 2 |
-| 140 | Diacepam 10mg | Valium | 2 |
-| 146 | Glucagen | Glucosa inyectable | 1 |
-| 147 | Glucosmon | Glucosa oral | 3 |
-| 164 | Balón resucitador | Adulto | 1 |
-| 165 | Balón resucitador | Pediátrico | 1 |
-| 168 | Set de control de hemorragias | — | 1 |
-| 198 | Suero fisiológico | 3ml | 5 |
-| 241 | Ligadura | — | 2 |
-| 242 | Llave de tres vías | — | 3 |
-
-### Mochila Azul
-
-> Bolsa de terapia intravenosa y medicación.
-
-| ID_item | nombre | especificación | stock_objetivo |
-|---|---|---|---|
 | 1 | Aguja de carga | 1,20x40 mm | 5 |
 | 2 | Aguja intramuscular | 0,80x38 mm | 5 |
 | 3 | Aguja intramuscular | 0,9x40 mm | 5 |
 | 4 | Aguja intravenosa | 0,80x25 mm | 5 |
 | 5 | Aguja intravenosa | 0,9x25 mm | 5 |
 | 18 | Apósito fijación vía | — | 3 |
-| 26 | Contenedor cortopunzantes | — | 1 |
-| 32 | Guantes | M | 4 |
-| 37 | Catéter | 16 | 2 |
-| 38 | Catéter | 18 | 3 |
-| 39 | Catéter | 20 | 3 |
-| 40 | Catéter | 22 | 2 |
-| 106 | Jeringa | 10/12 ml | 5 |
+| 38 | Catéter | 18 | 2 |
+| 39 | Catéter | 20 | 2 |
+| 106 | Jeringa | 10/12 ml | 3 |
 | 107 | Jeringa | 2/3 ml | 5 |
 | 109 | Jeringa | 5/6 ml | 5 |
-| 139 | Dexketoprofeno 50mg | Enantyum | 2 |
-| 150 | Metamizol 2g | Nolotil | 3 |
-| 151 | Metilprednisolona 20mg/40mg | Urbason | 2 |
-| 158 | Paracetamol 1000mg | — | 3 |
-| 162 | Salbutamol 2,5mg | — | 2 |
+| 85 | Gasa estéril x10 | 10x10 | 3 |
+| 168 | Set de control de hemorragias | — | 1 |
 | 195 | Suero fisiológico | 100ml | 3 |
 | 196 | Suero fisiológico | 250ml | 2 |
-| 241 | Ligadura | — | 3 |
+| 241 | Ligadura | — | 2 |
 | 242 | Llave de tres vías | — | 3 |
 | 244 | Sistema de suero | — | 3 |
+| 130 | Adrenalina 1mg | — | 2 |
+| 133 | Atropina 1mg | — | 2 |
+| 140 | Diacepam 10mg | Valium | 2 |
+| 146 | Glucagen | Glucosa inyectable | 1 |
+| 147 | Glucosmon | Glucosa oral | 3 |
+| 139 | Dexketoprofeno 50mg | Enantyum | 2 |
+| 150 | Metamizol 2g | Nolotil | 3 |
+| 158 | Paracetamol 1000mg | — | 3 |
+
+### Mochila Azul
+
+> Bolsa de respiratorio, manejo de vía aérea y ventilación.
+
+| ID_item | nombre | especificación | stock_objetivo |
+|---|---|---|---|
+| 31 | Guantes | L | 2 |
+| 32 | Guantes | M | 4 |
+| 43 | Cánula de guedel | 6 | 1 |
+| 44 | Cánula de guedel | 7 | 1 |
+| 45 | Cánula de guedel | 8 | 1 |
+| 52 | I-gel | 4 | 1 |
+| 53 | I-gel | 5 | 1 |
+| 117 | Mascarilla reservorio | Adulto | 1 |
+| 118 | Mascarilla reservorio | Pediátrico | 1 |
+| 164 | Balón resucitador | Adulto | 1 |
+| 165 | Balón resucitador | Pediátrico | 1 |
+| 198 | Suero fisiológico | 3ml | 5 |
+| 151 | Metilprednisolona 20mg/40mg | Urbason | 2 |
+| 162 | Salbutamol 2,5mg | — | 2 |
 
 ### Mochila Amarilla
 
@@ -763,55 +759,19 @@
 
 ### Mochila Roja
 
-> Bolsa de emergencias vitales. Se porta al lugar del paciente en intervenciones críticas.
+> Bolsa de circulatorio, accesos vasculares, fluidoterapia y soporte cardiovascular.
 
 | ID_item | nombre | especificación | stock_objetivo |
 |---|---|---|---|
 | 26 | Contenedor cortopunzantes | — | 1 |
 | 31 | Guantes | L | 2 |
 | 32 | Guantes | M | 4 |
-| 38 | Catéter | 18 | 2 |
-| 39 | Catéter | 20 | 2 |
-| 43 | Cánula de guedel | 6 | 1 |
-| 44 | Cánula de guedel | 7 | 1 |
-| 45 | Cánula de guedel | 8 | 1 |
-| 52 | I-gel | 4 | 1 |
-| 53 | I-gel | 5 | 1 |
-| 85 | Gasa estéril x10 | 10x10 | 3 |
-| 106 | Jeringa | 10/12 ml | 3 |
-| 107 | Jeringa | 2/3 ml | 5 |
-| 117 | Mascarilla reservorio | Adulto | 1 |
-| 118 | Mascarilla reservorio | Pediátrico | 1 |
-| 129 | Adenosina 6mg | Adenocor | 2 |
-| 130 | Adrenalina 1mg | — | 3 |
-| 131 | Amiodarona 150mg | Trangorex | 2 |
-| 133 | Atropina 1mg | — | 2 |
-| 140 | Diacepam 10mg | Valium | 2 |
-| 146 | Glucagen | Glucosa inyectable | 1 |
-| 147 | Glucosmon | Glucosa oral | 3 |
-| 152 | Midazolam 45mg | — | 1 |
-| 164 | Balón resucitador | Adulto | 1 |
-| 165 | Balón resucitador | Pediátrico | 1 |
-| 168 | Set de control de hemorragias | — | 1 |
-| 198 | Suero fisiológico | 3ml | 5 |
-| 241 | Ligadura | — | 2 |
-| 242 | Llave de tres vías | — | 3 |
-
-### Mochila Azul
-
-> Bolsa de terapia intravenosa y medicación avanzada.
-
-| ID_item | nombre | especificación | stock_objetivo |
-|---|---|---|---|
 | 1 | Aguja de carga | 1,20x40 mm | 5 |
 | 2 | Aguja intramuscular | 0,80x38 mm | 5 |
 | 3 | Aguja intramuscular | 0,9x40 mm | 5 |
 | 4 | Aguja intravenosa | 0,80x25 mm | 5 |
 | 5 | Aguja intravenosa | 0,9x25 mm | 5 |
 | 18 | Apósito fijación vía | — | 3 |
-| 26 | Contenedor cortopunzantes | — | 1 |
-| 31 | Guantes | L | 2 |
-| 32 | Guantes | M | 4 |
 | 36 | Catéter | 14 | 1 |
 | 37 | Catéter | 16 | 2 |
 | 38 | Catéter | 18 | 3 |
@@ -824,16 +784,8 @@
 | 109 | Jeringa | 5/6 ml | 5 |
 | 110 | Jeringa | 50ml | 2 |
 | 111 | Jeringa | 1ml | 3 |
-| 136 | Bromuro de ipratropio 500mg | Atrovent | 2 |
-| 137 | Budesonida 0,5mg | Pulmicort | 2 |
-| 139 | Dexketoprofeno 50mg | Enantyum | 2 |
-| 145 | Furosemida 20mg | Seguril | 2 |
-| 150 | Metamizol 2g | Nolotil | 3 |
-| 151 | Metilprednisolona 20mg/40mg | Urbason | 2 |
-| 153 | Naloxona 0,4mg | — | 1 |
-| 158 | Paracetamol 1000mg | — | 3 |
-| 160 | Primperam 10mg | Metoclopramida | 2 |
-| 162 | Salbutamol 2,5mg | — | 2 |
+| 85 | Gasa estéril x10 | 10x10 | 3 |
+| 168 | Set de control de hemorragias | — | 1 |
 | 195 | Suero fisiológico | 100ml | 3 |
 | 196 | Suero fisiológico | 250ml | 2 |
 | 197 | Suero fisiológico | 500ml | 2 |
@@ -841,6 +793,43 @@
 | 241 | Ligadura | — | 3 |
 | 242 | Llave de tres vías | — | 3 |
 | 244 | Sistema de suero | — | 3 |
+| 129 | Adenosina 6mg | Adenocor | 2 |
+| 130 | Adrenalina 1mg | — | 3 |
+| 131 | Amiodarona 150mg | Trangorex | 2 |
+| 133 | Atropina 1mg | — | 2 |
+| 140 | Diacepam 10mg | Valium | 2 |
+| 146 | Glucagen | Glucosa inyectable | 1 |
+| 147 | Glucosmon | Glucosa oral | 3 |
+| 152 | Midazolam 45mg | — | 1 |
+| 153 | Naloxona 0,4mg | — | 1 |
+| 139 | Dexketoprofeno 50mg | Enantyum | 2 |
+| 145 | Furosemida 20mg | Seguril | 2 |
+| 150 | Metamizol 2g | Nolotil | 3 |
+| 158 | Paracetamol 1000mg | — | 3 |
+| 160 | Primperam 10mg | Metoclopramida | 2 |
+
+### Mochila Azul
+
+> Bolsa de respiratorio, aislamiento de vía aérea, oxigenoterapia y ventilación.
+
+| ID_item | nombre | especificación | stock_objetivo |
+|---|---|---|---|
+| 31 | Guantes | L | 2 |
+| 32 | Guantes | M | 4 |
+| 43 | Cánula de guedel | 6 | 1 |
+| 44 | Cánula de guedel | 7 | 1 |
+| 45 | Cánula de guedel | 8 | 1 |
+| 52 | I-gel | 4 | 1 |
+| 53 | I-gel | 5 | 1 |
+| 117 | Mascarilla reservorio | Adulto | 1 |
+| 118 | Mascarilla reservorio | Pediátrico | 1 |
+| 164 | Balón resucitador | Adulto | 1 |
+| 165 | Balón resucitador | Pediátrico | 1 |
+| 198 | Suero fisiológico | 3ml | 5 |
+| 136 | Bromuro de ipratropio 500mg | Atrovent | 2 |
+| 137 | Budesonida 0,5mg | Pulmicort | 2 |
+| 151 | Metilprednisolona 20mg/40mg | Urbason | 2 |
+| 162 | Salbutamol 2,5mg | — | 2 |
 
 ### Mochila Amarilla
 
@@ -942,55 +931,19 @@
 
 ### Mochila Roja
 
-*Idéntica a `plantilla_C → Mochila Roja`.*
+*Idéntica a `plantilla_C → Mochila Roja` (Circulatorio y accesos vasculares).*
 
 | ID_item | nombre | especificación | stock_objetivo |
 |---|---|---|---|
 | 26 | Contenedor cortopunzantes | — | 1 |
 | 31 | Guantes | L | 2 |
 | 32 | Guantes | M | 4 |
-| 38 | Catéter | 18 | 2 |
-| 39 | Catéter | 20 | 2 |
-| 43 | Cánula de guedel | 6 | 1 |
-| 44 | Cánula de guedel | 7 | 1 |
-| 45 | Cánula de guedel | 8 | 1 |
-| 52 | I-gel | 4 | 1 |
-| 53 | I-gel | 5 | 1 |
-| 85 | Gasa estéril x10 | 10x10 | 3 |
-| 106 | Jeringa | 10/12 ml | 3 |
-| 107 | Jeringa | 2/3 ml | 5 |
-| 117 | Mascarilla reservorio | Adulto | 1 |
-| 118 | Mascarilla reservorio | Pediátrico | 1 |
-| 129 | Adenosina 6mg | Adenocor | 2 |
-| 130 | Adrenalina 1mg | — | 3 |
-| 131 | Amiodarona 150mg | Trangorex | 2 |
-| 133 | Atropina 1mg | — | 2 |
-| 140 | Diacepam 10mg | Valium | 2 |
-| 146 | Glucagen | Glucosa inyectable | 1 |
-| 147 | Glucosmon | Glucosa oral | 3 |
-| 152 | Midazolam 45mg | — | 1 |
-| 164 | Balón resucitador | Adulto | 1 |
-| 165 | Balón resucitador | Pediátrico | 1 |
-| 168 | Set de control de hemorragias | — | 1 |
-| 198 | Suero fisiológico | 3ml | 5 |
-| 241 | Ligadura | — | 2 |
-| 242 | Llave de tres vías | — | 3 |
-
-### Mochila Azul
-
-*Idéntica a `plantilla_C → Mochila Azul`.*
-
-| ID_item | nombre | especificación | stock_objetivo |
-|---|---|---|---|
 | 1 | Aguja de carga | 1,20x40 mm | 5 |
 | 2 | Aguja intramuscular | 0,80x38 mm | 5 |
 | 3 | Aguja intramuscular | 0,9x40 mm | 5 |
 | 4 | Aguja intravenosa | 0,80x25 mm | 5 |
 | 5 | Aguja intravenosa | 0,9x25 mm | 5 |
 | 18 | Apósito fijación vía | — | 3 |
-| 26 | Contenedor cortopunzantes | — | 1 |
-| 31 | Guantes | L | 2 |
-| 32 | Guantes | M | 4 |
 | 36 | Catéter | 14 | 1 |
 | 37 | Catéter | 16 | 2 |
 | 38 | Catéter | 18 | 3 |
@@ -1003,16 +956,8 @@
 | 109 | Jeringa | 5/6 ml | 5 |
 | 110 | Jeringa | 50ml | 2 |
 | 111 | Jeringa | 1ml | 3 |
-| 136 | Bromuro de ipratropio 500mg | Atrovent | 2 |
-| 137 | Budesonida 0,5mg | Pulmicort | 2 |
-| 139 | Dexketoprofeno 50mg | Enantyum | 2 |
-| 145 | Furosemida 20mg | Seguril | 2 |
-| 150 | Metamizol 2g | Nolotil | 3 |
-| 151 | Metilprednisolona 20mg/40mg | Urbason | 2 |
-| 153 | Naloxona 0,4mg | — | 1 |
-| 158 | Paracetamol 1000mg | — | 3 |
-| 160 | Primperam 10mg | Metoclopramida | 2 |
-| 162 | Salbutamol 2,5mg | — | 2 |
+| 85 | Gasa estéril x10 | 10x10 | 3 |
+| 168 | Set de control de hemorragias | — | 1 |
 | 195 | Suero fisiológico | 100ml | 3 |
 | 196 | Suero fisiológico | 250ml | 2 |
 | 197 | Suero fisiológico | 500ml | 2 |
@@ -1020,6 +965,43 @@
 | 241 | Ligadura | — | 3 |
 | 242 | Llave de tres vías | — | 3 |
 | 244 | Sistema de suero | — | 3 |
+| 129 | Adenosina 6mg | Adenocor | 2 |
+| 130 | Adrenalina 1mg | — | 3 |
+| 131 | Amiodarona 150mg | Trangorex | 2 |
+| 133 | Atropina 1mg | — | 2 |
+| 140 | Diacepam 10mg | Valium | 2 |
+| 146 | Glucagen | Glucosa inyectable | 1 |
+| 147 | Glucosmon | Glucosa oral | 3 |
+| 152 | Midazolam 45mg | — | 1 |
+| 153 | Naloxona 0,4mg | — | 1 |
+| 139 | Dexketoprofeno 50mg | Enantyum | 2 |
+| 145 | Furosemida 20mg | Seguril | 2 |
+| 150 | Metamizol 2g | Nolotil | 3 |
+| 158 | Paracetamol 1000mg | — | 3 |
+| 160 | Primperam 10mg | Metoclopramida | 2 |
+
+### Mochila Azul
+
+*Idéntica a `plantilla_C → Mochila Azul` (Respiratorio y manejo de vía aérea).*
+
+| ID_item | nombre | especificación | stock_objetivo |
+|---|---|---|---|
+| 31 | Guantes | L | 2 |
+| 32 | Guantes | M | 4 |
+| 43 | Cánula de guedel | 6 | 1 |
+| 44 | Cánula de guedel | 7 | 1 |
+| 45 | Cánula de guedel | 8 | 1 |
+| 52 | I-gel | 4 | 1 |
+| 53 | I-gel | 5 | 1 |
+| 117 | Mascarilla reservorio | Adulto | 1 |
+| 118 | Mascarilla reservorio | Pediátrico | 1 |
+| 164 | Balón resucitador | Adulto | 1 |
+| 165 | Balón resucitador | Pediátrico | 1 |
+| 198 | Suero fisiológico | 3ml | 5 |
+| 136 | Bromuro de ipratropio 500mg | Atrovent | 2 |
+| 137 | Budesonida 0,5mg | Pulmicort | 2 |
+| 151 | Metilprednisolona 20mg/40mg | Urbason | 2 |
+| 162 | Salbutamol 2,5mg | — | 2 |
 
 ### Mochila Amarilla
 
@@ -1033,7 +1015,7 @@
 | 15 | Apósito | 10x10 | 3 |
 | 16 | Apósito | 10x15 o 10x20 | 3 |
 | 17 | Apósito | 5x7 o 5x9 | 3 |
-| 21 | Tiritas clásicas | — | 5 |
+| 21 | Tiritas classics | — | 5 |
 | 22 | Bolsa de basura | Amarilla y roja | 2 |
 | 29 | Esparadrapo | Hipoalergénico | 1 |
 | 30 | Esparadrapo | Tela o papel | 1 |
@@ -1062,39 +1044,15 @@
 
 ### Mochila Roja
 
+> Bolsa de circulatorio, accesos vasculares y control de hemorragias.
+
 | ID_item | nombre | especificación | stock_objetivo |
 |---|---|---|---|
 | 26 | Contenedor cortopunzantes | — | 1 |
 | 32 | Guantes | M | 4 |
-| 38 | Catéter | 18 | 2 |
-| 39 | Catéter | 20 | 2 |
-| 43 | Cánula de guedel | 6 | 1 |
-| 44 | Cánula de guedel | 7 | 1 |
-| 45 | Cánula de guedel | 8 | 1 |
-| 52 | I-gel | 4 | 1 |
-| 53 | I-gel | 5 | 1 |
-| 85 | Gasa estéril x10 | 10x10 | 3 |
-| 106 | Jeringa | 10/12 ml | 3 |
-| 107 | Jeringa | 2/3 ml | 3 |
-| 117 | Mascarilla reservorio | Adulto | 1 |
-| 130 | Adrenalina 1mg | — | 2 |
-| 133 | Atropina 1mg | — | 1 |
-| 147 | Glucosmon | Glucosa oral | 2 |
-| 164 | Balón resucitador | Adulto | 1 |
-| 168 | Set de control de hemorragias | — | 1 |
-| 198 | Suero fisiológico | 3ml | 3 |
-| 241 | Ligadura | — | 2 |
-| 242 | Llave de tres vías | — | 2 |
-
-### Mochila Azul
-
-| ID_item | nombre | especificación | stock_objetivo |
-|---|---|---|---|
-| 2 | Aguja intramuscular | 0,80x38 mm | 3 |
 | 4 | Aguja intravenosa | 0,80x25 mm | 3 |
+| 2 | Aguja intramuscular | 0,80x38 mm | 3 |
 | 18 | Apósito fijación vía | — | 2 |
-| 26 | Contenedor cortopunzantes | — | 1 |
-| 32 | Guantes | M | 4 |
 | 37 | Catéter | 16 | 1 |
 | 38 | Catéter | 18 | 3 |
 | 39 | Catéter | 20 | 3 |
@@ -1102,15 +1060,35 @@
 | 106 | Jeringa | 10/12 ml | 3 |
 | 107 | Jeringa | 2/3 ml | 3 |
 | 109 | Jeringa | 5/6 ml | 3 |
-| 139 | Dexketoprofeno 50mg | Enantyum | 1 |
-| 150 | Metamizol 2g | Nolotil | 2 |
-| 158 | Paracetamol 1000mg | — | 2 |
-| 162 | Salbutamol 2,5mg | — | 1 |
+| 168 | Set de control de hemorragias | — | 1 |
 | 195 | Suero fisiológico | 100ml | 2 |
 | 196 | Suero fisiológico | 250ml | 1 |
 | 241 | Ligadura | — | 2 |
 | 242 | Llave de tres vías | — | 2 |
 | 244 | Sistema de suero | — | 2 |
+| 130 | Adrenalina 1mg | — | 2 |
+| 133 | Atropina 1mg | — | 1 |
+| 147 | Glucosmon | Glucosa oral | 2 |
+| 139 | Dexketoprofeno 50mg | Enantyum | 1 |
+| 150 | Metamizol 2g | Nolotil | 2 |
+| 158 | Paracetamol 1000mg | — | 2 |
+
+### Mochila Azul
+
+> Bolsa de respiratorio, vía aérea y ventilación.
+
+| ID_item | nombre | especificación | stock_objetivo |
+|---|---|---|---|
+| 32 | Guantes | M | 4 |
+| 43 | Cánula de guedel | 6 | 1 |
+| 44 | Cánula de guedel | 7 | 1 |
+| 45 | Cánula de guedel | 8 | 1 |
+| 52 | I-gel | 4 | 1 |
+| 53 | I-gel | 5 | 1 |
+| 117 | Mascarilla reservorio | Adulto | 1 |
+| 164 | Balón resucitador | Adulto | 1 |
+| 198 | Suero fisiológico | 3ml | 3 |
+| 162 | Salbutamol 2,5mg | — | 1 |
 
 ### Mochila Amarilla
 
@@ -1155,7 +1133,6 @@
 | 15 | Apósito | 10x10 | 3 |
 | 16 | Apósito | 10x15 o 10x20 | 3 |
 | 17 | Apósito | 5x7 o 5x9 | 3 |
-| 18 | Apósito fijación vía | — | 3 |
 | 19 | Steri-trip | 12mm x 100mm | 2 |
 | 20 | Steri-trip | 3mm x 75mm | 2 |
 | 21 | Tiritas clásicas | — | 10 |
@@ -1184,6 +1161,7 @@
 | 1 | Aguja de carga | 1,20x40 mm | 3 |
 | 2 | Aguja intramuscular | 0,80x38 mm | 3 |
 | 4 | Aguja intravenosa | 0,80x25 mm | 3 |
+| 18 | Apósito fijación vía | — | 3 |
 | 37 | Catéter | 16 | 2 |
 | 38 | Catéter | 18 | 3 |
 | 39 | Catéter | 20 | 3 |

@@ -1,4 +1,15 @@
-import { Activity, ArrowRightLeft, RefreshCw, Truck } from 'lucide-react'
+import { ArrowRightLeft, CheckCircle2, RefreshCw } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,10 +22,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { resolveRpcError } from '@/lib/resolveRpcError'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { useState } from 'react'
+
+// ── Types ────────────────────────────────────────────────────────────
 
 interface MovimientoRow {
   id_movimiento: string
@@ -38,11 +52,12 @@ interface TransitoRow {
   id_nombre_responsable: string
 }
 
+// ── Queries ──────────────────────────────────────────────────────────
+
 function useMovimientos() {
   return useQuery({
     queryKey: ['ultimos_movimientos'],
     queryFn: async (): Promise<MovimientoRow[]> => {
-      // movimientos_inventario not yet in generated types → cast
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('movimientos_inventario')
@@ -73,7 +88,6 @@ function useTransito() {
   return useQuery({
     queryKey: ['inventario_transito'],
     queryFn: async (): Promise<TransitoRow[]> => {
-      // envios_material not yet in generated types → cast
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('envios_material')
@@ -88,6 +102,8 @@ function useTransito() {
     },
   })
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
@@ -113,10 +129,69 @@ const ESTADO_TRANSITO_VARIANT: Record<string, 'ok' | 'warn' | 'secondary'> = {
   Recibido: 'secondary',
 }
 
+// ── ConfirmarEnvioButton ─────────────────────────────────────────────
+
+function ConfirmarEnvioButton({ envio }: { envio: TransitoRow }) {
+  const qc = useQueryClient()
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function confirmar() {
+    setSaving(true)
+    setError(null)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: err } = await (supabase as any).rpc('rpc_confirmar_envio', {
+        p_id_envio: envio.id_envio,
+      })
+      if (err) throw err
+      await qc.invalidateQueries({ queryKey: ['inventario_transito'] })
+    } catch (e) {
+      setError(resolveRpcError(e))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button size="sm" variant="outline" disabled={saving} className="h-7">
+            <CheckCircle2 className="size-3.5 mr-1" aria-hidden="true" />
+            {saving ? 'Confirmando…' : 'Confirmar recepción'}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar recepción?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se marcará el envío de «{envio.location_origen}» → «{envio.location_destino}» como
+              recibido. Esta acción actualiza el stock del destino.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmar}>Confirmar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────
+
 export function MovimientosScreen({ vista }: { vista?: 'ultimos' | 'transito' }) {
-  const [tab, setTab] = useState<string>(vista ?? 'ultimos')
+  const rol = useAuthStore((s) => s.rol)
   const movQ = useMovimientos()
   const transQ = useTransito()
+
+  const canConfirm =
+    rol === 'logistica' ||
+    rol === 'responsable_logistica' ||
+    rol === 'gerencia' ||
+    rol === 'coordinacion'
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
@@ -141,24 +216,57 @@ export function MovimientosScreen({ vista }: { vista?: 'ultimos' | 'transito' })
         </Button>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="ultimos">
-            <Activity className="size-3.5 mr-1" />
-            Últimos
-          </TabsTrigger>
-          <TabsTrigger value="transito">
-            <Truck className="size-3.5 mr-1" />
-            En tránsito
-            {(transQ.data?.length ?? 0) > 0 && (
-              <Badge variant="warn" className="ml-1 text-xs">
-                {transQ.data!.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      {vista === 'transito' ? (
+        <div className="mt-0">
+          {transQ.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (transQ.data?.length ?? 0) === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">No hay envíos en tránsito.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {(transQ.data ?? []).map((t) => (
+                <Card key={t.id_envio}>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <div className="space-y-0.5">
+                      <div className="text-sm font-medium">
+                        {t.location_origen} → {t.location_destino}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={ESTADO_TRANSITO_VARIANT[t.estado] ?? 'info'}
+                          className="text-xs"
+                        >
+                          {t.estado.replace('_', ' ')}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Salida: {fmtDateTime(t.timestamp_salida)}
+                        </span>
+                        {t.timestamp_llegada && (
+                          <span className="text-xs text-muted-foreground">
+                            Llegada: {fmtDateTime(t.timestamp_llegada)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Responsable: {t.id_nombre_responsable}
+                      </div>
+                    </div>
 
-        <TabsContent value="ultimos" className="mt-3">
+                    {canConfirm && t.estado === 'En_Transito' && (
+                      <ConfirmarEnvioButton envio={t} />
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-0">
           {movQ.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (movQ.data?.length ?? 0) === 0 ? (
@@ -210,58 +318,8 @@ export function MovimientosScreen({ vista }: { vista?: 'ultimos' | 'transito' })
               </CardContent>
             </Card>
           )}
-        </TabsContent>
-
-        <TabsContent value="transito" className="mt-3">
-          {transQ.isLoading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (transQ.data?.length ?? 0) === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">No hay envíos en tránsito.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs font-bold uppercase">
-                        Origen → Destino
-                      </TableHead>
-                      <TableHead className="text-xs font-bold uppercase">Estado</TableHead>
-                      <TableHead className="text-xs font-bold uppercase">Salida</TableHead>
-                      <TableHead className="text-xs font-bold uppercase">Llegada</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(transQ.data ?? []).map((t) => (
-                      <TableRow key={t.id_envio}>
-                        <TableCell className="text-sm">
-                          {t.location_origen} → {t.location_destino}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={ESTADO_TRANSITO_VARIANT[t.estado] ?? 'info'}
-                            className="text-xs"
-                          >
-                            {t.estado.replace('_', ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">{fmtDateTime(t.timestamp_salida)}</TableCell>
-                        <TableCell className="text-xs">
-                          {fmtDateTime(t.timestamp_llegada)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   )
 }

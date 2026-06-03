@@ -1,30 +1,10 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: '14.5'
   }
   public: {
     Tables: {
@@ -166,6 +146,39 @@ export type Database = {
           ip?: string | null
           metadata?: Json | null
           tipo_evento?: Database['public']['Enums']['tipo_evento_rbac']
+        }
+        Relationships: []
+      }
+      bajas_laborales: {
+        Row: {
+          created_at: string
+          descripcion: string | null
+          estado: string
+          fecha_fin: string | null
+          fecha_inicio: string
+          id_baja: string
+          id_nombre: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          descripcion?: string | null
+          estado?: string
+          fecha_fin?: string | null
+          fecha_inicio: string
+          id_baja?: string
+          id_nombre: string
+          tipo: string
+        }
+        Update: {
+          created_at?: string
+          descripcion?: string | null
+          estado?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string
+          id_baja?: string
+          id_nombre?: string
+          tipo?: string
         }
         Relationships: []
       }
@@ -520,25 +533,28 @@ export type Database = {
       }
       doc10_transferencias: {
         Row: {
+          destino_externo: string | null
           id_nombre_operador: string
           id_transferencia: string
-          location_destino: string
+          location_destino: string | null
           location_origen: string
           timestamp_confirmacion: string | null
           timestamp_envio: string
         }
         Insert: {
+          destino_externo?: string | null
           id_nombre_operador: string
           id_transferencia?: string
-          location_destino: string
+          location_destino?: string | null
           location_origen: string
           timestamp_confirmacion?: string | null
           timestamp_envio?: string
         }
         Update: {
+          destino_externo?: string | null
           id_nombre_operador?: string
           id_transferencia?: string
-          location_destino?: string
+          location_destino?: string | null
           location_origen?: string
           timestamp_confirmacion?: string | null
           timestamp_envio?: string
@@ -1099,6 +1115,7 @@ export type Database = {
       }
       eventos_fisicos_vehiculo: {
         Row: {
+          anclada: boolean
           descripcion: string | null
           id_evento: string
           id_nombre_registrador: string
@@ -1107,6 +1124,7 @@ export type Database = {
           tipo_evento: string
         }
         Insert: {
+          anclada?: boolean
           descripcion?: string | null
           id_evento?: string
           id_nombre_registrador: string
@@ -1115,6 +1133,7 @@ export type Database = {
           tipo_evento: string
         }
         Update: {
+          anclada?: boolean
           descripcion?: string | null
           id_evento?: string
           id_nombre_registrador?: string
@@ -1269,19 +1288,25 @@ export type Database = {
       }
       filiacion_sesiones: {
         Row: {
+          estado: string
           id_drp: string | null
+          id_nombre_responsable: string | null
           id_sesion: string
           timestamp_apertura: string
           timestamp_cierre: string | null
         }
         Insert: {
+          estado?: string
           id_drp?: string | null
+          id_nombre_responsable?: string | null
           id_sesion?: string
           timestamp_apertura?: string
           timestamp_cierre?: string | null
         }
         Update: {
+          estado?: string
           id_drp?: string | null
+          id_nombre_responsable?: string | null
           id_sesion?: string
           timestamp_apertura?: string
           timestamp_cierre?: string | null
@@ -1293,6 +1318,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'drps'
             referencedColumns: ['id_drp']
+          },
+          {
+            foreignKeyName: 'filiacion_sesiones_id_nombre_responsable_fkey'
+            columns: ['id_nombre_responsable']
+            isOneToOne: false
+            referencedRelation: 'fichas_empleados'
+            referencedColumns: ['id_nombre']
           },
         ]
       }
@@ -1702,24 +1734,37 @@ export type Database = {
       }
       psa_sesiones: {
         Row: {
+          estado: string
+          id_nombre_responsable: string | null
           id_sesion: string
           matricula: string
           timestamp_apertura: string
           timestamp_cierre: string | null
         }
         Insert: {
+          estado?: string
+          id_nombre_responsable?: string | null
           id_sesion?: string
           matricula: string
           timestamp_apertura?: string
           timestamp_cierre?: string | null
         }
         Update: {
+          estado?: string
+          id_nombre_responsable?: string | null
           id_sesion?: string
           matricula?: string
           timestamp_apertura?: string
           timestamp_cierre?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: 'psa_sesiones_id_nombre_responsable_fkey'
+            columns: ['id_nombre_responsable']
+            isOneToOne: false
+            referencedRelation: 'fichas_empleados'
+            referencedColumns: ['id_nombre']
+          },
           {
             foreignKeyName: 'psa_sesiones_matricula_fkey'
             columns: ['matricula']
@@ -1798,6 +1843,95 @@ export type Database = {
             referencedColumns: ['id_nombre']
           },
         ]
+      }
+      repositorio_documentos: {
+        Row: {
+          activo: boolean
+          categoria: string
+          descripcion: string | null
+          fecha_alta: string
+          id: string
+          id_nombre_autor: string | null
+          mutation_uuid: string | null
+          nombre: string
+          url: string | null
+          version: string | null
+        }
+        Insert: {
+          activo?: boolean
+          categoria: string
+          descripcion?: string | null
+          fecha_alta?: string
+          id?: string
+          id_nombre_autor?: string | null
+          mutation_uuid?: string | null
+          nombre: string
+          url?: string | null
+          version?: string | null
+        }
+        Update: {
+          activo?: boolean
+          categoria?: string
+          descripcion?: string | null
+          fecha_alta?: string
+          id?: string
+          id_nombre_autor?: string | null
+          mutation_uuid?: string | null
+          nombre?: string
+          url?: string | null
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'repositorio_documentos_id_nombre_autor_fkey'
+            columns: ['id_nombre_autor']
+            isOneToOne: false
+            referencedRelation: 'fichas_empleados'
+            referencedColumns: ['id_nombre']
+          },
+        ]
+      }
+      servicios_planificados: {
+        Row: {
+          created_at: string
+          estado: string
+          fecha: string
+          id: string
+          id_nombre: string
+          matricula: string | null
+          mutation_uuid: string | null
+          notas: string | null
+          tipo_servicio: string
+          turno: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          estado?: string
+          fecha: string
+          id?: string
+          id_nombre: string
+          matricula?: string | null
+          mutation_uuid?: string | null
+          notas?: string | null
+          tipo_servicio: string
+          turno: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          estado?: string
+          fecha?: string
+          id?: string
+          id_nombre?: string
+          matricula?: string | null
+          mutation_uuid?: string | null
+          notas?: string | null
+          tipo_servicio?: string
+          turno?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       sesiones_emergencia: {
         Row: {
@@ -2020,9 +2154,11 @@ export type Database = {
           lat: number | null
           lng: number | null
           matricula: string
+          nombre_display: string | null
           plantilla_id: string | null
           subestado_operativo: Database['public']['Enums']['subestado_operativo'] | null
           tipo: Database['public']['Enums']['tipo_vehiculo']
+          vehiculo_id: string | null
         }
         Insert: {
           condicion_tecnica?: Database['public']['Enums']['condicion_tecnica']
@@ -2031,9 +2167,11 @@ export type Database = {
           lat?: number | null
           lng?: number | null
           matricula: string
+          nombre_display?: string | null
           plantilla_id?: string | null
           subestado_operativo?: Database['public']['Enums']['subestado_operativo'] | null
           tipo: Database['public']['Enums']['tipo_vehiculo']
+          vehiculo_id?: string | null
         }
         Update: {
           condicion_tecnica?: Database['public']['Enums']['condicion_tecnica']
@@ -2042,9 +2180,11 @@ export type Database = {
           lat?: number | null
           lng?: number | null
           matricula?: string
+          nombre_display?: string | null
           plantilla_id?: string | null
           subestado_operativo?: Database['public']['Enums']['subestado_operativo'] | null
           tipo?: Database['public']['Enums']['tipo_vehiculo']
+          vehiculo_id?: string | null
         }
         Relationships: [
           {
@@ -2193,6 +2333,10 @@ export type Database = {
         Args: { p_id_solicitud: string }
         Returns: undefined
       }
+      rpc_archivar_documento_repositorio: {
+        Args: { p_archivar?: boolean; p_id_documento: string }
+        Returns: undefined
+      }
       rpc_asignar_mochila_a_drp: {
         Args: { p_id_drp: string; p_id_mochila: string }
         Returns: undefined
@@ -2213,6 +2357,14 @@ export type Database = {
         Returns: undefined
       }
       rpc_cancelar_push: { Args: { p_endpoint: string }; Returns: undefined }
+      rpc_cancelar_servicio: {
+        Args: { p_id_servicio: string; p_mutation_uuid: string }
+        Returns: Json
+      }
+      rpc_cerrar_baja: {
+        Args: { p_id_baja: string; p_mutation_uuid: string }
+        Returns: Json
+      }
       rpc_cerrar_checklist: {
         Args: {
           p_id_checklist: string
@@ -2251,6 +2403,16 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_checkin_vehiculo_v2: {
+        Args: {
+          p_carry?: string
+          p_id_nombre_pilot: string
+          p_km_inicio: number
+          p_matricula: string
+          p_mutation_uuid: string
+        }
+        Returns: Json
+      }
       rpc_crear_drp: { Args: { p_mutation_uuid: string }; Returns: string }
       rpc_crear_informe_svb: {
         Args: {
@@ -2272,6 +2434,21 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_doc10_enviar_material: {
+        Args: {
+          p_destino_externo: string
+          p_id_nombre_operador: string
+          p_items: Json
+          p_location_destino: string
+          p_matricula_origen: string
+          p_mutation_uuid: string
+        }
+        Returns: Json
+      }
+      rpc_eliminar_servicio_planificado: {
+        Args: { p_id_servicio: string }
+        Returns: undefined
+      }
       rpc_enviar_solicitud_vacaciones: {
         Args: {
           p_fecha_fin: string
@@ -2283,6 +2460,36 @@ export type Database = {
         }
         Returns: string
       }
+      rpc_guardar_documento_repositorio: {
+        Args: {
+          p_categoria: string
+          p_descripcion?: string
+          p_id_documento?: string
+          p_mutation_uuid: string
+          p_nombre: string
+          p_url?: string
+          p_version?: string
+        }
+        Returns: string
+      }
+      rpc_guardar_servicio_planificado: {
+        Args: {
+          p_fecha: string
+          p_id_nombre: string
+          p_id_servicio?: string
+          p_matricula?: string
+          p_mutation_uuid: string
+          p_notas?: string
+          p_tipo_servicio: string
+          p_turno: string
+        }
+        Returns: string
+      }
+      rpc_marcar_ausencia: { Args: { p_mutation_uuid: string }; Returns: Json }
+      rpc_marcar_ausencia_otro: {
+        Args: { p_id_nombre_target: string; p_mutation_uuid: string }
+        Returns: Json
+      }
       rpc_marcar_aviso_leido: {
         Args: { p_id_aviso: string }
         Returns: undefined
@@ -2291,8 +2498,23 @@ export type Database = {
         Args: { p_id_mensaje: string; p_mutation_uuid: string }
         Returns: undefined
       }
+      rpc_marcar_presencia: {
+        Args: { p_id_terminal: string; p_mutation_uuid: string }
+        Returns: Json
+      }
       rpc_obtener_checklist_anterior: {
         Args: { p_matricula: string }
+        Returns: Json
+      }
+      rpc_planificar_servicio: {
+        Args: {
+          p_fecha: string
+          p_id_nombre: string
+          p_matricula?: string
+          p_mutation_uuid: string
+          p_tipo_servicio: string
+          p_turno: string
+        }
         Returns: Json
       }
       rpc_procesar_borrado_rgpd:
@@ -2324,6 +2546,16 @@ export type Database = {
           p_mutation_uuid: string
           p_nivel_criticidad: Database['public']['Enums']['nivel_criticidad']
           p_sistema_afectado: string
+        }
+        Returns: Json
+      }
+      rpc_registrar_baja: {
+        Args: {
+          p_descripcion?: string
+          p_fecha_inicio: string
+          p_id_nombre: string
+          p_mutation_uuid: string
+          p_tipo: string
         }
         Returns: Json
       }
@@ -2494,9 +2726,20 @@ export type Database = {
         | 'merma'
         | 'recuperacion_descuadre'
         | 'merma_definitiva_residual'
-      tipo_servicio: 'urgente' | 'programado' | 'evento' | 'traslado'
+      tipo_servicio:
+        | 'urgente'
+        | 'programado'
+        | 'evento'
+        | 'traslado'
+        | 'dispositivo'
+        | 'guardia_urgencias'
+        | 'drp'
+        | 'privado'
+        | 'simulacro'
+        | 'formacion'
+        | 'sin_asignar'
       tipo_turno: 'T' | 'L' | 'V' | 'B' | 'C'
-      tipo_vehiculo: 'A1' | 'A2' | 'B' | 'C' | 'VIR' | 'Quad' | 'BKP'
+      tipo_vehiculo: 'A1' | 'A2' | 'B' | 'C' | 'VIR' | 'Quad' | 'BKP' | 'Unidad Movil' | 'Logistica'
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2620,9 +2863,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       condicion_tecnica: [
@@ -2735,9 +2975,21 @@ export const Constants = {
         'recuperacion_descuadre',
         'merma_definitiva_residual',
       ],
-      tipo_servicio: ['urgente', 'programado', 'evento', 'traslado'],
+      tipo_servicio: [
+        'urgente',
+        'programado',
+        'evento',
+        'traslado',
+        'dispositivo',
+        'guardia_urgencias',
+        'drp',
+        'privado',
+        'simulacro',
+        'formacion',
+        'sin_asignar',
+      ],
       tipo_turno: ['T', 'L', 'V', 'B', 'C'],
-      tipo_vehiculo: ['A1', 'A2', 'B', 'C', 'VIR', 'Quad', 'BKP'],
+      tipo_vehiculo: ['A1', 'A2', 'B', 'C', 'VIR', 'Quad', 'BKP', 'Unidad Movil', 'Logistica'],
     },
   },
 } as const

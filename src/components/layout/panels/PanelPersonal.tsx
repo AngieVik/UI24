@@ -12,38 +12,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
-import { useVehiculoActivo } from '@/hooks/useVehiculoActivo'
-import { useDrpActivo } from '@/hooks/useDrpActivo'
 import { formatRol, getInitials } from '@/lib/formatRol'
-
-type EstadoTurno = 'En DRP' | 'En servicio' | 'En base'
-
-function formatHora(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return '—'
-  }
-}
-
-function estadoVariant(estado: EstadoTurno): 'default' | 'secondary' | 'outline' {
-  if (estado === 'En DRP') return 'default'
-  if (estado === 'En servicio') return 'secondary'
-  return 'outline'
-}
 
 export function PanelPersonal() {
   const { data, isLoading, isError } = usePersonalEnTurno()
-  // Contexto para derivar el estado de cada persona — TanStack Query
-  // dedupe estos hooks con los de los otros paneles del home.
-  const vehiculo = useVehiculoActivo()
-  const drp = useDrpActivo()
-
-  const deriveEstado = (): EstadoTurno => {
-    if (drp.data) return 'En DRP'
-    if (vehiculo.data) return 'En servicio'
-    return 'En base'
-  }
 
   return (
     <Card>
@@ -81,47 +53,36 @@ export function PanelPersonal() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Estado</TableHead>
                 <TableHead>Función</TableHead>
                 <TableHead>Teléfono</TableHead>
-                <TableHead className="text-right">Check-in</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((p) => {
-                const estado = deriveEstado()
-                return (
-                  <TableRow key={p.id_nombre}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="size-7">
-                          <AvatarFallback className="text-[10px] font-bold">
-                            {getInitials(p.nombre_real)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col leading-tight">
-                          <span className="font-bold">{p.nombre_real}</span>
-                          <span className="text-xs font-light text-muted-foreground">
-                            {p.id_nombre}
-                          </span>
-                        </div>
+              {data.map((p) => (
+                <TableRow key={p.id_nombre}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="size-7">
+                        <AvatarFallback className="text-[10px] font-bold">
+                          {getInitials(p.nombre_real)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col leading-tight">
+                        <span className="font-bold">{p.nombre_real}</span>
+                        <span className="text-xs font-light text-muted-foreground">
+                          {p.id_nombre}
+                        </span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={estadoVariant(estado)}>{estado}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{formatRol(p.rol)}</Badge>
-                    </TableCell>
-                    <TableCell className="font-light text-muted-foreground">
-                      {p.telefono ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right font-light text-muted-foreground">
-                      {formatHora(p.checkin_at)}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{formatRol(p.rol)}</Badge>
+                  </TableCell>
+                  <TableCell className="font-light text-muted-foreground">
+                    {p.telefono ?? '—'}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         )}

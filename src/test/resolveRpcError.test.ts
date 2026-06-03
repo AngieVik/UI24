@@ -12,14 +12,16 @@ describe('resolveRpcError', () => {
     expect(resolveRpcError(err)).toBe('Stock insuficiente.')
   })
 
-  it('devuelve fallback para código desconocido', () => {
+  it('devuelve fallback con código para código ERR_ desconocido', () => {
     const err = new Error('ERR_DESCONOCIDO_999: algo raro')
-    expect(resolveRpcError(err)).toBe('Error inesperado. Contacta con soporte.')
+    expect(resolveRpcError(err)).toBe(
+      'Error inesperado (ERR_DESCONOCIDO_999). Contacta con soporte.'
+    )
   })
 
-  it('devuelve fallback para errores de red sin prefijo ERR_', () => {
+  it('devuelve fallback con mensaje raw para errores sin prefijo ERR_', () => {
     const err = new Error('Failed to fetch')
-    expect(resolveRpcError(err)).toBe('Error inesperado. Contacta con soporte.')
+    expect(resolveRpcError(err)).toBe('Error inesperado. Contacta con soporte. [Failed to fetch]')
   })
 
   it('acepta strings además de Error', () => {

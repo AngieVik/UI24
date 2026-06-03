@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LogOut, RefreshCw, AlertTriangle } from 'lucide-react'
+import { LogOut, RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -84,16 +84,6 @@ export function ForzarCheckoutScreen() {
           <RefreshCw className="size-4" aria-hidden="true" />
         </Button>
       </div>
-
-      <Card className="border-destructive/40 bg-destructive/5">
-        <CardContent className="flex gap-2 py-3">
-          <AlertTriangle className="size-4 shrink-0 text-destructive mt-0.5" aria-hidden="true" />
-          <p className="font-body text-sm text-destructive">
-            Forzar checkout cierra el turno del trabajador inmediatamente. Usar solo en caso de
-            emergencia o cuando el trabajador no pueda hacer checkout por sí mismo.
-          </p>
-        </CardContent>
-      </Card>
 
       {error && (
         <p role="alert" className="text-sm text-destructive">

@@ -10,13 +10,16 @@ import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useActivacionStore } from '@/stores/useActivacionStore'
 import { useDoc7 } from '@/hooks/useDoc7'
+import { useFlotaCompleta } from '@/hooks/useFlotaCompleta'
 import type { Database } from '@/types/supabase'
 
 type NivelCriticidad = Database['public']['Enums']['nivel_criticidad']
@@ -55,9 +58,15 @@ const schema = z.object({
 type Schema = z.infer<typeof schema>
 
 export function Doc7InformeAveriaScreen() {
-  const matricula = useActivacionStore((s) => s.matricula)
+  const matriculaActiva = useActivacionStore((s) => s.matricula)
   const idActivacion = useActivacionStore((s) => s.id_activacion)
-  const { registrarAveria, isSubmitting, error, success } = useDoc7(matricula)
+  const { data: flota } = useFlotaCompleta()
+
+  // Cuando no hay turno activo (contexto Flota), el usuario puede seleccionar cualquier vehículo
+  const [selMatricula, setSelMatricula] = useState<string | null>(null)
+  const efectivaMatricula = matriculaActiva ?? selMatricula
+
+  const { registrarAveria, isSubmitting, error, success } = useDoc7(efectivaMatricula)
   const [imagen, setImagen] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -68,17 +77,43 @@ export function Doc7InformeAveriaScreen() {
     mode: 'onBlur',
   })
 
-  // Gate
-  if (!idActivacion || !matricula) {
+  // Sin turno activo y sin vehículo seleccionado → mostrar selector
+  if (!idActivacion && !efectivaMatricula) {
     return (
-      <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-6 py-16 text-center">
-        <div className="grid size-12 place-items-center rounded-md bg-muted text-muted-foreground/70">
-          <Cog aria-hidden="true" className="size-6" />
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-3 p-3">
+        <div className="flex items-center gap-2">
+          <Cog aria-hidden="true" className="size-5 text-muted-foreground" />
+          <h2 className="font-display text-lg font-bold">Doc-7 — Informe de avería</h2>
         </div>
-        <h2 className="font-display text-lg font-bold leading-tight">Doc-7 — Informe de avería</h2>
-        <p className="font-body text-base font-light text-muted-foreground">
-          No hay turno activo. Inicia un turno desde Operativa → Vehículos.
-        </p>
+        <Card>
+          <CardContent className="space-y-3 py-4">
+            <p className="text-sm text-muted-foreground">
+              Selecciona el vehículo para registrar la avería.
+            </p>
+            <Select value={selMatricula ?? ''} onValueChange={(v) => setSelMatricula(v || null)}>
+              <SelectTrigger aria-label="Seleccionar vehículo">
+                <SelectValue placeholder="Seleccionar vehículo…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Flota</SelectLabel>
+                  {flota.map((v) => (
+                    <SelectItem key={v.matricula} value={v.matricula}>
+                      <span className="font-mono font-semibold">
+                        {v.vehiculo_id ?? v.matricula}
+                      </span>
+                      {v.vehiculo_id && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          ({v.matricula})
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -147,7 +182,7 @@ export function Doc7InformeAveriaScreen() {
         </CardHeader>
         <CardContent>
           <div className="mb-3 flex items-center gap-2">
-            <Badge variant="outline">{matricula}</Badge>
+            <Badge variant="outline">{efectivaMatricula}</Badge>
           </div>
 
           <form

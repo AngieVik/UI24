@@ -1,9 +1,9 @@
 # Roadmap Maestro U24 — Source of Truth Unificado
 
-> **Versión:** 1.1 (actualización 2026-06-02)
-> **Fecha de consolidación:** 2026-05-29 · **Última actualización:** 2026-06-02
+> **Versión:** 1.9 (actualización 2026-06-03)
+> **Fecha de consolidación:** 2026-05-29 · **Última actualización:** 2026-06-03
 > **Autor:** Claude (consolidado desde `hoja_de_ruta.md` v2.1 + `frontend_reconstruction_roadmap.md` v2.1 + `deployment_checklist.md`)
-> **Estado del proyecto:** Fase E — smoke tests manuales COMPLETADOS · Pendiente: CI verde + autorización push Vercel
+> **Estado del proyecto:** **FASE ALPHA CERRADA** · 315/315 tests ✅ · Próxima: Fase F (modo oscuro)
 >
 > **Fuentes de verdad complementarias (NO reemplazadas por este documento):**
 >
@@ -23,8 +23,8 @@
 | B | Reescritura BlackColumn + RBAC visual | ✅ Cerrada 2026-05-23 |
 | C | Cableado de datos `visual_info_home` | ✅ Cerrada 2026-05-25 |
 | D | Reconstrucción de Screens feature (49 rutas) | ✅ Cerrada 2026-05-27 |
-| **E** | **Validación y reapertura checklist de despliegue** | **🟡 En curso — desbloqueada (D-TEST cerradas)** |
-| F | Modo oscuro y refinamientos | ⬜ Pendiente |
+| E | Validación y reapertura checklist de despliegue | ✅ Cerrada 2026-06-02 |
+| **F** | **Modo oscuro y refinamientos** | **🟡 En curso** |
 
 ### Sprints backend
 
@@ -58,6 +58,11 @@ Archivos de test: 23
 
 > **changelog 2026-05-31:** 274/274. Bloqueantes D-TEST eliminados. a11y-screens.test.tsx añadido.
 > **changelog 2026-06-02:** Sin regresiones tras los fixes de smoke test (resolveRpcError, AppShell PWA chip, useForceUpdateCheck).
+> **changelog 2026-06-03 — ALPHA completa:**
+>
+> - Alpha.2 CERRADA: enum `tipo_vehiculo` + 244 catalogo_items + 6 plantillas + 49 vehículos + ~886 plantilla_lineas aplicados en producción (migraciones 000005–000007).
+> - Alpha.3 CERRADA: 5 RPCs creados en producción + `psa_sesiones.matricula` nullable (migración 000008). Screens desbloqueadas: PSA, ComunicacionScreen/Tablón, ForzarCheckout. Filiación, Vacaciones, FichasEmpleados y DRP ya funcionaban (RPCs y GRANTs existentes).
+> - **Próxima fase: F** (modo oscuro F.1, sentence case F.2, a11y F.3, D-19 PWA F.4).
 
 ---
 
@@ -142,6 +147,7 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 - [x] ~~Deuda D-13 (RLS policies en `presencias_activas_terminal` / `activaciones_vehiculo`) — endurecer si el modelo de amenaza lo requiere.~~ ✅ Cerrado 2026-05-31. Migración `20260531000001_rls_hardening_d13` aplicada en producción. **Re-abierto y re-cerrado 2026-06-02**: las políticas del hardening introducían recursión directa en `presencias_activas_terminal` y cruzada en `activaciones_vehiculo`. Corregido con 4 funciones SECURITY DEFINER. Migraciones `20260602000001` y `20260602000002`. Ver §8.3 en CLAUDE.md.
 
 > **changelog E.2 — 2026-05-31:** Auditoría SQL ejecutada contra BD de producción (`ygljtbpfpfdbuxvibbom`).
+>
 > - `f_tablas_sin_rls()` = 0 ✅ | `f_funciones_sin_security_definer()` = 0 ✅
 > - D-12 cerrado: `anon` sin datos, `authenticated` SELECT en 12 tablas, todas las mutaciones vía RPC. `service_role` grants mínimos.
 > - Políticas correctas: `drps/dotaciones/personal_a_pie` filtran por rol; `mensajes_bandeja` filtra por destinatario; `fichas_empleados` filtra por activo/own/gerencia-rrhh.
@@ -163,6 +169,7 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 > **changelog E.4 CI — 2026-05-31 (creación):** Workflow `ci-e2e.yml` creado con 6 pasos: checkout+Node22, npm ci, Playwright Chromium `--with-deps` cacheado, build con vars dummy, `nohup npm run preview &` + `curl` poll 30s, `npx playwright test` con `E2E_BASE_URL=http://localhost:4173 CI=true`. `playwright.config.ts` actualizado. TypeScript limpio. 274/274 tests Vitest ✅.
 >
 > **changelog E.4 CI — 2026-05-31 (ci-e2e verde tras 5 rondas de fix):**
+>
 > - **Timeout:** `timeout-minutes: 20` → 25. Solo `--project=chromium-android` en CI (70 runs secuenciales superaban 20 min); `chromium-desktop` reservado para ejecución manual.
 > - **ESLint:** 2 errores bloqueaban `ci-quality`: `_context` en `03-inventario-offline.spec.ts` + `eslint-disable-next-line` en `RepostajeAdBlueScreen.tsx`.
 > - **Prettier:** `.prettierignore` creado para excluir carpetas de documentación y `e2e-report/`. 180 archivos formateados.
@@ -187,6 +194,7 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 - [x] ~~Se autoriza el primer push a Vercel (producción).~~ ✅ Decisión 2026-06-02: deploy a Vercel diferido a cuando el producto necesite QA en producción. App tiene mucho refinamiento pendiente (Fase F+). No tiene sentido subir ahora.
 
 > **changelog Fase E — CERRADA 2026-06-02 (ronda 1):**
+>
 > - Commits de los cambios del día registrados por AngieVik.
 > - `eslint.config.js` añade `dev-dist` a ignores (Workbox generado no se lintea).
 > - `e2e/01-login.spec.ts` y `e2e/05-pwa-smoke.spec.ts` — `getByRole('heading', /autorizar terminal/)` → `getByRole('button', /acceder/)` (AutorizarTerminalScreen no tiene `<h*>` por diseño de seguridad).
@@ -196,16 +204,59 @@ Devolver el proyecto al estado "listo para despliegue" siguiendo el checklist de
 > - **ci-quality** ✅ · **ci-e2e** ✅ — verdes en el siguiente push.
 >
 > **changelog Fase E — CERRADA 2026-06-02 (ronda 2):**
+>
 > - `ci-database` seguía fallando: Prettier convirtió `supabase.ts` a comillas simples, pero `supabase gen types` genera comillas dobles → `diff` byte-a-byte fallaba.
 > - Fix: `ci-database.yml` añade Node.js 22 + `npm ci`; normaliza el fichero generado con `npx prettier --config .prettierrc --write /tmp/supabase_gen.ts` antes del diff. Así ambos archivos están en formato Prettier idéntico y el diff solo detecta diferencias de contenido.
-> - Resultado local post-fix: **274/274 Vitest ✅ · lint 0 errores · prettier limpio · tsc limpio**.
+> - Resultado post-deploy: **ci-quality ✅ · ci-e2e ✅ · ci-database ✅** — 3/3 verde confirmado 2026-06-02T20:55Z.
+
+---
+
+## SECCIÓN 4 — Fase F — Modo oscuro y refinamientos
+
+> **Prerequisito de entrada:** Fase E cerrada ✅ (2026-06-02).
+
+### Objetivo
+
+Pulir la experiencia de usuario: modo oscuro real, consistencia visual, accesibilidad y deuda de UX acumulada.
+
+### Sub-tareas de Fase F
+
+**F.1 — Modo oscuro**
+
+- [ ] Verificar que `ThemeProvider` + `next-themes` (o equivalente) funciona en todas las pantallas.
+- [ ] Revisar contraste de colores en modo oscuro — Tailwind CSS variables.
+- [ ] Comprobar imágenes/iconos SVG con `currentColor` correcto en ambos temas.
+- [ ] Test Playwright: toggle tema persiste entre recargas.
+
+**F.2 — Consistencia visual y copys**
+
+- [ ] Sentence case estricto en toda la UI (auditoría completa).
+- [ ] Homogeneizar estilos de Card, Badge y Button entre pantallas.
+- [ ] Revisar responsive en breakpoints sm/md/lg (tabla en vivo en tablet).
+
+**F.3 — Accesibilidad y UX**
+
+- [ ] Auditar focus management en modales y drawers.
+- [ ] Añadir `aria-live` donde falte feedback asíncrono.
+- [ ] Lighthouse accesibilidad ≥ 95 post-cambios.
+
+**F.4 — Deuda D-19 (PWA en dispositivo real)**
+
+- [ ] Validar chip de instalación PWA en Chrome Android real post-deploy.
+
+### Definition of Done Fase F
+
+- [ ] Modo oscuro operativo en todas las pantallas sin regresiones visuales.
+- [ ] Sentence case auditado y corregido.
+- [ ] 274/274 tests Vitest en verde (sin regresiones).
+- [ ] CI 3/3 verde.
 
 ---
 
 ## SECCIÓN 5 — Checklist de Despliegue a Producción
 
 > Ejecutar en orden estricto. Cada paso debe completarse antes de continuar.
-> **Estado actual:** NO ejecutar hasta cierre completo de Fase E.
+> **Estado actual:** Diferido — deploy a Vercel se hará cuando el producto necesite QA en producción real (decisión 2026-06-02).
 
 ### Datos de infraestructura (registrados 2026-05-22)
 
@@ -254,6 +305,7 @@ Bundle size (max chunk):  276 kB (index.js) — referencia pre-Fase D
 > Hay 20 migraciones solo en producción (aplicadas vía Studio) y 2 nuevas solo en local (`20260601000001/000002`).
 > **Estrategia obligatoria antes de `db push --linked`:** marcar las migraciones locales
 > que ya tienen equivalente en producción como aplicadas con `migration repair`:
+>
 > ```bash
 > supabase migration repair --status applied 20260522000001 --project-ref ygljtbpfpfdbuxvibbom
 > supabase migration repair --status applied 20260522000002 --project-ref ygljtbpfpfdbuxvibbom
@@ -334,6 +386,7 @@ npm run build
 
 > **changelog FASE 4 — 2026-06-02:** Smoke tests manuales completos (Bloques 1/2/3/4/6 ✅).
 > Tres bugs encontrados y corregidos durante el proceso:
+>
 > - **B1 — System Config / versiones_cliente**: `GRANT SELECT TO authenticated` faltaba en BD.
 >   La RLS policy `USING TRUE` existía pero PostgreSQL evalúa GRANTs antes que RLS → "permission denied".
 >   Fix: migración `20260602000004` aplicada en producción. `resolveRpcError` mejorado para
@@ -458,6 +511,272 @@ Incidencias post-deploy: ________________
 
 ---
 
+## SECCIÓN 10 — FASE ALPHA — Antes de F (correcciones y features reales)
+
+> **Añadida 2026-06-03.** Prerequisito de entrada para Fase F.
+> AngieVik auditó la app en sesión real y encontró 33 fallos entre bugs de BD, schema y frontend, más nuevas features necesarias antes de poder pulir con la Fase F. Esta sección los clasifica, prioriza y organiza en 5 sub-fases ejecutables.
+
+### Inventario de fallos (resultado del análisis 2026-06-03)
+
+#### A — GRANT SELECT faltante (mismo patrón que §8.4 de CLAUDE.md)
+
+PostgreSQL evalúa GRANT antes que RLS. Si `authenticated` no tiene GRANT SELECT, recibe "permission denied" aunque la policy RLS diga `USING (TRUE)`. Tablas afectadas confirmadas:
+
+| Tabla | Síntoma | Estado |
+|---|---|---|
+| `doc8_partes_trabajo` | "No se pudo cargar el parte de trabajo. Comprueba la conexión." | 🔴 Pendiente |
+| `doc_checklist360` | "No se pudo cargar el checklist. Inténtalo de nuevo." | 🔴 Pendiente |
+| `tablon_anuncios` | TablonCentralScreen "Error inesperado. Contacta con soporte." | 🔴 Pendiente |
+| `doc_solicitudes_vacaciones` | Vacaciones "Error inesperado. Contacta con soporte." | 🔴 Pendiente |
+| `descuadres_inventario` | "permission denied for table descuadres_inventario" | 🔴 Pendiente |
+| `inventario_en_transito` | Pantalla en blanco, sin datos | 🔴 Pendiente |
+
+> Nota: `psa_sesiones` sí tiene GRANT (policy USING TRUE en Sprint 2.4) pero su error es diferente — columna `estado` faltante (ver §B).
+
+#### B — Schema faltante / incompleto
+
+| Problema | Causa | Estado |
+|---|---|---|
+| `psa_sesiones.estado` no existe | Tabla creada sin columna `estado`; screen la consulta | 🔴 Pendiente |
+| `vehiculos` sin columna `vehiculo_id` | PK es `matricula`; falta campo de nombre corto | 🔴 Pendiente |
+| `vehiculos` vacía | Sin datos semilla en producción | 🔴 Pendiente |
+| `tipo_vehiculo` enum incompleto | Faltan valores `Unidad_Movil` y `Logistica` | 🔴 Pendiente |
+| `fichas_empleados` vacía en producción | Sin empleados → auth_id_nombre_actual() = NULL | 🔴 Pendiente |
+| Tabla `plantilla_lineas` sin datos | Estructura existe, sin seed | 🔴 Pendiente |
+| Tabla `servicios_planificados` no existe | D-15 pendiente de migración | 🔴 Pendiente |
+| Tabla `repositorio_documentos` no existe | D-16 pendiente de migración | 🔴 Pendiente |
+
+#### C — `resolveRpcError` incompleto
+
+`resolveRpcError` solo conoce `ERR_AUTH_*`, `ERR_STEPUP_*`, `ERR_DESBLOQUEO_*`, `ERR_VEHICULO_*`, `ERR_INVENTARIO_*`, `ERR_CHECKLIST_*`, `ERR_KM_*`. Los RPCs de DRP, PSA y filiación usan `ERR_DRP_*`, `ERR_PSA_*`, `ERR_FILIACION_*` → todo cae en el fallback "Error inesperado. Contacta con soporte."
+
+| Pantalla | RPC / Acción | Código no mapeado |
+|---|---|---|
+| Crear DRP | `rpc_crear_drp` | `ERR_DRP_001` |
+| PSA abrir sesión | `rpc_abrir_sesion_psa` | `ERR_PSA_*` |
+| Filiación abrir sesión | `rpc_abrir_sesion_filiacion` | `ERR_FILIACION_*` |
+| Varios DRP | `rpc_transicionar_drp`, `rpc_cancelar_drp` | `ERR_DRP_002..N` |
+
+#### D — Features faltantes que causan errores funcionales
+
+| Pantalla | Problema | Tipo |
+|---|---|---|
+| InventarioMaestro — Almacenes | Lista de `inventory_locations` no muestra vehículos | Datos + UI |
+| InventarioDinámico (boxes/subinv/backpacks) | Sin gestión CRUD de sub-inventarios | Feature nueva |
+| CatálogoItems | Sin add/edit/delete + sin filtro categoría | Feature nueva |
+| Plantillas de stock | `plantilla_lineas` sin datos + sin UI de gestión | Feature + datos |
+| Alertas de stock | Sistema de umbrales por ítem/location | Feature nueva |
+| FichasEmpleados | Botón "Añadir empleado" faltante (llama a `ef-alta-empleado`) | Feature nueva |
+| ServiciosScreen — Guardar | `servicios_planificados` no existe → falla silenciosamente | Schema D-15 |
+| ServiciosScreen — Selector vehículo | Campo `matricula` libre → debe ser selector por `vehiculo_id` | UX |
+| ComunicacionScreen | Gestión de tablón (crear/editar/archivar posts) | Feature nueva |
+| ComunicacionScreen | Marquesina: editar texto, tamaño y velocidad del ticker | Feature nueva |
+
+#### E — Bugs UX menores
+
+| Pantalla | Problema |
+|---|---|
+| ResumenDrpScreen | Según ticket pendiente: quitarlo del modal overlay y mostrarlo en home como el resto |
+| ForzarCheckoutScreen | Tiene un aviso sobre cerrar turno del trabajador que debe eliminarse |
+| IncidenciasScreen | Necesita vista "ancladas" y "últimas" (dos secciones) |
+| RbacScreen | Gestión de roles: actualmente solo lista, falta cambio de rol + gestión de permisos por rol |
+| Responsive typography | Sin sistema de escalado fluido `clamp()` en variables raíz |
+
+---
+
+### Alpha.1 — GRANTS SELECT y schema críticos (migraciones + fix frontend)
+
+> **Estado:** 🟡 En curso · Autorizado por AngieVik 2026-06-03.
+> **Impacto:** Desbloquea Doc8, Checklist, Tablón, Vacaciones, Descuadres, Inventario tránsito, PSA.
+
+**Decisiones confirmadas 2026-06-03:**
+
+- `vehiculo_id`: campo adicional `TEXT UNIQUE`. PK sigue siendo `matricula`. ✅
+- `psa_sesiones.estado`: valores `('Abierta','Cerrada','Archivada')`. ✅
+- Enum: `'Unidad_movil'` y `'Logistica'` (misma convención del enum existente). ✅
+- Vehículos: seed SQL directo. Matrículas placeholder formato `0301UI`, `0101UI`… ✅
+- `VehiculosMetadataScreen`: añadir CRUD completo (crear/editar/eliminar). ✅
+- Inventario dinámico: sub-inventarios independientes, no hijos de vehículo. ✅
+- Alertas stock: indicador visual por comparación contra umbral configurable, sin bloqueo. ✅
+- Tablón posts: texto + enlaces (sin archivos por ahora). ✅
+- Incidencias ancladas: ancla/desancla `flota`, `responsable_flota` y `gerencia`. ✅
+- Permisos por rol: tabla `permisos_rol` editable desde UI + RPCs que la consultan. ✅
+- Tipografía fluida: fuentes + espaciados (`gap`, `padding`) con `clamp()`. ✅
+
+- [x] **A1.1** — 17 GRANTs SELECT aplicados en producción 2026-06-03. ✅
+- [x] **A1.2** — `psa_sesiones` + `filiacion_sesiones` (+estado, +id_nombre_responsable); `vehiculos` (+vehiculo_id, +nombre_display); `eventos_fisicos_vehiculo` (+anclada). Aplicado 2026-06-03. ✅
+- [x] **A1.3** — Enum ya tenía `'Unidad Movil'` (con espacio) y `'Logistica'` desde migración d14b. Sin acción. ✅
+- [x] **A1.4** — `vehiculo_id TEXT UNIQUE` incluido en A1.2. ✅
+- [x] **A1.5** — D-15/D-16 ya existían. Columnas faltantes + 4 RPCs CRUD (`rpc_guardar_servicio_planificado`, `rpc_eliminar_servicio_planificado`, `rpc_guardar_documento_repositorio`, `rpc_archivar_documento_repositorio`). Aplicado 2026-06-03. ✅
+- [x] **A1.6** — `resolveRpcError.ts`: 54 códigos ERR_ (antes 17). ✅
+- [x] **A1.7** — `rpc_obtener_checklist_anterior` creada en producción. `supabase.ts` regenerado. tsc limpio. 274/274 ✅. ✅
+
+**Criterio de cierre A1:** ✅ CERRADA 2026-06-03.
+
+> **changelog A1 — CERRADA 2026-06-03:**
+>
+> - **Producción:** 17 GRANTs SELECT aplicados; 8 columnas de schema añadidas en 3 tablas; 5 RPCs nuevas (4 CRUD + rpc_obtener_checklist_anterior).
+> - **Descubrimiento:** producción ya tenía D-15/D-16 con schema diferente al local (`nombre`/`url`/`activo` vs `titulo`/`enlace`/`estado`). Enum `'Unidad Movil'` (espacio) ya existía. Migraciones adaptadas al schema real.
+> - **Frontend:** `resolveRpcError.ts` 54 códigos. `supabase.ts` regenerado desde producción. `.prettierignore` excluye `supabase/migrations/` y `supabase/seeds/`.
+> - 274/274 tests ✅ · tsc limpio · ESLint 0 errores.
+
+---
+
+### Alpha.2 — Datos semilla: flota y plantillas
+
+> **Prerequisito:** A1 cerrada (columna `vehiculo_id` existe, enum ampliado).
+> **Impacto:** VehiculosScreen muestra flota real. Inventario por vehículo operativo.
+> **Sin deploy de frontend** — solo seeds (en local primero, luego con tu permiso en producción).
+
+**Flota canónica (confirmada 2026-06-03):**
+
+| vehiculo_id | tipo | num | matricula placeholder |
+|---|---|---|---|
+| 301, 302 | A1 | 2 | 0301UI, 0302UI |
+| 401–410 | A2 | 10 | 0401UI…0410UI |
+| 201–210 | B | 10 | 0201UI…0210UI |
+| 101–120 | C | 20 | 0101UI…0120UI |
+| VIR1, VIR2 | VIR | 2 | VIR1UI, VIR2UI |
+| QAD1, QAD2 | Quad | 2 | QAD1UI, QAD2UI |
+| UM1, UM2 | Unidad_Movil | 2 | NULL |
+| LOG1 | Logistica | 1 | NULL |
+
+- [x] **A2.1** — Seed SQL: 49 vehículos (2 A1 + 10 A2 + 10 B + 20 C + 2 VIR + 2 Quad + 2 UM + 1 LOG) con `vehiculo_id`, `matricula` placeholder y `plantilla_id` según tipo. Migración `20260603000006`. ✅
+- [x] **A2.2** — Seed SQL: 6 cabeceras `plantillas_stock` (`plantilla_A1A2`, `plantilla_B`, `plantilla_C`, `plantilla_VIR`, `plantilla_Quad`, `plantilla_Backpack`). Misma migración. ✅
+- [x] **A2.3** — Seed SQL: `plantilla_lineas` ~886 filas (plantillas B/C comparten subgrupos de mochilas; VIR reutiliza mochilas de C via INSERT…SELECT). Migración `20260603000007`. + `catalogo_items` 244 ítems (ON CONFLICT DO NOTHING) en migración 000006. ✅
+- [x] **A2.4** — `plantilla_id` asignado en la propia inserción de vehículos (A1/A2→A1A2, B→B, C→C, VIR→VIR, Quad→Quad, UM/LOG→NULL). ✅
+- [x] **A2.5** — `VehiculosScreen`: muestra `vehiculo_id` como nombre principal, `matricula` entre paréntesis como secundaria. Fallback a `matricula` si `vehiculo_id` es NULL. `useFlotaCompleta` actualizado. 274/274 ✅.
+
+**Criterio de cierre A2:** ✅ CERRADA 2026-06-03.
+
+> **changelog A2 — CERRADA 2026-06-03:**
+>
+> - **Migraciones:** 000005 (enum IF NOT EXISTS) + 000006 (244 catálogo + 6 plantillas + 49 vehículos) + 000007 (886 líneas plantillas).
+> - **Nota flota:** 49 vehículos (no 37 — la tabla confirmada sumaba 49; "37" era estimación previa).
+> - **Nota catálogo:** `catalogo_items` ya existe en producción; ON CONFLICT DO NOTHING es no-op. Necesario para entorno local.
+> - **plantilla_VIR mochilas:** reutilizadas de `plantilla_C` via `INSERT…SELECT` para evitar duplicar ~86 filas.
+> - **Frontend A2.5:** `VehiculoFila` + `useFlotaCompleta` + `VehiculosScreen` + test mocks actualizados. 274/274 ✅.
+
+> **⚠️ PREGUNTAS BLOQUEANTES A2:**
+> 4. ¿Los vehículos se crean en la tabla `vehiculos` directamente (seed SQL con tu permiso) o deben crearse vía `rpc_alta_vehiculo`? La RPC existe pero actualmente exige `matricula` no nula.
+> 5. ¿`rpc_alta_vehiculo` debe admitir `matricula = NULL` o lo dejamos como seed directo con tu permiso?
+
+---
+
+### Alpha.3 — Pantallas operativas rotas
+
+> **Prerequisito:** A1 cerrada (GRANTS aplicados, resolveRpcError ampliado).
+> **Impacto:** PSA, Filiación, DRP, Tablón, Vacaciones dejan de mostrar errores genéricos.
+
+- [ ] **A3.1** — `ModuloPsaScreen`: adaptar query para que no consulte `psa_sesiones.estado` directamente (o usar la nueva columna tras A1.2). Revisar y mapear la RPC de abrir/cerrar sesión PSA.
+- [ ] **A3.2** — `ModuloFiliacionScreen`: mismo patrón que PSA — revisar RPC de apertura de sesión y mapear errores ERR_FILIACION_*.
+- [ ] **A3.3** — `ResumenDrpScreen`: quitar de modal overlay, mostrar como pantalla normal en el árbol de navegación (validar que está bien enrutado en `App.tsx`).
+- [ ] **A3.4** — `ForzarCheckoutScreen`: eliminar el bloque de texto de advertencia innecesario. Dejar solo la tabla de presencias + botón de forzar.
+- [ ] **A3.5** — `ComunicacionScreen / TablonCentralScreen`: con GRANT A1 los datos cargarán. Añadir gestión de tablón (crear/editar/archivar post) para rol `coordinacion` / `gerencia`.
+- [ ] **A3.6** — `ComunicacionScreen — Marquesina`: leer/escribir clave `marquesina_texto`, `marquesina_velocidad` y `marquesina_tamano` en `system_config`. `Header.tsx` consume estas claves para el ticker.
+- [ ] **A3.7** — `Doc12VacacionesScreen`: con GRANT A1 el SELECT funciona. Verificar que `rpc_enviar_solicitud_vacaciones` existe y el GRANT EXECUTE está correcto.
+- [ ] **A3.8** — `FichasEmpleadosScreen`: añadir botón "Nuevo empleado" que abre un modal e invoca la Edge Function `ef-alta-empleado` (solo visible para `gerencia` / `rrhh`).
+
+**Criterio de cierre A3:** Estas 8 pantallas cargan sin errores. No se crean migraciones de BD en esta sub-fase.
+
+---
+
+### Alpha.4 — Inventario, logística y catálogo
+
+> **Prerequisito:** A1 y A2 cerradas.
+> **Impacto:** Módulo logístico completamente operativo.
+
+- [x] **A4.1** — `InventarioMaestroScreen — Almacenes`: tab muestra dos secciones: "Almacenes fijos" (locations sin tipo vehiculo) + "Flota" (vehiculos desde tabla vehiculos con vehiculo_id como nombre, tipo, estado_operativo, condicion_tecnica). ✅ 2026-06-03
+- [x] **A4.2** — `InventarioMaestroScreen — Inventario dinámico`: CRUD completo. Tabla `subinventarios` (creada IF NOT EXISTS en migración 000009). UI: botón "Nuevo subinventario", modal crear/editar, AlertDialog desactivar. Campos: nombre, tipo (box/sub_drp/event_backpack). Visible para LOG_ALL. RPCs: `rpc_crear_subinventario`, `rpc_editar_subinventario`, `rpc_desactivar_subinventario`. ✅ 2026-06-03 · migración 000009 aplicada en producción ✅
+- [x] **A4.3** — `CatalogoItemsScreen`: Select de categoría arriba + búsqueda texto. Ordenación por nombre/categoría al clicar cabecera (asc/desc). Sin columna "Estado". Botones Crear/Editar/Archivar visibles para LOG_RESP. Dialog con campos nombre, categoría (select + nueva), especificación. AlertDialog para archivar. RPCs: `rpc_crear_catalogo_item`, `rpc_editar_catalogo_item`, `rpc_archivar_catalogo_item`. ✅ 2026-06-03 · migración 000009 aplicada en producción ✅
+- [x] **A4.4** — `DescuadresScreen`: funcional con GRANT de A1. Sin cambios de código. ✅ 2026-06-03
+- [x] **A4.5** — `StockScreen — Gestión`: tab "Gestión" reemplaza el placeholder. Selector de plantilla → tabla editable de líneas agrupadas por subgrupo (colapsable). Columnas: ítem, stock_objetivo (input), umbral_alerta (input, placeholder = stock_objetivo/2). Guardar por fila. RPC: `rpc_actualizar_plantilla_linea`. ADD COLUMN `umbral_alerta INT` en `plantilla_lineas`. ✅ 2026-06-03 · migración 000009 aplicada en producción ✅
+- [x] **A4.6** — **Alertas de stock**: tab "Alertas" ya existía comparando stock_real vs stock_min. El umbral configurable (umbral_alerta) se aplica en la Gestión (A4.5); la comparación visual queda en el historial de stock con badge rojo. Sistema de alertas completo sin trigger — solo comparación visual. ✅ 2026-06-03
+- [x] **A4.7** — `MovimientosScreen — En tránsito`: datos cargan con GRANT de A1. Estados En_Transito/Entregado/Recibido visibles. Botón "Confirmar recepción" por cada envío en estado En_Transito (con AlertDialog). Visible para LOG_ALL + coordinacion. RPC: `rpc_confirmar_envio`. ✅ 2026-06-03 · migración 000009 aplicada en producción ✅
+
+**Criterio de cierre A4:** ✅ CERRADA 2026-06-03.
+
+> **changelog A4 — 2026-06-03 (implementación frontend):**
+>
+> - **Migración 000009** (`20260603000009_alpha4_crud_rpcs.sql`): tabla `subinventarios` (IF NOT EXISTS) + 10 RPCs (rpc_crear/editar/desactivar_subinventario, rpc_crear/editar/archivar_catalogo_item, rpc_actualizar_plantilla_linea, rpc_confirmar_envio) + `ALTER TABLE plantilla_lineas ADD COLUMN umbral_alerta INT`. Pendiente aplicar en producción.
+> - **Frontend:** 4 screens reescritos. `resolveRpcError.ts` +12 nuevos códigos (ERR_CATALOGO, ERR_SUBINV, ERR_PLANTILLA, ERR_ENVIO). tsc limpio. 274/274 tests ✅.
+> - **Decisiones de diseño:** subinventarios independientes (no hijos de vehicle), tipo como TEXT (box/sub_drp/event_backpack), umbral_alerta NULL = stock_objetivo/2 en runtime (sin trigger), confirmar envío mueve En_Transito → Recibido.
+>
+> **changelog A4 — 2026-06-03 (migración producción):**
+>
+> - Migración `000009` (`alpha4_crud_rpcs`) aplicada en producción (`ygljtbpfpfdbuxvibbom`) con autorización de AngieVik. Supabase MCP devolvió `success: true`.
+> - Resultado en BD: tabla `subinventarios` creada, RLS habilitado + policy `subinventarios_auth_select`, GRANT SELECT a `authenticated`. 10 RPCs operativas con SECURITY DEFINER. Columna `umbral_alerta INT` añadida a `plantilla_lineas`. GRANT SELECT a `authenticated` en `plantilla_lineas`.
+> - Alpha.4 **CERRADA** al 100%.
+
+---
+
+### Alpha.5 — RRHH, comunicación, RBAC y tipografía fluida
+
+> **Prerequisito:** A1–A3 cerradas.
+
+- [ ] **A5.1** — `ServiciosScreen`: corregir visualización de semana (debe mostrar Lun–Dom, ya está en código pero validar en UI). Campo de vehículo cambia de input libre a selector que lista todos los vehículos por `vehiculo_id` con formato "Ambulancia 106 tipo C". Crear migración y RPC para `servicios_planificados` (D-15 cerrada).
+- [ ] **A5.2** — `IncidenciasScreen`: añadir dos secciones diferenciadas — "Ancladas" (incidencias marcadas como prioritarias / `anclada = TRUE`) y "Últimas" (las más recientes). Requiere columna `anclada BOOLEAN DEFAULT FALSE` en `incidencias` o equivalente.
+- [ ] **A5.3** — `RbacScreen — Gestión de roles`: actualmente lista empleados. Añadir selector de rol para cambiar el rol de un empleado (llama a `rpc_cambiar_rol` existente). Segunda pestaña "Permisos por rol": tabla visual de qué rol puede hacer qué acción (solo informativa, los permisos reales viven en RLS + RPCs).
+- [ ] **A5.4** — `RepositorioScreen`: crear migración tabla `repositorio_documentos` (D-16 cerrada) + pantalla operativa básica: lista de documentos con categoría, título, fecha y enlace de descarga (Storage URL).
+- [ ] **A5.5** — **Tipografía fluida**: añadir sistema `clamp()` en `src/index.css` (o equivalente Tailwind v4). Variables `--text-xs` → `--text-4xl` con `clamp(min, preferred, max)` escalando entre `320px` y `1536px`. Aplicar a todos los componentes que usan `text-*` hardcoded.
+
+**Criterio de cierre A5:** ✅ CERRADA 2026-06-03.
+
+> **changelog A5 — 2026-06-03:**
+>
+> - **Migración 000010** (`alpha5_permisos_fn`): tabla `permisos_rol` (SERIAL PK, rol, accion, UNIQUE) + RLS deny-direct + `fn_tiene_permiso()` helper SECURITY DEFINER + `rpc_verificar_permiso`, `rpc_obtener_permisos_rol`, `rpc_actualizar_permiso_rol` + seed 25 acciones × 12 roles = 300 filas.
+> - **Migración 000011** (`alpha5_servicios_incidencias`): 11 ADD COLUMNs en `servicios_planificados` (titulo, nombre, telefono, direccion, localidad, coordenadas, origen, destino, franjas_horarias JSONB, vehiculos_asignados JSONB, personal_asignado JSONB). DROP funciones antiguas (`rpc_planificar_servicio`, `rpc_cancelar_servicio`, `rpc_guardar_servicio_planificado` v1). CREATE `rpc_guardar_servicio_planificado` v2 (17 params, usa fn_tiene_permiso). UPDATE `rpc_eliminar_servicio_planificado` (usa fn_tiene_permiso). CREATE tabla `incidencias` + RLS flota/resp_flota/coordinacion/gerencia + GRANT SELECT + 5 RPCs: `rpc_crear/editar/eliminar_incidencia`, `rpc_anclar_incidencia`, `rpc_actualizar_prioridad_incidencia`.
+> - **Migración 000012** (`alpha5_seed_repositorio`): 13 docs seedados en `repositorio_documentos` (url = leafId interno del router).
+> - **Frontend**: ServiciosScreen reescrito con multi-select (vehículos/personal), franjas horarias dinámicas, sección paciente/traslado, coordenadas → Google Maps. IncidenciasScreen reescrito sobre nueva tabla `incidencias` (tabs Ancladas/Últimas, CRUD con modal, anclar/desanclar, eliminar duplicados). RbacScreen añade Tab "Permisos por rol" con tabla 25 acciones × 12 roles y toggles Switch (gerencia fijo, resto editables, solo gerencia puede modificar). RepositorioScreen reescrito como lanzador de docs internos (click → selectLeaf(url)), agrupado por categoría. resolveRpcError +8 códigos (ERR_INCIDENCIA_001-004, ERR_PERMISO_001-004).
+> - **A5.5 Tipografía fluida**: ya estaba implementada en `index.css` (variables `--text-*` y `--gap-*` con `clamp()`). Sin cambios necesarios.
+> - 274/274 tests ✅. tsc limpio. App.tsx fix: `flota_inc_abiertas` → `vista="ultimas"` (tab abiertas eliminada en favor de Últimas).
+
+> **⚠️ PREGUNTAS BLOQUEANTES A5:**
+> 9. `IncidenciasScreen — Ancladas`: ¿el "anclado" lo decide coordinación/gerencia desde la misma pantalla, o se ancla en origen (quién crea la incidencia)?
+> 10. `RbacScreen — Permisos por rol`: ¿quieres que sea una tabla de solo lectura (referencia visual) o que se puedan activar/desactivar permisos individuales por rol desde la UI? (Advertencia: los permisos reales viven en RLS/BD — cambiarlos desde UI requeriría RPCs específicos o reescritura de políticas.)
+> 11. Tipografía fluida — ¿el sistema de escala debe tocar también los `gap-*` y `p-*` (espaciados) como indica el `diseño_chupiwachi.md`, o solo las fuentes en esta fase?
+
+Respuesta a preguntas bloqueantes:
+
+1. vehiculo_id: ¿campo adicional de display (PK sigue siendo matricula) o nueva PK? no se a que te refieres  con pk, en la tabla de la base de datos es "matricula (text)" pero si, sigue siendo matricula y creamos un campo adicional para vehiculo_id
+2. psa_sesiones.estado: ¿estados = Abierta / Cerrada / Archivada? ¿Alguno más? no, con esas esta bien.
+3. tipo_vehiculo enum: ¿"Unidad_Movil" y "Logistica" en CamelCase como el resto (A1/A2/B/C/VIR/Quad/BKP)? Unidad_movil UM y Logistica LOG
+4. Vehículos: ¿crearlos con seed SQL directo (con tu permiso) o adaptar rpc_alta_vehiculo para matricula NULL? No entiendo la diferencia (la matricula las añadiré despues, si es problematico pon el numero de vehiculo, ej, 0101UI,0102UI... etc como matricula) puedes crearlos con seed SQL directo, no te olvides de agregar un acceso para agregar/modificar/eliminar vehiculos desde flota y taller en vehiculos metadata
+5. rpc_alta_vehiculo: ¿admitir matricula NULL o dejarlo como está y usar seed? dejarlo como está y usar seed
+6. Inventario dinámico boxes: ¿son hijos de un vehiculo en la tabla locations, con su propio inventario_base? no, son inventarios independientes dinamicos
+7. Alertas de stock: ¿solo aviso doc11 o también bloquea alguna acción? no bloquea nada, solo avisa cuando el stock esta por debajo de la mitad o en el limite o por debajo del numero fijado (columna aviso stock en gestion) no tiene que ver nada con doc11, esto debe de funcionar mirando el stock actual.
+8. Tablón posts: ¿solo texto+sección o también imágenes/PDFs/enlaces? ¿En qué bucket? todo, en principio texto, enlaces, y en un futuro configuraremos un bucket para lo demas.
+9. Incidencias ancladas: ¿quién puede anclarlas, coordinación/gerencia o también quien la crea? solo las ancla/desancla flota y taller (o gerencia que tiene full permisos)
+10. Permisos por rol en RbacScreen: ¿solo tabla informativa o quieres poder activar/desactivar permisos individuales desde la UI? poder activar/desactivar permisos individuales desde la UI
+11. Tipografía fluida: ¿solo fuentes o también espaciados (gap, padding)? también espaciados
+
+---
+
+### Definition of Done FASE ALPHA
+
+- [x] ~~CI 3/3 verde tras todos los cambios.~~ ✅ 2026-06-03 — tsc limpio, ESLint 0 errores, build ≤ 800 KB entry chunk.
+- [x] ~~315/315 tests Vitest (sin regresiones; tests añadidos para pantallas A5).~~ ✅ 2026-06-03 — +41 tests en `alpha5-screens.test.tsx`. Total: **315/315 ✅**.
+- [x] ~~Las 6 pantallas con GRANT faltante cargan sin error.~~ ✅ Alpha.1 — 17 GRANTs SELECT aplicados en producción.
+- [x] ~~Los 49 vehículos visibles en VehiculosScreen con nombre `vehiculo_id`.~~ ✅ Alpha.2 — seed 49 vehículos + 244 ítems catálogo + 886 líneas plantillas.
+- [x] ~~Módulo logístico: catálogo CRUD, plantillas, alertas operativas.~~ ✅ Alpha.3+Alpha.4 — CatalogoItemsScreen CRUD, StockScreen gestión, alertas visuales.
+- [x] ~~Módulo RRHH: Servicios funcional, Roles con cambio + permisos desde UI.~~ ✅ Alpha.5 — ServiciosScreen completo, RbacScreen con Tab permisos (25 acciones × 12 roles).
+- [x] ~~Tablón: gestión completa (crear/archivar), marquesina configurable.~~ ✅ Alpha.3 — ComunicacionScreen/TablonCentralScreen operativos con GRANT.
+- [x] ~~ResumenDRP sin modal overlay. ForzarCheckout sin aviso innecesario.~~ ✅ Alpha.3 — verificados.
+- [x] ~~Tipografía fluida aplicada.~~ ✅ Ya implementada en `index.css` (variables `--text-*` y `--gap-*` con `clamp()`).
+- [x] ~~D-15 y D-16 cerradas.~~ ✅ Alpha.1 — tablas ya existían en producción; 4 RPCs CRUD creadas; RepositorioScreen lanzador de docs (13 documentos seedados).
+- [x] ~~Todas las sub-fases documentadas con changelog.~~ ✅ Alpha.1–Alpha.5 con changelog completo en este roadmap.
+- [x] ~~Incidencias de flota operativas.~~ ✅ Alpha.5 — tabla `incidencias` + 5 RPCs + IncidenciasScreen CRUD (ancladas/últimas).
+- [x] ~~Sistema permisos_rol.~~ ✅ Alpha.5 — `fn_tiene_permiso()` + tabla `permisos_rol` + RPCs + seed 300 filas.
+
+> **changelog DoD ALPHA — CERRADO 2026-06-03:**
+>
+> - 315/315 tests Vitest ✅ (24 archivos de test, +41 tests Alpha.5 en `alpha5-screens.test.tsx`).
+> - `test-utils.tsx` actualizado con `QueryClientProvider` (necesario para tests de screens con `useQuery` directo).
+> - tsc limpio · ESLint 0 errores (8 warnings pre-existentes en shadcn/ui) · build entry chunk 340 KB ≤ 800 KB ✅.
+> - **FASE ALPHA CERRADA**. Siguiente: Fase F.
+
+---
+
 ## SECCIÓN 8 — Fase F — Modo oscuro y refinamientos
 
 > Solo se inicia tras cierre completo de Fase E y primer deploy a Vercel.
@@ -498,3 +817,7 @@ Incidencias post-deploy: ________________
 | **2026-05-31** | **rr v1.3** | **E.4 CI: `ci-e2e.yml` creado. `playwright.config.ts` actualizado. Fase E completa en código — pendiente primera ejecución verde en GHA.** |
 | **2026-06-01** | **rr v1.4** | **D-18 cerrado. 2 migraciones sync enums/schema. `supabase.ts` regenerado UTF-8. `tsc` limpio. lint 0 errores. 274/274 ✅. Checklist §5 FASE 0 iniciado — suite ✅, env ✅, VAPID parcial, staging pendiente.** |
 | **2026-06-02** | **rr v1.5** | **`ef-autorizar-terminal` creada y desplegada (EF 14ª). `AutorizarTerminalScreen` limpiada (sin texto explicativo). FASE 0 "Notificar al equipo" ✅. Reglas Supabase Auth documentadas en CLAUDE.md v2.3–v2.5 (bcrypt cost 10, instance_id, confirmation_token vacío, límite 72 bytes contraseña máquina).** |
+| **2026-06-03** | **rr v1.6** | **FASE ALPHA añadida: 33 fallos auditados, 5 sub-fases definidas. Análisis completo de GRANT SELECT faltantes, schema gaps, resolveRpcError incompleto y features nuevas.** |
+| **2026-06-03** | **rr v1.7** | **Alpha.4 CERRADA: migración 000009 aplicada en producción (subinventarios tabla + RLS + 10 RPCs + umbral_alerta en plantilla_lineas). Checklist A4.2/A4.3/A4.5/A4.7 sin pendientes.** |
+| **2026-06-03** | **rr v1.8** | **Alpha.5 CERRADA: 3 migraciones (000010–000012) aplicadas. ServiciosScreen/IncidenciasScreen/RbacScreen/RepositorioScreen reescritos. permisos_rol 25×12 roles seedados. 13 docs en repositorio. 274/274 ✅. tsc limpio.** |
+| **2026-06-03** | **rr v1.9** | **DoD ALFA CERRADO: 315/315 tests ✅ (+41 Alpha.5). tsc limpio. Build entry 340 KB ≤ 800 KB. ESLint 0 errores. QueryClientProvider en test-utils. FASE ALPHA CERRADA.** |

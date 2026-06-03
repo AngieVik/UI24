@@ -22,5 +22,7 @@ lh-report.json
 # Estado Netlify
 .netlify/
 
-# Supabase Edge Functions (formato propio)
+# Supabase (SQL sin parser Prettier + Edge Functions con formato propio)
 supabase/functions/
+supabase/migrations/
+supabase/seeds/

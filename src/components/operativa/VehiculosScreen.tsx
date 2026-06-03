@@ -35,12 +35,12 @@ const NO_CARRY = '__none__'
 const TIPO_ORDER = ['A1', 'A2', 'B', 'C', 'VIR', 'Quad', 'Unidad Movil', 'Logistica'] as const
 
 const ESTADO_LABELS: Record<string, string> = {
-  desactivado: 'Desactivado',
-  activado: 'Activado',
+  desactivado: 'Sin turno',
+  activado: 'En turno',
   en_drp: 'En DRP',
   // legado
-  inactivo: 'Desactivado',
-  activo: 'Activado',
+  inactivo: 'Sin turno',
+  activo: 'En turno',
 }
 
 const SUBESTADO_LABELS: Record<string, string> = {
@@ -193,7 +193,7 @@ export function VehiculosScreen() {
       setMode('view')
       setFeedback(
         result.online
-          ? `Turno iniciado — ${result.matricula} activado.`
+          ? `Turno iniciado — ${result.matricula}.`
           : 'Turno encolado (offline). Se aplicará al reconectar.'
       )
     }
@@ -270,7 +270,14 @@ export function VehiculosScreen() {
                     <SelectLabel>{tipo}</SelectLabel>
                     {vehiculos.map((v) => (
                       <SelectItem key={v.matricula} value={v.matricula}>
-                        <span className="font-mono font-semibold">{v.matricula}</span>
+                        <span className="font-mono font-semibold">
+                          {v.vehiculo_id ?? v.matricula}
+                        </span>
+                        {v.vehiculo_id && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({v.matricula})
+                          </span>
+                        )}
                         <span className="ml-2 text-xs text-muted-foreground">
                           — {ESTADO_LABELS[v.estado_operativo] ?? v.estado_operativo}
                           {v.subestado_operativo &&
@@ -292,8 +299,13 @@ export function VehiculosScreen() {
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="flex items-center gap-2 font-display text-base">
               <CheckCircle2 aria-hidden="true" className="size-4" />
-              {selectedVehiculo.matricula}
-              <span className="font-light text-muted-foreground">· {selectedVehiculo.tipo}</span>
+              {selectedVehiculo.vehiculo_id ?? selectedVehiculo.matricula}
+              <span className="font-light text-muted-foreground">
+                · {selectedVehiculo.tipo}
+                {selectedVehiculo.vehiculo_id && (
+                  <span className="ml-1 text-xs">({selectedVehiculo.matricula})</span>
+                )}
+              </span>
             </CardTitle>
             <div className="flex items-center gap-2">
               {/* Estado operativo */}

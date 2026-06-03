@@ -86,9 +86,9 @@ Los subgrupos se crean directamente en cada location según necesidades.
 
 | Tipo | Descripción |
 |---|---|
-| `Unidad_movil` | Subgrupos libres (Box 1, Box 2, Box 3…) |
-| `Logistica` | Subgrupos libres (Box 1, Box 2, Box 3…) |
-| `Subinventario` | Sin estructura predefinida — logística decide el contenido por DRP/PSA |
+| `Unidad_movil` | Subgrupos libres (Box1, Box2, Box3…) |
+| `Logistica` | Subgrupos libres (Box1, Box2, Box3…) |
+| `Subinventario` | Sin estructura predefinida — logística decide el contenido por DRP/PSA  |
 | `Almacen` | Sin estructura predefinida — almacén central gestionado libremente |
 
 ### Estructura de una plantilla
@@ -150,9 +150,9 @@ Acceso desde `inventario_maestro → Gestionar plantillas`.
 | Tipo | IDs |
 |---|---|
 | A1 | 301, 302 |
-| A2 | 401–408 |
-| B | 201–208 |
-| C | 101–118 |
+| A2 | 401–410 |
+| B | 201–210 |
+| C | 101–120 |
 | Unidad_movil | UM1, UM2 |
 | Logistica | LOG1 |
 | VIR | VIR1, VIR2 |

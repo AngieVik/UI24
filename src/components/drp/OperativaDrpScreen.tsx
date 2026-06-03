@@ -5,8 +5,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDrp } from '@/hooks/useDrp'
+import { useFlotaCompleta } from '@/hooks/useFlotaCompleta'
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 
@@ -26,6 +36,7 @@ export function OperativaDrpScreen() {
     agregarPersonal,
   } = useDrp()
 
+  const { data: flota } = useFlotaCompleta()
   const [matriculaInput, setMatriculaInput] = useState('')
   const [matriculaError, setMatriculaError] = useState('')
   const [nombreInput, setNombreInput] = useState('')
@@ -171,15 +182,42 @@ export function OperativaDrpScreen() {
               )}
               <div className="flex gap-2">
                 <Field className="flex-1">
-                  <FieldLabel htmlFor="op-matricula">Matrícula</FieldLabel>
-                  <Input
-                    id="op-matricula"
-                    placeholder="Ej. 1234-XXX"
+                  <FieldLabel htmlFor="op-matricula">Vehículo</FieldLabel>
+                  <Select
                     value={matriculaInput}
-                    onChange={(e) => setMatriculaInput(e.target.value.toUpperCase())}
+                    onValueChange={(v) => {
+                      setMatriculaInput(v)
+                      setMatriculaError('')
+                    }}
                     disabled={actingDot}
-                    aria-invalid={!!matriculaError}
-                  />
+                  >
+                    <SelectTrigger id="op-matricula" aria-invalid={!!matriculaError}>
+                      <SelectValue placeholder="Seleccionar vehículo…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {flota.length === 0 ? (
+                        <SelectItem value="__none__" disabled>
+                          Sin vehículos disponibles
+                        </SelectItem>
+                      ) : (
+                        <SelectGroup>
+                          <SelectLabel>Flota</SelectLabel>
+                          {flota.map((v) => (
+                            <SelectItem key={v.matricula} value={v.matricula}>
+                              <span className="font-mono font-semibold">
+                                {v.vehiculo_id ?? v.matricula}
+                              </span>
+                              {v.vehiculo_id && (
+                                <span className="ml-1 text-xs text-muted-foreground">
+                                  ({v.matricula})
+                                </span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </SelectContent>
+                  </Select>
                   {matriculaError && <FieldError errors={[{ message: matriculaError }]} />}
                 </Field>
                 <div className="flex items-end">

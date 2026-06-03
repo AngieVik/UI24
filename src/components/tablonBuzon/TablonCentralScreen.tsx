@@ -3,12 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTablon, type AnuncioItem } from '@/hooks/useTablon'
-
-/* ─────────────────────────────────────────────────────────────────────────
- * Constants
- * ───────────────────────────────────────────────────────────────────────── */
 
 const SECCION_LABEL: Record<string, string> = {
   normativas: 'Normativas',
@@ -22,26 +17,6 @@ const SECCION_VARIANT: Record<string, 'ok' | 'info' | 'warn'> = {
   avisos_corporativos: 'warn',
 }
 
-const SECCIONES: AnuncioItem['seccion'][] = ['normativas', 'protocolos', 'avisos_corporativos']
-
-/* ─────────────────────────────────────────────────────────────────────────
- * Helpers
- * ───────────────────────────────────────────────────────────────────────── */
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- * AnuncioCard
- * ───────────────────────────────────────────────────────────────────────── */
-
 function AnuncioCard({ anuncio }: { anuncio: AnuncioItem }) {
   return (
     <Card>
@@ -53,21 +28,13 @@ function AnuncioCard({ anuncio }: { anuncio: AnuncioItem }) {
           <span className="font-medium text-sm">{anuncio.titulo}</span>
         </div>
         <p className="text-sm text-muted-foreground">{anuncio.contenido}</p>
-        <p className="text-xs text-muted-foreground">
-          {fmtDate(anuncio.timestamp_publicacion)}
-          {' · '}Por: <span className="font-medium">{anuncio.id_nombre_autor}</span>
-        </p>
       </CardContent>
     </Card>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- * Main component
- * ───────────────────────────────────────────────────────────────────────── */
-
 export function TablonCentralScreen() {
-  const { anuncios, loading, error, cargarTablon, porSeccion } = useTablon()
+  const { anuncios, loading, error, cargarTablon } = useTablon()
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 p-3">
@@ -109,46 +76,11 @@ export function TablonCentralScreen() {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="todos">
-          <TabsList className="w-full">
-            <TabsTrigger value="todos">
-              Todos
-              <Badge variant="secondary" className="ml-1 text-xs">
-                {anuncios.length}
-              </Badge>
-            </TabsTrigger>
-            {SECCIONES.map((sec) => {
-              const count = porSeccion(sec).length
-              if (count === 0) return null
-              return (
-                <TabsTrigger key={sec} value={sec}>
-                  {SECCION_LABEL[sec]}
-                  <Badge variant={SECCION_VARIANT[sec]} className="ml-1 text-xs">
-                    {count}
-                  </Badge>
-                </TabsTrigger>
-              )
-            })}
-          </TabsList>
-
-          <TabsContent value="todos" className="mt-3 space-y-2">
-            {anuncios.map((a) => (
-              <AnuncioCard key={a.id_anuncio} anuncio={a} />
-            ))}
-          </TabsContent>
-
-          {SECCIONES.map((sec) => (
-            <TabsContent key={sec} value={sec} className="mt-3 space-y-2">
-              {porSeccion(sec).length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No hay anuncios en {SECCION_LABEL[sec].toLowerCase()}.
-                </p>
-              ) : (
-                porSeccion(sec).map((a) => <AnuncioCard key={a.id_anuncio} anuncio={a} />)
-              )}
-            </TabsContent>
+        <div className="space-y-2">
+          {anuncios.map((a) => (
+            <AnuncioCard key={a.id_anuncio} anuncio={a} />
           ))}
-        </Tabs>
+        </div>
       )}
     </div>
   )

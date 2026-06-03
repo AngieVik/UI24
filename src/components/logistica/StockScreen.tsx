@@ -1,8 +1,23 @@
 import { useState } from 'react'
-import { Bell, Clock, RefreshCw, Settings2, Tag } from 'lucide-react'
+import {
+  RefreshCw,
+  Tag,
+  Save,
+  AlertTriangle,
+  ChevronRight,
+  ChevronDown,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -12,9 +27,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { resolveRpcError } from '@/lib/resolveRpcError'
+import { useAuthStore } from '@/stores/useAuthStore'
+
+// ── Types ────────────────────────────────────────────────────────────
 
 interface StockRow {
   location_id: string
@@ -31,7 +49,6 @@ interface PlantillaRow {
   nombre: string
   tipo: string
   activa: boolean
-  num_items?: number
 }
 
 interface AlertaRow {
@@ -43,11 +60,21 @@ interface AlertaRow {
   nombre?: string
 }
 
+interface PlantillaLineaRow {
+  plantilla_id: string
+  subgrupo: string
+  id_item: number
+  stock_objetivo: number
+  umbral_alerta: number | null
+  nombre?: string
+}
+
+// ── Queries ──────────────────────────────────────────────────────────
+
 function useStockHistorial() {
   return useQuery({
     queryKey: ['stock_historial'],
     queryFn: async (): Promise<StockRow[]> => {
-      // inventario_stock_actual is a view not yet in generated types → cast
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('inventario_stock_actual')
@@ -76,7 +103,6 @@ function usePlantillas() {
   return useQuery({
     queryKey: ['plantillas_stock'],
     queryFn: async (): Promise<PlantillaRow[]> => {
-      // plantillas_stock not yet in generated types → cast
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('plantillas_stock')
@@ -92,7 +118,6 @@ function useAlertas() {
   return useQuery({
     queryKey: ['stock_alertas'],
     queryFn: async (): Promise<AlertaRow[]> => {
-      // inventario_stock_actual not yet in generated types → cast; filter client-side
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('inventario_stock_actual')
@@ -115,6 +140,38 @@ function useAlertas() {
   })
 }
 
+function usePlantillaLineas(plantillaId: string | null) {
+  return useQuery({
+    queryKey: ['plantilla_lineas', plantillaId],
+    enabled: plantillaId !== null,
+    queryFn: async (): Promise<PlantillaLineaRow[]> => {
+      // umbral_alerta no está en tipos generados aún → cast
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('plantilla_lineas')
+        .select(
+          'plantilla_id, subgrupo, id_item, stock_objetivo, umbral_alerta, catalogo_items(nombre)'
+        )
+        .eq('plantilla_id', plantillaId!)
+        .order('subgrupo')
+        .order('id_item')
+      if (error) throw error
+      return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+        plantilla_id: r['plantilla_id'] as string,
+        subgrupo: r['subgrupo'] as string,
+        id_item: r['id_item'] as number,
+        stock_objetivo: r['stock_objetivo'] as number,
+        umbral_alerta: (r['umbral_alerta'] as number | null) ?? null,
+        nombre:
+          ((r['catalogo_items'] as Record<string, unknown> | null)?.['nombre'] as string) ??
+          undefined,
+      }))
+    },
+  })
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
 function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString('es-ES', {
     day: '2-digit',
@@ -124,15 +181,281 @@ function fmtDateTime(iso: string): string {
   })
 }
 
+// ── Gestión tab: editable plantilla lineas ───────────────────────────
+
+interface GestionTabProps {
+  plantillas: PlantillaRow[]
+}
+
+interface LineaEditState {
+  stock_objetivo: string
+  umbral_alerta: string
+  saving: boolean
+  error: string | null
+  saved: boolean
+}
+
+function GestionTab({ plantillas }: GestionTabProps) {
+  const qc = useQueryClient()
+  const [selectedPlantilla, setSelectedPlantilla] = useState<string | null>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [editStates, setEditStates] = useState<Record<string, LineaEditState>>({})
+
+  const lineasQ = usePlantillaLineas(selectedPlantilla)
+
+  function lineaKey(l: PlantillaLineaRow) {
+    return `${l.subgrupo}::${l.id_item}`
+  }
+
+  function getEditState(l: PlantillaLineaRow): LineaEditState {
+    const key = lineaKey(l)
+    return (
+      editStates[key] ?? {
+        stock_objetivo: String(l.stock_objetivo),
+        umbral_alerta: l.umbral_alerta !== null ? String(l.umbral_alerta) : '',
+        saving: false,
+        error: null,
+        saved: false,
+      }
+    )
+  }
+
+  function updateEditState(l: PlantillaLineaRow, patch: Partial<LineaEditState>) {
+    const key = lineaKey(l)
+    setEditStates((prev) => ({
+      ...prev,
+      [key]: { ...getEditState(l), ...patch },
+    }))
+  }
+
+  function toggleGroup(subgrupo: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(subgrupo)) next.delete(subgrupo)
+      else next.add(subgrupo)
+      return next
+    })
+  }
+
+  async function saveLinea(l: PlantillaLineaRow) {
+    const state = getEditState(l)
+    const stockObj = parseInt(state.stock_objetivo, 10)
+    const umbral =
+      state.umbral_alerta.trim() !== '' ? parseInt(state.umbral_alerta, 10) : null
+
+    if (isNaN(stockObj) || stockObj < 0) {
+      updateEditState(l, { error: 'El stock objetivo debe ser un número ≥ 0.' })
+      return
+    }
+
+    updateEditState(l, { saving: true, error: null })
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: err } = await (supabase as any).rpc('rpc_actualizar_plantilla_linea', {
+        p_plantilla_id: l.plantilla_id,
+        p_subgrupo: l.subgrupo,
+        p_id_item: l.id_item,
+        p_stock_objetivo: stockObj,
+        p_umbral_alerta: umbral,
+      })
+      if (err) throw err
+      await qc.invalidateQueries({ queryKey: ['plantilla_lineas', l.plantilla_id] })
+      updateEditState(l, { saving: false, saved: true })
+      setTimeout(() => updateEditState(l, { saved: false }), 2000)
+    } catch (e) {
+      updateEditState(l, { saving: false, error: resolveRpcError(e) })
+    }
+  }
+
+  const lineas = lineasQ.data ?? []
+  const subgrupos = [...new Set(lineas.map((l) => l.subgrupo))]
+
+  return (
+    <div className="space-y-4">
+      {/* Selector de plantilla */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-muted-foreground">Plantilla:</span>
+        <Select
+          value={selectedPlantilla ?? ''}
+          onValueChange={(v) => {
+            setSelectedPlantilla(v || null)
+            setEditStates({})
+            setCollapsedGroups(new Set())
+          }}
+        >
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="Selecciona una plantilla" />
+          </SelectTrigger>
+          <SelectContent>
+            {plantillas.map((p) => (
+              <SelectItem key={p.id_plantilla} value={p.id_plantilla}>
+                {p.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {!selectedPlantilla && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Selecciona una plantilla para ver y editar sus líneas de stock.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedPlantilla && lineasQ.isLoading && <Skeleton className="h-48 w-full" />}
+
+      {selectedPlantilla && !lineasQ.isLoading && lineas.length === 0 && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Esta plantilla no tiene líneas configuradas.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedPlantilla && !lineasQ.isLoading && lineas.length > 0 && (
+        <div className="space-y-2">
+          {subgrupos.map((sg) => {
+            const sgLineas = lineas.filter((l) => l.subgrupo === sg)
+            const collapsed = collapsedGroups.has(sg)
+            return (
+              <Card key={sg}>
+                <CardContent className="p-0">
+                  {/* Subgrupo header */}
+                  <button
+                    onClick={() => toggleGroup(sg)}
+                    className="flex w-full items-center justify-between px-4 py-2 hover:bg-muted/50 transition-colors"
+                    aria-expanded={!collapsed}
+                  >
+                    <span className="text-sm font-semibold">{sg}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{sgLineas.length} ítems</span>
+                      {collapsed ? (
+                        <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                      ) : (
+                        <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+                      )}
+                    </div>
+                  </button>
+
+                  {!collapsed && (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs font-bold uppercase">Ítem</TableHead>
+                          <TableHead className="w-28 text-xs font-bold uppercase">
+                            Stock obj.
+                          </TableHead>
+                          <TableHead className="w-36 text-xs font-bold uppercase">
+                            Umbral alerta
+                          </TableHead>
+                          <TableHead className="w-20 text-xs font-bold uppercase">
+                            Guardar
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sgLineas.map((l) => {
+                          const state = getEditState(l)
+                          const placeholderUmbral = `${Math.ceil(l.stock_objetivo / 2)} (auto)`
+                          const isDirty =
+                            state.stock_objetivo !== String(l.stock_objetivo) ||
+                            state.umbral_alerta !==
+                              (l.umbral_alerta !== null ? String(l.umbral_alerta) : '')
+
+                          return (
+                            <TableRow key={lineaKey(l)}>
+                              <TableCell>
+                                <div className="text-sm font-medium">
+                                  {l.nombre ?? `#${l.id_item}`}
+                                </div>
+                                {state.error && (
+                                  <p className="text-xs text-destructive">{state.error}</p>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="h-7 w-20 text-sm"
+                                  value={state.stock_objetivo}
+                                  onChange={(e) =>
+                                    updateEditState(l, { stock_objetivo: e.target.value })
+                                  }
+                                  disabled={state.saving}
+                                  aria-label={`Stock objetivo ${l.nombre ?? l.id_item}`}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="h-7 w-24 text-sm"
+                                  value={state.umbral_alerta}
+                                  onChange={(e) =>
+                                    updateEditState(l, { umbral_alerta: e.target.value })
+                                  }
+                                  disabled={state.saving}
+                                  placeholder={placeholderUmbral}
+                                  aria-label={`Umbral de alerta ${l.nombre ?? l.id_item}`}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {state.saved ? (
+                                  <Badge variant="ok" className="text-xs">
+                                    Guardado
+                                  </Badge>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant={isDirty ? 'default' : 'ghost'}
+                                    className="h-7 px-2"
+                                    onClick={() => saveLinea(l)}
+                                    disabled={state.saving || !isDirty}
+                                    aria-label={`Guardar cambios de ${l.nombre ?? l.id_item}`}
+                                  >
+                                    {state.saving ? (
+                                      '…'
+                                    ) : (
+                                      <Save className="size-3.5" aria-hidden="true" />
+                                    )}
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────
+
 export function StockScreen({
   vista,
 }: {
   vista?: 'historial' | 'plantillas' | 'alertas' | 'gestion'
 }) {
-  const [tab, setTab] = useState<string>(vista ?? 'historial')
+  const rol = useAuthStore((s) => s.rol)
   const histQ = useStockHistorial()
   const planQ = usePlantillas()
   const alertQ = useAlertas()
+
+  const canGestion = rol === 'responsable_logistica' || rol === 'gerencia'
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-3 p-3">
@@ -158,33 +481,9 @@ export function StockScreen({
         </Button>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="historial">
-            <Clock className="size-3.5 mr-1" />
-            Historial
-          </TabsTrigger>
-          <TabsTrigger value="plantillas">
-            <Tag className="size-3.5 mr-1" />
-            Plantillas
-          </TabsTrigger>
-          <TabsTrigger value="alertas">
-            <Bell className="size-3.5 mr-1" />
-            Alertas
-            {(alertQ.data?.length ?? 0) > 0 && (
-              <Badge variant="destructive" className="ml-1 text-xs">
-                {alertQ.data!.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="gestion">
-            <Settings2 className="size-3.5 mr-1" />
-            Gestión
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Historial */}
-        <TabsContent value="historial" className="mt-3">
+      {/* Historial */}
+      {(vista ?? 'historial') === 'historial' && (
+        <div className="mt-0">
           {histQ.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
@@ -229,10 +528,12 @@ export function StockScreen({
               </CardContent>
             </Card>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Plantillas */}
-        <TabsContent value="plantillas" className="mt-3">
+      {/* Plantillas */}
+      {(vista ?? 'historial') === 'plantillas' && (
+        <div className="mt-0">
           {planQ.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
@@ -265,10 +566,12 @@ export function StockScreen({
               </CardContent>
             </Card>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Alertas */}
-        <TabsContent value="alertas" className="mt-3">
+      {/* Alertas */}
+      {(vista ?? 'historial') === 'alertas' && (
+        <div className="mt-0">
           {alertQ.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (alertQ.data?.length ?? 0) === 0 ? (
@@ -281,14 +584,15 @@ export function StockScreen({
             <div className="space-y-2">
               {(alertQ.data ?? []).map((a, i) => (
                 <Card key={`${a.location_id}-${a.id_item}-${i}`} className="border-destructive/50">
-                  <CardContent className="flex items-center justify-between py-3">
-                    <div>
+                  <CardContent className="flex items-center gap-3 py-3">
+                    <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+                    <div className="flex-1">
                       <span className="font-medium">{a.nombre ?? `Ítem #${a.id_item}`}</span>
                       <div className="text-xs text-muted-foreground">{a.location_id}</div>
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-destructive">
-                        {a.stock_real} / {a.stock_min} min
+                        {a.stock_real} / {a.stock_min} mín
                       </div>
                       <div className="text-xs text-destructive">Faltan {a.diferencia} uds</div>
                     </div>
@@ -297,20 +601,19 @@ export function StockScreen({
               ))}
             </div>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Gestión de plantillas */}
-        <TabsContent value="gestion" className="mt-3">
-          <Card>
-            <CardContent className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                La gestión de plantillas de stock está disponible para responsables de logística.
-                Contacta con tu responsable de almacén para crear o modificar plantillas.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Gestión de plantillas (A4.5) */}
+      {canGestion && (vista ?? 'historial') === 'gestion' && (
+        <div className="mt-0">
+          {planQ.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <GestionTab plantillas={planQ.data ?? []} />
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, Filter, Gauge, RefreshCw, Tag } from 'lucide-react'
+import { Gauge, RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,7 +13,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useFlotaCompleta } from '@/hooks/useFlotaCompleta'
 
 const CONDICION_VARIANT: Record<string, 'ok' | 'warn' | 'destructive' | 'secondary'> = {
@@ -38,7 +37,6 @@ export function VisorMantenimientoScreen({
 }: {
   vista?: 'tabla' | 'badges' | 'filtros' | 'detalle'
 }) {
-  const [tab, setTab] = useState<string>(vista ?? 'tabla')
   const { data: vehiculos, isLoading, error } = useFlotaCompleta()
   const [search, setSearch] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
@@ -79,34 +77,9 @@ export function VisorMantenimientoScreen({
         </p>
       )}
 
-      <Tabs
-        value={tab}
-        onValueChange={(t) => {
-          setTab(t)
-          if (t !== 'detalle') setDetalleId(null)
-        }}
-      >
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="tabla">
-            <Gauge className="size-3.5 mr-1" />
-            Tabla
-          </TabsTrigger>
-          <TabsTrigger value="badges">
-            <Tag className="size-3.5 mr-1" />
-            Badges
-          </TabsTrigger>
-          <TabsTrigger value="filtros">
-            <Filter className="size-3.5 mr-1" />
-            Filtros
-          </TabsTrigger>
-          <TabsTrigger value="detalle">
-            <Eye className="size-3.5 mr-1" />
-            Detalle
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Tabla principal */}
-        <TabsContent value="tabla" className="mt-3">
+      {/* Tabla principal */}
+      {(vista ?? 'tabla') === 'tabla' && (
+        <div className="mt-0">
           {isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
@@ -147,10 +120,7 @@ export function VisorMantenimientoScreen({
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              setDetalleId(v.matricula)
-                              setTab('detalle')
-                            }}
+                            onClick={() => setDetalleId(v.matricula)}
                             aria-label={`Ver detalle ${v.matricula}`}
                           >
                             Detalle
@@ -163,10 +133,12 @@ export function VisorMantenimientoScreen({
               </CardContent>
             </Card>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Badges de estado */}
-        <TabsContent value="badges" className="mt-3">
+      {/* Badges de estado */}
+      {(vista ?? 'tabla') === 'badges' && (
+        <div className="mt-0">
           {isLoading ? (
             <Skeleton className="h-32 w-full" />
           ) : (
@@ -219,10 +191,12 @@ export function VisorMantenimientoScreen({
               </Card>
             </div>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Filtros */}
-        <TabsContent value="filtros" className="mt-3">
+      {/* Filtros */}
+      {(vista ?? 'tabla') === 'filtros' && (
+        <div className="mt-0">
           <div className="space-y-3">
             <Input
               type="search"
@@ -245,10 +219,7 @@ export function VisorMantenimientoScreen({
                   <Card
                     key={v.matricula}
                     className="cursor-pointer hover:bg-muted/40"
-                    onClick={() => {
-                      setDetalleId(v.matricula)
-                      setTab('detalle')
-                    }}
+                    onClick={() => setDetalleId(v.matricula)}
                   >
                     <CardContent className="flex items-center justify-between py-3">
                       <div>
@@ -267,10 +238,12 @@ export function VisorMantenimientoScreen({
               </div>
             )}
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Detalle */}
-        <TabsContent value="detalle" className="mt-3">
+      {/* Detalle */}
+      {(vista ?? 'tabla') === 'detalle' && (
+        <div className="mt-0">
           {!detalleVehiculo ? (
             <Card>
               <CardContent className="py-8 text-center">
@@ -311,8 +284,8 @@ export function VisorMantenimientoScreen({
               </CardContent>
             </Card>
           )}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   )
 }

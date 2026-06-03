@@ -30,6 +30,8 @@ const VEH_DESACT: ReturnType<typeof useFlotaCompleta>['data'][number] = {
   condicion_tecnica: 'operativo',
   estado_operativo: 'desactivado',
   subestado_operativo: null,
+  vehiculo_id: null,
+  nombre_display: null,
 }
 const VEH_ACTIVO: ReturnType<typeof useFlotaCompleta>['data'][number] = {
   matricula: '2222-DEMO',
@@ -37,6 +39,8 @@ const VEH_ACTIVO: ReturnType<typeof useFlotaCompleta>['data'][number] = {
   condicion_tecnica: 'operativo',
   estado_operativo: 'activado',
   subestado_operativo: 'en_espera',
+  vehiculo_id: null,
+  nombre_display: null,
 }
 const VEH_CRITICO: ReturnType<typeof useFlotaCompleta>['data'][number] = {
   matricula: '3333-DEMO',
@@ -44,6 +48,8 @@ const VEH_CRITICO: ReturnType<typeof useFlotaCompleta>['data'][number] = {
   condicion_tecnica: 'critico',
   estado_operativo: 'desactivado',
   subestado_operativo: null,
+  vehiculo_id: null,
+  nombre_display: null,
 }
 const VEH_VIR: ReturnType<typeof useFlotaCompleta>['data'][number] = {
   matricula: '4444-DEMO',
@@ -51,6 +57,8 @@ const VEH_VIR: ReturnType<typeof useFlotaCompleta>['data'][number] = {
   condicion_tecnica: 'operativo',
   estado_operativo: 'desactivado',
   subestado_operativo: null,
+  vehiculo_id: null,
+  nombre_display: null,
 }
 
 const ADMIN = {

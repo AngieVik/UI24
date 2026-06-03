@@ -14,10 +14,10 @@ import { VisualInfoHome } from '@/components/layout/VisualInfoHome'
 import { useBlackColumn } from '@/contexts/BlackColumnContext'
 import { usePersonalEnTurno } from '@/hooks/usePersonalEnTurno'
 import { findNode } from '@/components/layout/black-column-nav'
+import { useTickerConfig } from '@/hooks/useTickerConfig'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { BandejaCanal } from '@/components/layout/BandejaModal'
 
 const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? '0.1.0'
@@ -368,6 +368,7 @@ export default function App() {
  */
 function RouterPresencias() {
   const personal = usePersonalEnTurno()
+  const ticker = useTickerConfig()
 
   // Primer pintado: mientras carga la primera vez, mostramos skeleton
   // para no parpadear entre estados.
@@ -384,7 +385,7 @@ function RouterPresencias() {
   }
 
   return (
-    <AppShell ticker="Tablón · BlackColumn drill-down activo · pulsa los grupos para entrar, pulsa el padre activo o el botón de atrás para volver.">
+    <AppShell ticker={ticker.text || undefined} tickerSpeed={ticker.speed}>
       <>
         <Suspense fallback={<ScreenFallback />}>
           <HomeArea />
@@ -451,7 +452,7 @@ function HomeArea() {
   if (selectedLeafId === 'drp_est') return <EstadosDrpScreen />
   if (selectedLeafId === 'drp_op') return <OperativaDrpScreen />
   if (selectedLeafId === 'drp_log') return <LogisticaDrpScreen />
-  // drp_res → opensModal=true, se abre en ModalArea como overlay. No ruta aquí.
+  if (selectedLeafId === 'drp_res') return <ResumenDrpScreen />
 
   // ── D.3 Módulos especiales ─────────────────────────────────────────────────
   if (selectedLeafId === 'mod_psa') return <ModuloPsaScreen />
@@ -478,7 +479,7 @@ function HomeArea() {
   // log_bandeja → opensModal=true, se abre en ModalArea. No ruta aquí.
 
   // ── D.5 Incidencias ────────────────────────────────────────────────────────
-  if (selectedLeafId === 'flota_inc_abiertas') return <IncidenciasScreen vista="abiertas" />
+  if (selectedLeafId === 'flota_inc_abiertas') return <IncidenciasScreen vista="ultimas" />
   if (selectedLeafId === 'flota_inc_ancladas') return <IncidenciasScreen vista="ancladas" />
   if (selectedLeafId === 'flota_inc_ultimas') return <IncidenciasScreen vista="ultimas" />
 
@@ -496,8 +497,8 @@ function HomeArea() {
   if (selectedLeafId === 'flota_mant_doc7') return <Doc7InformeAveriaScreen /> // mismo componente
 
   // ── D.5 Vehículos metadata ─────────────────────────────────────────────────
-  if (selectedLeafId === 'fmeta_docs') return <VehiculosMetadataScreen vista="docs" />
-  if (selectedLeafId === 'fmeta_km') return <VehiculosMetadataScreen vista="km" />
+  if (selectedLeafId === 'fmeta_docs') return <VehiculosMetadataScreen vista="unified" />
+  if (selectedLeafId === 'fmeta_km') return <VehiculosMetadataScreen vista="unified" />
   if (selectedLeafId === 'fmeta_eventos') return <VehiculosMetadataScreen vista="eventos" />
   // flota_bandeja → opensModal=true, se abre en ModalArea. No ruta aquí.
 
@@ -544,7 +545,6 @@ function HomeArea() {
  *  El contenido del home_area permanece detrás, sin ser reemplazado.
  *
  *  Bandejas → BandejaModal (self-contained, max-w-md).
- *  drp_res  → Dialog genérico con ResumenDrpScreen dentro.
  * ───────────────────────────────────────────────────────────────────────── */
 const BANDEJA_CANAL: Partial<Record<string, BandejaCanal>> = {
   log_bandeja: 'logistica',
@@ -561,26 +561,6 @@ function ModalArea() {
   const canal = BANDEJA_CANAL[modalLeafId]
   if (canal) {
     return <BandejaModal open onClose={closeModal} canal={canal} />
-  }
-
-  if (modalLeafId === 'drp_res') {
-    return (
-      <Dialog
-        open
-        onOpenChange={(v) => {
-          if (!v) closeModal()
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] max-w-screen-lg overflow-y-auto p-0">
-          <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle className="font-display text-lg font-bold">Resumen DRP</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-y-auto">
-            <ResumenDrpScreen />
-          </div>
-        </DialogContent>
-      </Dialog>
-    )
   }
 
   return null

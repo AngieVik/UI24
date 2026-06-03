@@ -3,8 +3,9 @@
  * - `rrhh_tablon` (gestión tablón): publish/archive announcements
  * - `rrhh_marquesina`: configure the ticker text shown in the Header
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Megaphone, Newspaper, RadioTower, RefreshCw, Trash2 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,12 +19,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useTablon, type AnuncioItem } from '@/hooks/useTablon'
 import { useSystemConfig } from '@/hooks/useSystemConfig'
 import { supabase } from '@/lib/supabase'
 import { resolveRpcError } from '@/lib/resolveRpcError'
+
+const SPEED_OPTIONS = [
+  { value: 15, label: 'Muy rápida' },
+  { value: 30, label: 'Rápida' },
+  { value: 60, label: 'Normal' },
+  { value: 90, label: 'Lenta' },
+  { value: 120, label: 'Muy lenta' },
+]
 
 const SECCION_OPTIONS: AnuncioItem['seccion'][] = [
   'normativas',
@@ -210,17 +218,38 @@ function GestionTablon() {
   )
 }
 
+const SPEED_VALUES = SPEED_OPTIONS.map((o) => o.value)
+function nearestSpeed(v: number): number {
+  return SPEED_VALUES.reduce((prev, curr) =>
+    Math.abs(curr - v) < Math.abs(prev - v) ? curr : prev
+  )
+}
+
 function GestionMarquesina() {
+  const qc = useQueryClient()
   const { config, setConfigValue, loading } = useSystemConfig()
-  const tickerEntry = config.find((c) => c.clave === 'ticker_text')
-  const [texto, setTexto] = useState((tickerEntry?.valor as string | undefined) ?? '')
+  const [texto, setTexto] = useState('')
+  const [speed, setSpeed] = useState(60)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Sincroniza los campos desde la clave 'marquesina' { texto, velocidad }
+  useEffect(() => {
+    if (loading) return
+    const entry = config.find((c) => c.clave === 'marquesina')
+    const val = entry?.valor as { texto?: string; velocidad?: number } | null | undefined
+    setTexto(typeof val?.texto === 'string' ? val.texto : '')
+    setSpeed(typeof val?.velocidad === 'number' ? nearestSpeed(val.velocidad) : 60)
+  }, [loading, config])
+
   async function handleGuardar() {
     setSaving(true)
-    const ok = await setConfigValue('ticker_text', texto.trim())
-    if (ok) setSaved(true)
+    setSaved(false)
+    const ok = await setConfigValue('marquesina', { texto: texto.trim(), velocidad: speed })
+    if (ok) {
+      setSaved(true)
+      qc.invalidateQueries({ queryKey: ['ticker_config'] })
+    }
     setSaving(false)
   }
 
@@ -229,19 +258,23 @@ function GestionMarquesina() {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 font-display text-sm">
           <RadioTower aria-hidden="true" className="size-4" />
-          Marquesina — texto del ticker
+          Marquesina — ticker del header
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="font-body text-xs text-muted-foreground">
-          El texto de la marquesina se muestra en tiempo real en el Header de todos los terminales.
+          El texto y la velocidad se aplican en tiempo real en el header de todos los terminales.
+          Deja el texto vacío para ocultar la marquesina.
         </p>
         {loading ? (
-          <Skeleton className="h-16 w-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </div>
         ) : (
           <>
             <Field>
-              <FieldLabel htmlFor="marq-texto">Texto de la marquesina</FieldLabel>
+              <FieldLabel htmlFor="marq-texto">Texto</FieldLabel>
               <Textarea
                 id="marq-texto"
                 value={texto}
@@ -250,18 +283,43 @@ function GestionMarquesina() {
                   setSaved(false)
                 }}
                 rows={3}
-                placeholder="Introduce el texto del ticker…"
+                placeholder="Introduce el texto del ticker… (vacío = sin marquesina)"
                 disabled={saving}
               />
             </Field>
-            {saved && <Badge variant="ok">Guardado correctamente</Badge>}
+
+            <Field>
+              <FieldLabel htmlFor="marq-speed">Velocidad</FieldLabel>
+              <Select
+                value={String(speed)}
+                onValueChange={(v) => {
+                  setSpeed(Number(v))
+                  setSaved(false)
+                }}
+                disabled={saving}
+              >
+                <SelectTrigger id="marq-speed" aria-label="Velocidad de la marquesina">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SPEED_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            {saved && <Badge variant="ok">Guardado. Los cambios ya son visibles en todos los terminales.</Badge>}
+
             <Button
               size="sm"
               className="w-full"
               onClick={handleGuardar}
-              disabled={saving || !texto.trim()}
+              disabled={saving}
             >
-              {saving ? 'Guardando…' : 'Guardar texto'}
+              {saving ? 'Guardando…' : 'Guardar marquesina'}
             </Button>
           </>
         )}
@@ -271,33 +329,22 @@ function GestionMarquesina() {
 }
 
 export function ComunicacionScreen({ vista }: { vista?: 'tablon' | 'marquesina' }) {
-  const [tab, setTab] = useState<string>(vista === 'marquesina' ? 'marquesina' : 'tablon')
-
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-3 p-3">
+    <div className="flex w-full flex-col gap-3 p-4">
       <div className="flex items-center gap-2">
         <Megaphone aria-hidden="true" className="size-5 text-muted-foreground" />
         <h2 className="font-display text-lg font-bold">Comunicación</h2>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full">
-          <TabsTrigger value="tablon">
-            <Newspaper className="size-3.5 mr-1" />
-            Tablón
-          </TabsTrigger>
-          <TabsTrigger value="marquesina">
-            <RadioTower className="size-3.5 mr-1" />
-            Marquesina
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="tablon" className="mt-3">
-          <GestionTablon />
-        </TabsContent>
-        <TabsContent value="marquesina" className="mt-3">
+      {vista === 'marquesina' ? (
+        <div className="mx-auto max-w-lg mt-0">
           <GestionMarquesina />
-        </TabsContent>
-      </Tabs>
+        </div>
+      ) : (
+        <div className="mx-auto max-w-2xl mt-0">
+          <GestionTablon />
+        </div>
+      )}
     </div>
   )
 }

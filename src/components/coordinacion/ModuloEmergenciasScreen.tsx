@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { resolveRpcError } from '@/lib/resolveRpcError'
@@ -188,8 +187,6 @@ function GalletaPanel({ tipo }: { tipo: 'pq' | 'normal' }) {
 }
 
 export function ModuloEmergenciasScreen({ vista }: { vista?: 'pq' | 'normal' }) {
-  const [tab, setTab] = useState<string>(vista === 'pq' ? 'pq' : 'normal')
-
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 p-3">
       <div className="flex items-center gap-2">
@@ -197,24 +194,15 @@ export function ModuloEmergenciasScreen({ vista }: { vista?: 'pq' | 'normal' }) 
         <h2 className="font-display text-lg font-bold">Módulo de emergencias</h2>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full">
-          <TabsTrigger value="pq">
-            <Cookie className="size-3.5 mr-1" />
-            Galleta pequeña
-          </TabsTrigger>
-          <TabsTrigger value="normal">
-            <Cookie className="size-3.5 mr-1" />
-            Galleta
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="pq" className="mt-3">
+      {vista === 'pq' ? (
+        <div className="mt-0">
           <GalletaPanel tipo="pq" />
-        </TabsContent>
-        <TabsContent value="normal" className="mt-3">
+        </div>
+      ) : (
+        <div className="mt-0">
           <GalletaPanel tipo="normal" />
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   )
 }
